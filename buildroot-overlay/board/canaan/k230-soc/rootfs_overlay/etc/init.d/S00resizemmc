@@ -1,0 +1,118 @@
+#!/bin/sh
+#
+# S00resizemmc - Robust two-stage SD rootfs auto-resize (DOS/MBR)
+#
+# Supports different SD capacities (8G/16G/32G/...) by discovering:
+# - root partition start sector
+# - current partition size
+# - physical card size
+#
+# Flow:
+# 1) If root partition does not reach card end: recreate it with same start
+#    sector and default end sector (full card), mark /resize_flag, reboot.
+# 2) If /resize_flag exists (or partition is already full): run resize2fs on
+#    mounted rootfs.
+
+rootdev=$(sed -n 's#.*root=\(/dev/mmcblk[0-9]p[0-9]\+\).*#\1#p' /proc/cmdline)
+bootdev=${rootdev%p*}
+rootpartnum=${rootdev##*p}
+
+rootbase=${rootdev##*/}
+bootbase=${bootdev##*/}
+
+FIRST_BOOT_FLAG=/first_boot_flag
+RESIZE_FLAG=/resize_flag
+DONE_FLAG=/resize_done
+
+log() {
+    echo "[S00resizemmc] $*"
+}
+
+fail() {
+    log "ERROR: $*"
+    exit 1
+}
+
+if [ -z "${rootdev}" ] || [ -z "${bootdev}" ] || [ -z "${rootpartnum}" ]; then
+    fail "cannot parse root mmc device from /proc/cmdline"
+fi
+
+if [ ! -b "${bootdev}" ] || [ ! -r "/sys/class/block/${rootbase}/start" ] || [ ! -r "/sys/class/block/${rootbase}/size" ] || [ ! -r "/sys/class/block/${bootbase}/size" ]; then
+    fail "missing block device or sysfs metadata for ${rootdev}/${bootdev}"
+fi
+
+if [ -f "${DONE_FLAG}" ]; then
+    log "resize already completed, skipping"
+    exit 0
+fi
+
+rootstart=$(cat "/sys/class/block/${rootbase}/start")
+rootsize=$(cat "/sys/class/block/${rootbase}/size")
+disksize=$(cat "/sys/class/block/${bootbase}/size")
+
+maxrootsize=$((disksize - rootstart))
+tail_sectors=$((maxrootsize - rootsize))
+
+log "root=${rootdev} bootdev=${bootdev} start=${rootstart} sectors root_size=${rootsize} disk_size=${disksize} tail=${tail_sectors}"
+
+# Keep legacy fw_env path generation used by this platform scripts.
+echo "${bootdev}   0x1e0000 0x10000" > /etc/fw_env.config
+
+# Stage 2: root partition already expanded, now grow ext4.
+if [ -f "${RESIZE_FLAG}" ]; then
+    log "Stage 2: resizing filesystem on ${rootdev}"
+    if [ ! -x /sbin/resize2fs ]; then
+        fail "resize2fs is missing"
+    fi
+
+    if resize2fs "${rootdev}"; then
+        rm -f "${RESIZE_FLAG}" "${FIRST_BOOT_FLAG}"
+        touch "${DONE_FLAG}"
+        log "filesystem resize done"
+        exit 0
+    else
+        fail "resize2fs failed"
+    fi
+fi
+
+# If partition already fills card (or almost full), only filesystem growth is needed.
+if [ "${tail_sectors}" -le 2048 ]; then
+    log "partition already at card end, running resize2fs directly"
+    if [ ! -x /sbin/resize2fs ]; then
+        fail "resize2fs is missing"
+    fi
+
+    if resize2fs "${rootdev}"; then
+        rm -f "${FIRST_BOOT_FLAG}"
+        touch "${DONE_FLAG}"
+        log "filesystem resize done"
+        exit 0
+    else
+        fail "resize2fs failed"
+    fi
+fi
+
+# Stage 1: enlarge partition to full card. This is attempted when:
+# - legacy first boot trigger exists, or
+# - partition is not yet full (self-healing if flag was missing)
+if [ -f "${FIRST_BOOT_FLAG}" ] || [ "${tail_sectors}" -gt 2048 ]; then
+    log "Stage 1: recreating partition ${rootpartnum} on ${bootdev} from ${rootstart} to end"
+
+    if [ ! -x /sbin/fdisk ]; then
+        fail "fdisk is missing"
+    fi
+
+    if printf 'd\n%s\nn\np\n%s\n%s\n\n\nw\n' "${rootpartnum}" "${rootpartnum}" "${rootstart}" | /sbin/fdisk "${bootdev}"; then
+        touch "${RESIZE_FLAG}"
+        rm -f "${FIRST_BOOT_FLAG}"
+        log "partition table updated, rebooting for kernel to reload partition layout"
+        sync
+        reboot -f
+        exit 0
+    else
+        fail "fdisk failed, keeping flags for retry"
+    fi
+fi
+
+log "no resize action required"
+exit 0

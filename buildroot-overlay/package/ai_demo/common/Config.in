@@ -1,0 +1,7 @@
+config BR2_PACKAGE_COMMON
+    bool "ai demo common"
+    select BR2_PACKAGE_DISPLAY
+    select BR2_PACKAGE_GSL_LITE
+    select BR2_PACKAGE_OPENCV4
+    help
+        ai demo common code

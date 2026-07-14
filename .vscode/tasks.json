@@ -1,0 +1,21 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build RockBase",
+            "type": "shell",
+            "command": "make",
+            "options": {
+                "cwd": "/home/bitpony/k230_linux_sdk",
+                "env": {
+                    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+                }
+            },
+            "args": [
+                "CONF=k230_canmv_rockbase_defconfig"
+            ],
+            "group": "build",
+            "problemMatcher": []
+        }
+    ]
+}
