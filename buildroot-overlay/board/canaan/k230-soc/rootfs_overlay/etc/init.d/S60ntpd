@@ -1,0 +1,44 @@
+#!/bin/sh
+#
+# S60ntpd - BusyBox NTP 时间同步 daemon
+# K230 无 RTC 电池，开机从网络同步时间
+# bitcoind 要求时间误差 < 10 分钟，否则共识失败
+#
+
+case "$1" in
+  start)
+    printf "Starting ntpd: "
+    # -d daemon  -l syslog  -p NTP server
+    # 全球各洲 NTP 服务器，冗余确保时间同步可用
+    ntpd -d -l \
+      -p pool.ntp.org \
+      -p time.cloudflare.com \
+      -p cn.pool.ntp.org \
+      -p jp.pool.ntp.org \
+      -p sg.pool.ntp.org \
+      -p de.pool.ntp.org \
+      -p uk.pool.ntp.org \
+      -p us.pool.ntp.org \
+      -p ca.pool.ntp.org \
+      -p br.pool.ntp.org \
+      -p za.pool.ntp.org \
+      -p au.pool.ntp.org
+    [ $? = 0 ] && echo "OK" || echo "FAIL"
+    ;;
+  stop)
+    printf "Stopping ntpd: "
+    killall ntpd 2>/dev/null
+    [ $? = 0 ] && echo "OK" || echo "FAIL"
+    ;;
+  restart|reload)
+    "$0" stop
+    sleep 1
+    "$0" start
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+    ;;
+esac
+
+exit $?
