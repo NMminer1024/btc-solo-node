@@ -1,0 +1,7 @@
+config BR2_PACKAGE_CKPOOL
+	bool "ckpool"
+	help
+	  ckpool is a high-performance Bitcoin mining pool server
+	  by Con Kolivas.
+
+	  https://github.com/ckolivas/ckpool
