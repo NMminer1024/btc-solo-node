@@ -221,7 +221,7 @@
 			compatible = "snps,dwc2";
 			reg = <0x0 0x91540000 0x0 0x10000>;
 			g-tx-fifo-size = <128 128 128 128 128 128>;
-			dr_mode = "otg";
+			dr_mode = "host";
 			otg-rev = <0x200>;
 			status = "disabled";
 		};
