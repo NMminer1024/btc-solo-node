@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: RockBase <rockbase@k230>
+Date: Tue, 15 Jul 2026 15:00:00 +0800
+Subject: [PATCH] usb: storage: skip TUR for ASMT 2235 on dwc2 host
+
+The ASMT 2235 USB-SATA bridge (0x174c:0x235c) stalls on REQUEST
+SENSE transfers when connected to a dwc2 host controller.  Mark
+the device as non-removable to skip TEST UNIT READY checks.
+
+Signed-off-by: RockBase <rockbase@k230>
+---
+ drivers/usb/storage/scsiglue.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/drivers/usb/storage/scsiglue.c b/drivers/usb/storage/scsiglue.c
+index xxxxxxx..xxxxxxx 100644
+--- a/drivers/usb/storage/scsiglue.c
++++ b/drivers/usb/storage/scsiglue.c
+@@ -167,6 +167,12 @@
+ 			break;
+ 		}
+ 
++		/* ASMT 2235 on dwc2: REQUEST SENSE transfer stalls, skip TUR */
++		if (us->pusb_dev->descriptor.idVendor == cpu_to_le16(0x174c) &&
++		    us->pusb_dev->descriptor.idProduct == cpu_to_le16(0x235c)) {
++			sdev->removable = 0;
++		}
++
+ 		/*
+ 		 * Disk-type devices use MODE SENSE(6) if the protocol
+ 		 * (SubClass) is Transparent SCSI, otherwise they use
