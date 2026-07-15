@@ -1,0 +1,22 @@
+#!/bin/sh
+#
+# S02led_boot - Phase 2: Early userspace init
+#
+# Blue blinking indicates kernel has booted and early userspace init is running.
+# Red LED is reserved for custom use.
+#
+
+case "$1" in
+start)
+	/usr/bin/rgb_led.sh phase boot
+	;;
+stop)
+	;;
+restart|reload)
+	/usr/bin/rgb_led.sh phase boot
+	;;
+*)
+	echo "Usage: $0 {start|stop|restart}"
+	exit 1
+	;;
+esac

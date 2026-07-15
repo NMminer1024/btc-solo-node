@@ -3,6 +3,9 @@ BR_NAME = buildroot-2025.02.1
 BR_SRC_DIR = output/$(BR_NAME)
 BR_OVERLAY_DIR = buildroot-overlay
 
+# Buildroot 不允许 PATH 中有空格或不可见字符，自动清洗
+export PATH := $(shell echo "$$PATH" | tr ':' '\n' | grep -v '[[:space:]]' | tr '\n' ':' | sed 's/:$$//')
+
 export FORCE_UNSAFE_CONFIGURE := 1
 
 export BR2_PRIMARY_SITE ?= $(shell \
@@ -22,11 +25,28 @@ include .last_conf
 BRW_BUILD_DIR = $(CURDIR)/output/$(CONF)
 
 
-.PHONY: all buildroot  debian ubuntu openouler  ruyi  debian_rootfs ubuntu_rootfs
+.PHONY: all buildroot  debian ubuntu openouler  ruyi  debian_rootfs ubuntu_rootfs copy-img
 all :  buildroot
 
 debian ubuntu openouler debian_rootfs ubuntu_rootfs : sync
 	@$(BR_SRC_DIR)/board/canaan/k230-soc/distribution/distribution.sh  $@  $(BRW_BUILD_DIR)
+
+# 镜像拷贝 — 通过 IMG_OUTPUT_DIR 指定目标目录，不硬编码路径
+# 用法: make copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/Iot/k230/img
+copy-img:
+	@if [ -z "$(IMG_OUTPUT_DIR)" ]; then \
+		echo "错误: 请设置 IMG_OUTPUT_DIR 环境变量指定拷贝目标路径"; \
+		echo "用法: make copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/Iot/k230/img"; \
+		exit 1; \
+	fi
+	@img=$$(ls -t $(BRW_BUILD_DIR)/images/sysimage-sdcard.img.gz 2>/dev/null | head -1); \
+	if [ -z "$$img" ]; then \
+		echo "错误: 未找到镜像文件，请先执行 make CONF=$(CONF) 编译"; \
+		exit 1; \
+	fi; \
+	mkdir -p "$(IMG_OUTPUT_DIR)" 2>/dev/null || true; \
+	cp -v "$$img" "$(IMG_OUTPUT_DIR)/"; \
+	echo "镜像已拷贝到: $(IMG_OUTPUT_DIR)/$$(basename $$img)"
 
 ddr_test_img_% :sync buildroot ###128/512/1024/2048
 	@echo "build ddr test img ,ddr size: $*"
@@ -58,6 +78,7 @@ help:sync
 	@echo "    make toolchain_and_depend #install toolchain and depend package"
 	@echo "    make ddr_test_img_128 #build ddr 128MB test img,128 can be 512/1024/2048/128"
 	@echo "    make list_def      #show support config,and current use config"
+	@echo "    make copy-img IMG_OUTPUT_DIR=/your/path  #copy img to target dir"
 	@echo ""
 	@echo "dcoker build and run example:"
 	@echo "    docker  build   -f tools/docker/Dockerfile  -t wjx/d tools/docker "

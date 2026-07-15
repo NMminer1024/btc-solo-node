@@ -1,21 +1,6 @@
-From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
-From: RockBase <rockbase@k230>
-Date: Tue, 15 Jul 2026 14:47:00 +0800
-Subject: [PATCH] usb: storage: add ASMT 2235 quirk with US_FL_INITIAL_READ10
-
-Add unusual_devs entry for ASMT 2235 USB-SATA bridge to use
-US_FL_INITIAL_READ10 quirk for reliable initialization.
-
-Signed-off-by: RockBase <rockbase@k230>
----
- drivers/usb/storage/unusual_devs.h | 8 ++++++++
- 1 file changed, 8 insertions(+)
-
-diff --git a/drivers/usb/storage/unusual_devs.h b/drivers/usb/storage/unusual_devs.h
-index xxxxxxx..xxxxxxx 100644
---- a/drivers/usb/storage/unusual_devs.h
-+++ b/drivers/usb/storage/unusual_devs.h
-@@ -2199,6 +2199,14 @@ UNUSUAL_DEV(  0x174c, 0x55aa, 0x0100, 0x0100,
+--- linux-orig/drivers/usb/storage/unusual_devs.h	2025-02-12 17:31:32.000000000 +0800
++++ linux-patched/drivers/usb/storage/unusual_devs.h	2026-07-15 15:35:34.879057868 +0800
+@@ -2198,6 +2198,13 @@
  		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
  		US_FL_NEEDS_CAP16),
  
