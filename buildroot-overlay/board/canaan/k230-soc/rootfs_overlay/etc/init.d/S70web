@@ -1,0 +1,29 @@
+#!/bin/sh
+#
+# S70web - NMminer Web Dashboard
+# BusyBox httpd on port 80, CGI-enabled
+#
+
+PIDFILE=/var/run/httpd.pid
+HTTPD_ARGS="-c /root/web/httpd.conf -h /root/web -p 80"
+
+case "$1" in
+  start)
+    printf "Starting web dashboard: "
+    start-stop-daemon -S -b -q -p "$PIDFILE" -x /bin/busybox -- httpd $HTTPD_ARGS
+    [ $? = 0 ] && echo "OK" || echo "FAIL"
+    ;;
+  stop)
+    printf "Stopping web dashboard: "
+    start-stop-daemon -K -q -p "$PIDFILE"
+    [ $? = 0 ] && echo "OK" || echo "FAIL"
+    ;;
+  restart)
+    "$0" stop
+    sleep 1
+    "$0" start
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+esac
