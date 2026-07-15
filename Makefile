@@ -52,7 +52,7 @@ ddr_test_img_% :sync buildroot ###128/512/1024/2048
 	@echo "build ddr test img ,ddr size: $*"
 	@tools/ddr_test_img.sh  $*
 
-buildroot: $(BRW_BUILD_DIR)/.config
+buildroot: sync $(BRW_BUILD_DIR)/.config
 	make -C $(BRW_BUILD_DIR) all   BR2_PRIMARY_SITE=$(BR2_PRIMARY_SITE)
 
 .PHONY:dl
