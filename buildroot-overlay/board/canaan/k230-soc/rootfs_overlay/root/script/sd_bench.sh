@@ -42,7 +42,7 @@ calc_mbps() {
     _t2="$3"
     _elapsed=$(echo "$_t2 - $_t1" | bc 2>/dev/null)
     if [ -n "$_elapsed" ] && [ "$_elapsed" != "0" ]; then
-        echo "scale=1; $_mb / $_elapsed" | bc 2>/dev/null
+        echo "scale=1; $_mb / $_elapsed" | bc 2>/dev/null | sed 's/^\./0./'
     else
         echo "N/A"
     fi
@@ -122,7 +122,7 @@ sync
 T2=$(now)
 RND_WRITE_IOPS=$(calc_iops 2000 "$T1" "$T2")
 if [ "$RND_WRITE_IOPS" != "N/A" ]; then
-    RND_WRITE_SPEED=$(echo "scale=1; $RND_WRITE_IOPS * 4 / 1024" | bc 2>/dev/null)
+    RND_WRITE_SPEED=$(echo "scale=1; $RND_WRITE_IOPS * 4 / 1024" | bc 2>/dev/null | sed 's/^\./0./')
 else
     RND_WRITE_SPEED="N/A"
 fi
@@ -139,7 +139,7 @@ done
 T2=$(now)
 RND_READ_IOPS=$(calc_iops 2000 "$T1" "$T2")
 if [ "$RND_READ_IOPS" != "N/A" ]; then
-    RND_READ_SPEED=$(echo "scale=1; $RND_READ_IOPS * 4 / 1024" | bc 2>/dev/null)
+    RND_READ_SPEED=$(echo "scale=1; $RND_READ_IOPS * 4 / 1024" | bc 2>/dev/null | sed 's/^\./0./')
 else
     RND_READ_SPEED="N/A"
 fi
