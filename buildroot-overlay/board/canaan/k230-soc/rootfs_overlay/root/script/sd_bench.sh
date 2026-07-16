@@ -1,14 +1,14 @@
 #!/bin/sh
 # ============================================================
-# SD 卡 / eMMC 综合测速脚本
+# SD 卡 / eMMC 综合测速脚本 (兼容 BusyBox)
 # 用法: ./sd_bench.sh [测试目录]
 #   默认在 /root/block 下测试 (若不存在则用 /tmp)
 #
 # 测试项目:
 #   1. 顺序写入 256MB (1M 块)
 #   2. 顺序读取 256MB (1M 块)
-#   3. 随机 4K 写入 (200MB total, 5000 files)
-#   4. 随机 4K 读取 (200MB total, 5000 files)
+#   3. 4K 小文件写入 (200MB total, 5000 files)
+#   4. 4K 小文件读取 (200MB total, 5000 files)
 #   5. 单文件随机 4K 写入 (10000 次)
 #   6. 单文件随机 4K 读取 (10000 次)
 # ============================================================
@@ -30,111 +30,123 @@ echo "  时间: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "============================================"
 echo ""
 
-# 辅助函数: 将 dd 输出中的速度提取为 MB/s
-parse_speed() {
-    # dd 输出类似: 268435456 bytes (256.0 MB) copied, 3.5 s, 76.8 MB/s
-    sed -n 's/.*, \([0-9.]*\) MB\/s$/\1/p'
+# ---- 计时: 读取 /proc/uptime (精确到 0.01s) ----
+now() {
+    awk '{print $1}' /proc/uptime
 }
 
-# 辅助函数: 将 time 输出中的 real 时间提取为秒
-parse_seconds() {
-    # real  0m3.50s
-    grep real | awk '{print $2}' | sed 's/0m//;s/s$//'
+# ---- 计算速度: $1=MB数, $2=开始秒, $3=结束秒 ----
+calc_mbps() {
+    _mb="$1"
+    _t1="$2"
+    _t2="$3"
+    _elapsed=$(echo "$_t2 - $_t1" | bc 2>/dev/null)
+    if [ -n "$_elapsed" ] && [ "$_elapsed" != "0" ]; then
+        echo "scale=1; $_mb / $_elapsed" | bc 2>/dev/null
+    else
+        echo "N/A"
+    fi
 }
 
+# ---- 计算 IOPS: $1=次数, $2=开始秒, $3=结束秒 ----
+calc_iops() {
+    _n="$1"
+    _t1="$2"
+    _t2="$3"
+    _elapsed=$(echo "$_t2 - $_t1" | bc 2>/dev/null)
+    if [ -n "$_elapsed" ] && [ "$_elapsed" != "0" ]; then
+        echo "scale=0; $_n / $_elapsed" | bc 2>/dev/null
+    else
+        echo "N/A"
+    fi
+}
+
+# ---- 测试 1: 顺序写入 256MB ----
 echo "===== 1/6 顺序写入: 256MB (bs=1M, conv=fsync) ====="
 sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null
-SEQ_WRITE_OUT=$(dd if=/dev/zero of=seq.bin bs=1M count=256 conv=fsync 2>&1)
-echo "$SEQ_WRITE_OUT"
-SEQ_WRITE_SPEED=$(echo "$SEQ_WRITE_OUT" | parse_speed)
-echo "  => 顺序写入速度: ${SEQ_WRITE_SPEED:-N/A} MB/s"
+T1=$(now)
+dd if=/dev/zero of=seq.bin bs=1M count=256 conv=fsync 2>/dev/null
+T2=$(now)
+SEQ_WRITE_SPEED=$(calc_mbps 256 "$T1" "$T2")
+echo "  => 顺序写入速度: ${SEQ_WRITE_SPEED} MB/s"
 echo ""
 
+# ---- 测试 2: 顺序读取 256MB ----
 echo "===== 2/6 顺序读取: 256MB (bs=1M) ====="
 sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null
-SEQ_READ_OUT=$(dd if=seq.bin of=/dev/null bs=1M count=256 2>&1)
-echo "$SEQ_READ_OUT"
-SEQ_READ_SPEED=$(echo "$SEQ_READ_OUT" | parse_speed)
-echo "  => 顺序读取速度: ${SEQ_READ_SPEED:-N/A} MB/s"
+T1=$(now)
+dd if=seq.bin of=/dev/null bs=1M count=256 2>/dev/null
+T2=$(now)
+SEQ_READ_SPEED=$(calc_mbps 256 "$T1" "$T2")
+echo "  => 顺序读取速度: ${SEQ_READ_SPEED} MB/s"
 rm -f seq.bin
 echo ""
 
-echo "===== 3/6 4K 小文件写入: 200MB total (5000 files × 40K) ====="
+# ---- 测试 3: 4K 小文件写入 ----
+echo "===== 3/6 4K 小文件写入: 200MB total (5000 files x 40K) ====="
 sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null
-START=$(date +%s%N)
+T1=$(now)
 for i in $(seq 1 5000); do
     dd if=/dev/zero of="f$i" bs=4K count=10 2>/dev/null
 done
 sync
-END=$(date +%s%N)
-ELAPSED=$(echo "scale=2; ($END - $START) / 1000000000" | bc 2>/dev/null || echo "0")
+T2=$(now)
 FILE_COUNT=$(ls | wc -l)
 TOTAL_SIZE=$(du -sh . | awk '{print $1}')
-echo "  文件数: $FILE_COUNT, 总大小: $TOTAL_SIZE, 耗时: ${ELAPSED}s"
-if [ "$ELAPSED" != "0" ] && [ "$ELAPSED" != "" ]; then
-    SPEED=$(echo "scale=1; 200 / $ELAPSED" | bc 2>/dev/null || echo "N/A")
-    echo "  => 4K 小文件写入速度: ${SPEED} MB/s"
-else
-    echo "  => 4K 小文件写入速度: N/A MB/s"
-fi
+SMALL_WRITE_SPEED=$(calc_mbps 200 "$T1" "$T2")
+echo "  文件数: $FILE_COUNT, 总大小: $TOTAL_SIZE"
+echo "  => 4K 小文件写入速度: ${SMALL_WRITE_SPEED} MB/s"
 echo ""
 
+# ---- 测试 4: 4K 小文件读取 ----
 echo "===== 4/6 4K 小文件读取: 200MB total (5000 files) ====="
 sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null
-START=$(date +%s%N)
+T1=$(now)
 for i in $(seq 1 5000); do
     dd if="f$i" of=/dev/null bs=4K 2>/dev/null
 done
-END=$(date +%s%N)
-ELAPSED=$(echo "scale=2; ($END - $START) / 1000000000" | bc 2>/dev/null || echo "0")
-echo "  耗时: ${ELAPSED}s"
-if [ "$ELAPSED" != "0" ] && [ "$ELAPSED" != "" ]; then
-    SPEED=$(echo "scale=1; 200 / $ELAPSED" | bc 2>/dev/null || echo "N/A")
-    echo "  => 4K 小文件读取速度: ${SPEED} MB/s"
-else
-    echo "  => 4K 小文件读取速度: N/A MB/s"
-fi
+T2=$(now)
+SMALL_READ_SPEED=$(calc_mbps 200 "$T1" "$T2")
+echo "  => 4K 小文件读取速度: ${SMALL_READ_SPEED} MB/s"
 rm -f f*
 echo ""
 
-echo "===== 5/6 单文件随机 4K 写入: 10000 次 ====="
+# ---- 测试 5: 单文件随机 4K 写入 10000 次 ----
+echo "===== 5/6 随机 4K 写入: 2000 次 (单文件) ====="
 sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null
-START=$(date +%s%N)
-for i in $(seq 1 10000); do
+T1=$(now)
+for i in $(seq 1 2000); do
     dd if=/dev/zero of=rand.bin bs=4K count=1 seek=$((i * 100 % 65536)) conv=notrunc 2>/dev/null
 done
 sync
-END=$(date +%s%N)
-ELAPSED=$(echo "scale=2; ($END - $START) / 1000000000" | bc 2>/dev/null || echo "0")
-echo "  10000 次写入, 耗时: ${ELAPSED}s"
-if [ "$ELAPSED" != "0" ] && [ "$ELAPSED" != "" ]; then
-    IOPS=$(echo "scale=0; 10000 / $ELAPSED" | bc 2>/dev/null || echo "N/A")
-    SPEED=$(echo "scale=1; 10000 * 4 / 1024 / $ELAPSED" | bc 2>/dev/null || echo "N/A")
-    echo "  => 随机 4K 写入: ${IOPS} IOPS, ${SPEED} MB/s"
+T2=$(now)
+RND_WRITE_IOPS=$(calc_iops 2000 "$T1" "$T2")
+if [ "$RND_WRITE_IOPS" != "N/A" ]; then
+    RND_WRITE_SPEED=$(echo "scale=1; $RND_WRITE_IOPS * 4 / 1024" | bc 2>/dev/null)
 else
-    echo "  => 随机 4K 写入: N/A"
+    RND_WRITE_SPEED="N/A"
 fi
+echo "  => 随机 4K 写入: ${RND_WRITE_IOPS} IOPS, ${RND_WRITE_SPEED} MB/s"
 echo ""
 
-echo "===== 6/6 单文件随机 4K 读取: 10000 次 ====="
+# ---- 测试 6: 单文件随机 4K 读取 2000 次 ----
+echo "===== 6/6 随机 4K 读取: 2000 次 (单文件) ====="
 sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null
-START=$(date +%s%N)
-for i in $(seq 1 10000); do
+T1=$(now)
+for i in $(seq 1 2000); do
     dd if=rand.bin of=/dev/null bs=4K skip=$((i * 100 % 65536)) count=1 2>/dev/null
 done
-END=$(date +%s%N)
-ELAPSED=$(echo "scale=2; ($END - $START) / 1000000000" | bc 2>/dev/null || echo "0")
-echo "  10000 次读取, 耗时: ${ELAPSED}s"
-if [ "$ELAPSED" != "0" ] && [ "$ELAPSED" != "" ]; then
-    IOPS=$(echo "scale=0; 10000 / $ELAPSED" | bc 2>/dev/null || echo "N/A")
-    SPEED=$(echo "scale=1; 10000 * 4 / 1024 / $ELAPSED" | bc 2>/dev/null || echo "N/A")
-    echo "  => 随机 4K 读取: ${IOPS} IOPS, ${SPEED} MB/s"
+T2=$(now)
+RND_READ_IOPS=$(calc_iops 2000 "$T1" "$T2")
+if [ "$RND_READ_IOPS" != "N/A" ]; then
+    RND_READ_SPEED=$(echo "scale=1; $RND_READ_IOPS * 4 / 1024" | bc 2>/dev/null)
 else
-    echo "  => 随机 4K 读取: N/A"
+    RND_READ_SPEED="N/A"
 fi
+echo "  => 随机 4K 读取: ${RND_READ_IOPS} IOPS, ${RND_READ_SPEED} MB/s"
 echo ""
 
-# 清理
+# ---- 清理 ----
 rm -f rand.bin
 cd /
 rm -rf "$WORK_DIR"
@@ -143,10 +155,11 @@ echo "============================================"
 echo "  测试完成!"
 echo "============================================"
 echo ""
-echo "  ╔══════════════════════════════════════════╗"
-echo "  ║           Summary                       ║"
-echo "  ╠══════════════════════════════════════════╣"
-printf "  ║ 顺序写入 (1M):   %7s MB/s        ║\n" "${SEQ_WRITE_SPEED:-N/A}"
-printf "  ║ 顺序读取 (1M):   %7s MB/s        ║\n" "${SEQ_READ_SPEED:-N/A}"
-echo "  ╚══════════════════════════════════════════╝"
+echo "  ------- Summary -------"
+echo "  顺序写入 (1M)  : ${SEQ_WRITE_SPEED} MB/s"
+echo "  顺序读取 (1M)  : ${SEQ_READ_SPEED} MB/s"
+echo "  小文件写入 (4K): ${SMALL_WRITE_SPEED} MB/s"
+echo "  小文件读取 (4K): ${SMALL_READ_SPEED} MB/s"
+echo "  随机写入 (4K)  : ${RND_WRITE_IOPS} IOPS (${RND_WRITE_SPEED} MB/s)"
+echo "  随机读取 (4K)  : ${RND_READ_IOPS} IOPS (${RND_READ_SPEED} MB/s)"
 echo ""

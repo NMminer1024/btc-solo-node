@@ -55,9 +55,9 @@ Signed-off-by: K230 SDK <dev@canaan-creative.com>
  		device_type = "memory";
  		reg = <0x0 0x0 0x0 0x40000000>;
 @@ -129,3 +129,10 @@
- 		rx_delay_line = <0x0d>;
- 		tx_delay_line = <0xc0>;
- 	};
+	rx_delay_line = <0x0d>;
+	tx_delay_line = <0xc0>;
+ };
 +
 +&pmuiomux {
 +	pmu_rgb_led_pins: pmu_rgb_led_pins {
