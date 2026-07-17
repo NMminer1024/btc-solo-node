@@ -55,6 +55,10 @@ config TARGET_K230_CANMV_GT6700
 	bool "Support k230_CANMV(GT6700)"
     select SYS_CACHE_SHIFT_6
 
+config TARGET_K230_ROCKBASE
+	bool "Support k230 RockBase"
+	select SYS_CACHE_SHIFT_6
+
 config TARGET_K230D_CANMV
 	bool "Support k230D_CANMV(K230PI zero)"
 	select SYS_CACHE_SHIFT_6
@@ -111,6 +115,7 @@ source "board/canaan/k230_canmv/Kconfig"
 source "board/canaan/k230_canmv_01studio/Kconfig"
 source "board/canaan/k230_canmv_dongshanpi/Kconfig"
 source "board/canaan/k230_canmv_gt6700/Kconfig"
+source "board/canaan/k230_rockbase/Kconfig"
 source "board/canaan/k230d_canmv/Kconfig"
 source "board/canaan/k230d_canmv_junroc_ai_cam/Kconfig"
 source "board/canaan/k230_unsiplp4/Kconfig"

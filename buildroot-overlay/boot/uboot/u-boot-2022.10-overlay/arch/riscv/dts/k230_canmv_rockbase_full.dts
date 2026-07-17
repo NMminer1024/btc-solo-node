@@ -23,7 +23,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /dts-v1/;
-#include <dt-bindings/pinctrl/k230-pinctrl.h>
+#include <dt-bindings/pinctrl/k230_evb.h>
 
 #define BANK_VOLTAGE_IO0_IO1	 K230_MSC_1V8  // FIXED
 #define BANK_VOLTAGE_IO2_IO13	 K230_MSC_3V3

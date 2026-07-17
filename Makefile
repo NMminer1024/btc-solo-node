@@ -8,6 +8,8 @@ export PATH := $(shell echo "$$PATH" | tr ':' '\n' | grep -v '[[:space:]]' | tr 
 
 export FORCE_UNSAFE_CONFIGURE := 1
 
+K230_TOOLCHAIN_DIR ?=
+
 export BR2_PRIMARY_SITE ?= $(shell \
 	if curl --output /dev/null --silent --head --fail https://ai.b-bug.org/k230/downloads/dl ;then  \
 	echo "https://ai.b-bug.org/k230/downloads/dl";\
@@ -18,7 +20,6 @@ export BR2_PRIMARY_SITE ?= $(shell \
 
 ifeq ("$(origin CONF)", "command line")
 $(shell echo CONF=$(CONF)>.last_conf;)
-else
 $(shell [ -f .last_conf ] || ( echo CONF=k230_canmv_defconfig>.last_conf;) )
 endif
 include .last_conf
@@ -79,6 +80,7 @@ help:sync
 	@echo "    make ddr_test_img_128 #build ddr 128MB test img,128 can be 512/1024/2048/128"
 	@echo "    make list_def      #show support config,and current use config"
 	@echo "    make copy-img IMG_OUTPUT_DIR=/your/path  #copy img to target dir"
+	@echo "    make CONF=k230_rockbase_defconfig K230_TOOLCHAIN_DIR=/your/toolchain/path"
 	@echo ""
 	@echo "dcoker build and run example:"
 	@echo "    docker  build   -f tools/docker/Dockerfile  -t wjx/d tools/docker "
@@ -106,6 +108,7 @@ list-def list_def:
 	@echo "	BPI-CanMV-K230D-Zero_ilp32_defconfig  --plct use,new 32 board"
 	@echo "	k230_evb_defconfig                    --k230 evb board"
 	@echo "	k230_canmv_gt6700_defconfig           --gt6700 board"
+	@echo "	k230_rockbase_defconfig                --rockbase board"
 	@echo "	k230_canmv_01studio_emmc_defconfig    --01studio emmc board"
 	@echo ""
 
@@ -138,9 +141,12 @@ $(BRW_BUILD_DIR)/.config: sync
 	mkdir -p $(BRW_BUILD_DIR)/images/deb
 ifeq ("$(origin CONF)", "command line")
 	make -C $(BR_SRC_DIR) $(CONF) O=$(BRW_BUILD_DIR)
+	@if [ -n "$(K230_TOOLCHAIN_DIR)" ]; then \
+		sed -i "s|^BR2_TOOLCHAIN_EXTERNAL_PATH=.*|BR2_TOOLCHAIN_EXTERNAL_PATH=\\"$(K230_TOOLCHAIN_DIR)\\"|" $(BRW_BUILD_DIR)/.config; \
+	fi
 	touch $@
 else
-	[ -e "$(BRW_BUILD_DIR)" ] || ( make -C $(BR_SRC_DIR) $(CONF) O=$(BRW_BUILD_DIR) ;touch $@; )
+	[ -e "$(BRW_BUILD_DIR)" ] || ( make -C $(BR_SRC_DIR) $(CONF) O=$(BRW_BUILD_DIR) ; if [ -n "$(K230_TOOLCHAIN_DIR)" ]; then sed -i "s|^BR2_TOOLCHAIN_EXTERNAL_PATH=.*|BR2_TOOLCHAIN_EXTERNAL_PATH=\"$(K230_TOOLCHAIN_DIR)\"|" $(BRW_BUILD_DIR)/.config; fi ; touch $@; )
 endif
 
 #echo LINUX_OVERRIDE_SRCDIR=/home/wangjianxin/t/linux-xuantie-kernel >output/k230d_canmv_64kernel_32rootfs_defconfig/local.mk

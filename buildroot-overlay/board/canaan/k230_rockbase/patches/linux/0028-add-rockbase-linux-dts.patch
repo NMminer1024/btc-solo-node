@@ -1,0 +1,336 @@
+From: RockBase SDK <dev@rockbase.local>
+Subject: [PATCH] riscv: dts: canaan: add Rockbase board device trees
+
+Add dedicated Linux DTS files for Rockbase so the board no longer
+inherits runtime hardware description from CanMV v3.
+
+---
+--- /dev/null
++++ b/arch/riscv/boot/dts/canaan/k230-rockbase.dts
+@@ -0,0 +1,177 @@
++// SPDX-License-Identifier: GPL-2.0 OR MIT
++/*
++ * Copyright (C) 2024 Yangyu Chen <cyy@cyyself.name>
++ */
++
++#include "k230.dtsi"
++#include <dt-bindings/leds/common.h>
++
++/ {
++	model = "RockBase K230";
++	compatible = "rockbase,k230-rockbase", "canaan,kendryte-k230", "k230_rockbase";
++
++	aliases {
++		serial3 = &uart3;
++		mmc0 = &mmc_sd0;
++		mmc1 = &mmc_sd1;
++		i2c0 = &i2c4;
++		i2c1 = &i2c3;
++	};
++
++	chosen {
++		stdout-path = "serial0:115200n8";
++	};
++
++	rgb_led {
++		compatible = "gpio-leds";
++		pinctrl-names = "default";
++		pinctrl-0 = <&pmu_rgb_led_pins>;
++
++		led_rgb_red: led-0 {
++			color = <LED_COLOR_ID_RED>;
++			label = "rgb:red";
++			gpios = <&gpio1_ports_b 0 GPIO_ACTIVE_LOW>;
++		};
++		led_rgb_green: led-1 {
++			color = <LED_COLOR_ID_GREEN>;
++			label = "rgb:green";
++			gpios = <&gpio0_ports 20 GPIO_ACTIVE_LOW>;
++		};
++		led_rgb_blue: led-2 {
++			color = <LED_COLOR_ID_BLUE>;
++			label = "rgb:blue";
++			gpios = <&gpio1_ports_b 1 GPIO_ACTIVE_LOW>;
++		};
++	};
++
++	ddr: memory@0 {
++		device_type = "memory";
++		reg = <0x0 0x0 0x0 0x40000000>;
++	};
++
++	sound {
++		status                      = "okay";
++		compatible                  = "canaan,k230-audio-inno";
++		canaan,model                = "K230_I2S_INNO";
++		canaan,k230-i2s-controller  = <&i2s>;
++		canaan,k230-audio-codec     = <&inno_codec>;
++	};
++};
++
++&uart0 {
++	status = "okay";
++};
++&uart3 {
++	status = "okay";
++};
++&mmc_sd1{
++	status = "okay";
++	no-1-8-v;
++	cap-sd-highspeed;
++	mshc_ctrl_r = <0x00>;
++};
++
++&usb0 {
++	status = "okay";
++};
++&usb1 {
++	status = "okay";
++};
++
++&i2c3 {
++	status = "okay";
++	lt9611: hdmi-bridge@3b {
++		compatible = "lontium,lt9611";
++		reg = <0x3b>;
++		reset-gpios = <&gpio0_ports 24 GPIO_ACTIVE_HIGH>;
++		interrupt-parent = <&gpio0_ports>;
++		interrupts = <23 IRQ_TYPE_EDGE_FALLING>;
++		ports {
++			#address-cells  = <1>;
++			#size-cells     = <0>;
++			port@1 {
++				reg = <1>;
++				lt9611_in: endpoint {
++					remote-endpoint = <&dsi_out_lt9611>;
++				};
++			};
++
++			port@2 {
++				reg = <2>;
++				lt9611_out: endpoint {
++					remote-endpoint = <&hdmi_connector_in>;
++				};
++			};
++		};
++	};
++};
++
++&i2c4 {
++	status = "okay";
++};
++
++&mipi0
++{
++	// set to csi2
++	id = <2>;
++	reg = <0x0 0x9000a800 0x0 0x800>;
++	interrupts = <121 IRQ_TYPE_LEVEL_HIGH>;
++	resets = <&sysctl_reset K230_RESET_CSI2_REG_OFFSET K230_RESET_CSI2_TYPE
++			  K230_RESET_CSI2_DONE_BIT K230_RESET_CSI2_ASSERT_BIT>,
++	<&sysctl_reset K230_RESET_M2_REG_OFFSET K230_RESET_M2_TYPE
++		 K230_RESET_M2_DONE_BIT K230_RESET_M2_ASSERT_BIT>;
++	reset-gpios = <&gpio0_ports 21 GPIO_ACTIVE_HIGH>;
++};
++
++&dsi {
++	ports {
++		port@1 {
++			reg = <1>;
++			dsi_out_lt9611: endpoint {
++				remote-endpoint = <&lt9611_in>;
++			};
++		};
++	};
++};
++/ {
++	hdmi: connector {
++		compatible = "hdmi-connector";
++		label = "hdmi";
++		type = "a";
++
++		port {
++			hdmi_connector_in: endpoint {
++				remote-endpoint = <&lt9611_out>;
++			};
++		};
++	};
++};
++&mmc_sd0 {
++	status = "okay";
++	no-1-8-v;
++	rx_delay_line = <0x0d>;
++	tx_delay_line = <0xc0>;
++};
++
++&pmuiomux {
++	pmu_rgb_led_pins: pmu_rgb_led_pins {
++		pins = "io0", "io1";
++		function = "alt1";
++	};
++};
++
++&pmuiomux {
++	pmu_usb_host_pwr_pin: pmu_usb_host_pwr_pin {
++		pins = "io2";
++		function = "alt1";
++		bias-disable;
++	};
++};
++&gpio1_ports_b {
++	gpio66_hog: gpio66-hog {
++		gpio-hog;
++		gpios = <2 GPIO_ACTIVE_HIGH>;
++		output-high;
++		line-name = "usb-host-pwr";
++	};
++};
+
+--- /dev/null
++++ b/arch/riscv/boot/dts/canaan/k230-rockbase-lcd.dts
+@@ -0,0 +1,145 @@
++// SPDX-License-Identifier: GPL-2.0 OR MIT
++/*
++ * Copyright (C) 2024 Yangyu Chen <cyy@cyyself.name>
++ */
++
++#include "k230.dtsi"
++#include "display-st7701-480x800.dtsi"
++#include <dt-bindings/leds/common.h>
++
++/ {
++	model = "RockBase K230";
++	compatible = "rockbase,k230-rockbase", "canaan,kendryte-k230", "k230_rockbase";
++
++	aliases {
++		serial3 = &uart3;
++		mmc0 = &mmc_sd0;
++		mmc1 = &mmc_sd1;
++		i2c0 = &i2c4;
++		i2c1 = &i2c3;
++	};
++
++	chosen {
++		stdout-path = "serial0:115200n8";
++	};
++
++	rgb_led {
++		compatible = "gpio-leds";
++		pinctrl-names = "default";
++		pinctrl-0 = <&pmu_rgb_led_pins>;
++
++		led_rgb_red: led-0 {
++			color = <LED_COLOR_ID_RED>;
++			label = "rgb:red";
++			gpios = <&gpio1_ports_b 0 GPIO_ACTIVE_LOW>;
++		};
++		led_rgb_green: led-1 {
++			color = <LED_COLOR_ID_GREEN>;
++			label = "rgb:green";
++			gpios = <&gpio0_ports 20 GPIO_ACTIVE_LOW>;
++		};
++		led_rgb_blue: led-2 {
++			color = <LED_COLOR_ID_BLUE>;
++			label = "rgb:blue";
++			gpios = <&gpio1_ports_b 1 GPIO_ACTIVE_LOW>;
++		};
++	};
++
++	ddr: memory@0 {
++		device_type = "memory";
++		reg = <0x0 0x0 0x0 0x40000000>;
++	};
++
++	sound {
++		status                      = "okay";
++		compatible                  = "canaan,k230-audio-inno";
++		canaan,model                = "K230_I2S_INNO";
++		canaan,k230-i2s-controller  = <&i2s>;
++		canaan,k230-audio-codec     = <&inno_codec>;
++	};
++};
++
++&uart0 {
++	status = "okay";
++};
++&uart3 {
++	status = "okay";
++};
++&mmc_sd1{
++	status = "okay";
++	no-1-8-v;
++	cap-sd-highspeed;
++	mshc_ctrl_r = <0x00>;
++};
++
++&usb0 {
++	status = "okay";
++};
++&usb1 {
++	status = "okay";
++};
++
++&i2c3 {
++	status = "okay";
++	touchscreen@38 {
++		compatible = "edt,edt-ft5306";
++		reg = <0x38>;
++		reset-gpios = <&gpio0_ports 24 GPIO_ACTIVE_LOW>;
++		interrupt-parent = <&gpio0_ports>;
++		interrupts = <23 IRQ_TYPE_EDGE_FALLING>;
++		touchscreen-size-x = <480>;
++		touchscreen-size-y = <800>;
++	};
++};
++
++&i2c4 {
++	status = "okay";
++};
++
++&mipi0
++{
++	// set to csi2
++	id = <2>;
++	reg = <0x0 0x9000a800 0x0 0x800>;
++	interrupts = <121 IRQ_TYPE_LEVEL_HIGH>;
++	resets = <&sysctl_reset K230_RESET_CSI2_REG_OFFSET K230_RESET_CSI2_TYPE
++			  K230_RESET_CSI2_DONE_BIT K230_RESET_CSI2_ASSERT_BIT>,
++	<&sysctl_reset K230_RESET_M2_REG_OFFSET K230_RESET_M2_TYPE
++		 K230_RESET_M2_DONE_BIT K230_RESET_M2_ASSERT_BIT>;
++	reset-gpios = <&gpio0_ports 21 GPIO_ACTIVE_HIGH>;
++};
++
++
++&lcd {
++	dsi_reset-gpios = <&gpio0_ports 22 GPIO_ACTIVE_HIGH>;
++	backlight_gpio-gpios = <&gpio0_ports 25 GPIO_ACTIVE_HIGH>;
++};
++&mmc_sd0 {
++	status = "okay";
++	no-1-8-v;
++	rx_delay_line = <0x0d>;
++	tx_delay_line = <0xc0>;
++};
++
++&pmuiomux {
++	pmu_rgb_led_pins: pmu_rgb_led_pins {
++		pins = "io0", "io1";
++		function = "alt1";
++	};
++};
++
++&pmuiomux {
++	pmu_usb_host_pwr_pin: pmu_usb_host_pwr_pin {
++		pins = "io2";
++		function = "alt1";
++		bias-disable;
++	};
++};
++&gpio1_ports_b {
++	gpio66_hog: gpio66-hog {
++		gpio-hog;
++		gpios = <2 GPIO_ACTIVE_HIGH>;
++		output-high;
++		line-name = "usb-host-pwr";
++	};
++};
