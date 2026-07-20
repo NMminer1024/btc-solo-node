@@ -6,9 +6,14 @@
 CONF=/root/bitcoind/bitcoin.conf
 DATADIR=/root/block
 CLOCK_EPOCH_MIN=1704067200
+RESIZE_DONE_FLAG=/resize_done
 
 is_running() {
     pidof bitcoind >/dev/null 2>&1
+}
+
+resize_ready() {
+    [ -f "${RESIZE_DONE_FLAG}" ]
 }
 
 wait_for_sane_clock() {
@@ -30,6 +35,11 @@ case "$1" in
 
         if is_running; then
                 echo "already running"
+                exit 0
+        fi
+
+        if ! resize_ready; then
+                echo "deferred (waiting for resize_done)"
                 exit 0
         fi
 

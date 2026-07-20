@@ -9,9 +9,14 @@ LOGFILE=${LOGDIR}/ckpool.log
 WAIT_PID_FILE=/root/ckpool/ckpool-autostart.pid
 BTC_CONF=/root/bitcoind/bitcoin.conf
 BTC_DATADIR=/root/block
+RESIZE_DONE_FLAG=/resize_done
 
 is_running() {
     pidof ckpool >/dev/null 2>&1
+}
+
+resize_ready() {
+    [ -f "${RESIZE_DONE_FLAG}" ]
 }
 
 rpc_ready() {
@@ -51,6 +56,12 @@ case "$1" in
 
         if is_running; then
                 echo "already running"
+                exit 0
+        fi
+
+        if ! resize_ready; then
+                stop_waiter
+                echo "deferred (waiting for resize_done)"
                 exit 0
         fi
 

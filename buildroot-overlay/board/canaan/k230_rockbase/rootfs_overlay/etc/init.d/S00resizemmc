@@ -102,7 +102,11 @@ if [ -f "${FIRST_BOOT_FLAG}" ] || [ "${tail_sectors}" -gt 2048 ]; then
         fail "fdisk is missing"
     fi
 
-    if printf 'd\n%s\nn\np\n%s\n%s\n\n\nw\n' "${rootpartnum}" "${rootpartnum}" "${rootstart}" | /sbin/fdisk "${bootdev}"; then
+    fdisk_out=$(printf 'd\n%s\nn\np\n%s\n%s\n\n\nw\n' "${rootpartnum}" "${rootpartnum}" "${rootstart}" | /sbin/fdisk "${bootdev}" 2>&1)
+    fdisk_rc=$?
+    echo "${fdisk_out}"
+
+    if [ "${fdisk_rc}" -eq 0 ] || echo "${fdisk_out}" | grep -q "The partition table has been altered."; then
         touch "${RESIZE_FLAG}"
         rm -f "${FIRST_BOOT_FLAG}"
         log "partition table updated, rebooting for kernel to reload partition layout"
