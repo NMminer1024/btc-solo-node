@@ -21,6 +21,7 @@ uptime_fmt=$(printf '%dd %02dh:%02dm' $((uptime_sec/86400)) $((uptime_sec%86400/
 nproc=$(grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 1)
 load1=$(awk '{print $1}' /proc/loadavg)
 load_pct=$(awk -v l="$load1" -v n="$nproc" 'BEGIN{printf "%.0f", l/n*100}')
+load_bar_pct=$(awk -v p="$load_pct" 'BEGIN{if (p > 100) p = 100; print p}')
 mem_total=$(awk '/^MemTotal/{printf "%.0f", $2/1024}' /proc/meminfo)
 mem_free=$(awk '/^MemAvailable/{printf "%.0f", $2/1024}' /proc/meminfo)
 mem_used=$((mem_total - mem_free)); mem_pct=$((mem_used * 100 / mem_total))
@@ -38,6 +39,7 @@ done
 
 # ── Bitcoin ──
 btc_running=0
+best_block_date=""
 if pidof bitcoind >/dev/null 2>&1; then
   btc_running=1
   btc_info=$(btc_cli getblockchaininfo); btc_net=$(btc_cli getnetworkinfo)
@@ -49,24 +51,40 @@ if pidof bitcoind >/dev/null 2>&1; then
   difficulty=$(echo "$btc_info" | grep -o '"difficulty": *[0-9.]*' | cut -d: -f2 | xargs)
   connections=$(echo "$btc_net" | grep -o '"connections": *[0-9]*' | grep -o '[0-9]*')
   subversion=$(echo "$btc_net" | grep -o '"subversion": *"[^"]*"' | cut -d'"' -f4)
+  if [ -n "$blocks" ] && [ "$blocks" != "-" ]; then
+    best_block_hash=$(btc_cli getblockhash "$blocks" | tr -d '"')
+    if [ -n "$best_block_hash" ]; then
+      best_block_time=$(btc_cli getblockheader "$best_block_hash" 2>/dev/null | grep -o '"time": *[0-9]*' | grep -o '[0-9]*' | head -n1)
+      if [ -n "$best_block_time" ]; then
+        best_block_date=$(date -u -d "@$best_block_time" '+%Y-%m-%d' 2>/dev/null || date -u -D '%s' -d "$best_block_time" '+%Y-%m-%d' 2>/dev/null || echo "")
+      fi
+    fi
+  fi
   [ -n "$progress" ] && [ "$progress" != "null" ] && progress_pct=$(echo "$progress" | awk '{printf "%.2f", $1*100}') || progress_pct="0.00"
   rss=$(cat /proc/$(pidof bitcoind)/status 2>/dev/null | awk '/^VmRSS/{printf "%.0f", $2/1024}')
   [ -n "$rss" ] && rss="${rss}M" || rss="N/A"
 else
-  headers="—"; blocks="—"; progress_pct="0.00"
-  ibd=""; chain="—"; difficulty="—"
-  connections="—"; subversion=""
+  headers="-"; blocks="-"; progress_pct="0.00"
+  ibd=""; chain="-"; difficulty="-"
+  connections="-"; subversion=""
   rss="N/A"
 fi
-
-# ── ckpool ──
+block_height_display="${headers} / ${blocks}"
+[ -n "$best_block_date" ] && block_height_display="${block_height_display} (${best_block_date})"
 ckpool_running=0; ckpool_tail=""
+CKPOOL_CONF=/root/ckpool/ckpool.conf
+btc_address=$(grep -m1 '"btcaddress"' "$CKPOOL_CONF" 2>/dev/null | cut -d'"' -f4)
+[ -z "$btc_address" ] && btc_address="-"
+ckpool_rpc_url=$(grep -m1 '"url"' "$CKPOOL_CONF" 2>/dev/null | cut -d'"' -f4)
+case "$ckpool_rpc_url" in
+  127.0.0.1:*|localhost:*|::1:*) stratum_mode="solo" ;;
+  "") stratum_mode="-" ;;
+  *) stratum_mode="pool" ;;
+esac
 if ps | grep -v grep | grep -q ckpool; then
   ckpool_running=1
   ckpool_tail=$(tail -5 /root/ckpool/logs/ckpool.log 2>/dev/null | sed 's/</\&lt;/g; s/>/\&gt;/g')
 fi
-
-# ── 网络 ──
 wifi_ssid=$(iwconfig 2>/dev/null | grep -o 'ESSID:"[^"]*"' | cut -d'"' -f2); [ -z "$wifi_ssid" ] && wifi_ssid="—"
 ip_addr=$(ip addr show wlan0 2>/dev/null | grep "inet " | awk '{print $2}' | cut -d/ -f1)
 [ -z "$ip_addr" ] && ip_addr=$(ip addr show eth0 2>/dev/null | grep "inet " | awk '{print $2}' | cut -d/ -f1)
@@ -113,7 +131,7 @@ cat <<ENDOFHTML
 <h2 data-i18n="card_sys">System</h2>
 <table>
 <tr><td data-i18n="cpu">CPU</td><td>${cpu_model}</td></tr>
-<tr><td data-i18n="load">Load</td><td>${load1} (${nproc} cores)<div class="bar-bg"><div class="bar-fill" style="width:${load_pct}%"></div></div></td></tr>
+<tr><td data-i18n="load">CPU Load</td><td>${load_pct}% (${nproc} cores)<div class="bar-bg"><div class="bar-fill" style="width:${load_bar_pct}%"></div></div></td></tr>
 <tr><td data-i18n="uptime">Uptime</td><td>${uptime_fmt}</td></tr>
 <tr><td data-i18n="temp">Temperature</td><td>${temp}°C</td></tr>
 <tr><td data-i18n="memory">Memory</td><td>${mem_used}M / ${mem_total}M (${mem_pct}%)<div class="bar-bg"><div class="bar-fill" style="width:${mem_pct}%"></div></div></td></tr>
@@ -146,7 +164,7 @@ else
 fi
 
 cat <<ENDOFHTML
-<tr><td data-i18n="block_height">Height</td><td>${headers} / ${blocks}</td></tr>
+<tr><td data-i18n="block_height">Height</td><td>${block_height_display}</td></tr>
 <tr><td data-i18n="ibd_progress">IBD Progress</td><td>${progress_pct}%<div class="bar-bg"><div class="bar-fill" style="width:${progress_pct}%"></div></div></td></tr>
 <tr><td data-i18n="connections">Conn</td><td>${connections}</td></tr>
 <tr><td data-i18n="difficulty">Diff</td><td>${difficulty}</td></tr>
@@ -156,21 +174,21 @@ cat <<ENDOFHTML
 
 <!-- Mining -->
 <div class="card">
-<h2 data-i18n="card_mining">Mining</h2>
+<h2 data-i18n="card_mining">Stratum Service</h2>
 <table>
 ENDOFHTML
 
 if [ "$ckpool_running" = "1" ]; then
-  echo '<tr><td data-i18n="ckpool_status">ckpool</td><td class="badge-ok">&#x2705; <span data-i18n="running">Running</span></td></tr>'
+  echo '<tr><td data-i18n="service_status">Service</td><td class="badge-ok">ckpool | <span data-i18n="running">Running</span></td></tr>'
 else
-  echo '<tr><td data-i18n="ckpool_status">ckpool</td><td class="badge-ok">&#x274C; <span data-i18n="stopped">Stopped</span></td></tr>'
+  echo '<tr><td data-i18n="service_status">Service</td><td class="badge-err">ckpool | <span data-i18n="stopped">Stopped</span></td></tr>'
 fi
 
 cat <<ENDOFHTML
-<tr><td data-i18n="btc_address">BTC Addr</td><td>18dK8...Pto1</td></tr>
+<tr><td data-i18n="stratum_mode">Stratum Mode</td><td>${stratum_mode}</td></tr>
+<tr><td data-i18n="btc_address">BTC Address</td><td><input type="text" readonly value="${btc_address}" onclick="this.select();" onfocus="this.select();" spellcheck="false" style="width:100%;box-sizing:border-box;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:6px 8px;font:inherit"></td></tr>
 </table>
 ENDOFHTML
-
 if [ -n "$ckpool_tail" ]; then
   echo '<div style="margin-top:10px;color:#8b949e;font-size:0.8rem"><span data-i18n="recent_logs">Recent Logs</span></div><div class="log-box">'"$ckpool_tail"'</div>'
 fi
@@ -205,7 +223,7 @@ subtitle:{en:'Bitcoin Full Node + Solo Mining Pool',zh:'Bitcoin\u5168\u8282\u70B
 lang_label:{en:'Language',zh:'\u8BED\u8A00',es:'Idioma',pt:'Idioma',ru:'\u042F\u0437\u044B\u043A',de:'Sprache',ja:'\u8A00\u8A9E',ko:'\uC5B8\uC5B4'},
 card_sys:{en:'System',zh:'\u7CFB\u7EDF\u4FE1\u606F',es:'Sistema',pt:'Sistema',ru:'\u0421\u0438\u0441\u0442\u0435\u043C\u0430',de:'System',ja:'\u30B7\u30B9\u30C6\u30E0',ko:'\uC2DC\uC2A4\uD15C'},
 cpu:{en:'CPU',zh:'CPU',es:'CPU',pt:'CPU',ru:'\u0426\u041F',de:'CPU',ja:'CPU',ko:'CPU'},
-load:{en:'Load',zh:'\u8D1F\u8F7D',es:'Carga',pt:'Carga',ru:'\u041D\u0430\u0433\u0440\u0443\u0437\u043A\u0430',de:'Last',ja:'\u8CA0\u8377',ko:'\uBD80\uD558'},
+load:{en:'CPU Load',zh:'CPU\u8D1F\u8F7D',es:'Carga CPU',pt:'Carga CPU',ru:'\u041D\u0430\u0433\u0440\u0443\u0437\u043A\u0430 CPU',de:'CPU-Last',ja:'CPU\u8CA0\u8377',ko:'CPU \uBD80\uD558'},
 uptime:{en:'Uptime',zh:'\u8FD0\u884C\u65F6\u95F4',es:'Actividad',pt:'Tempo Ativo',ru:'\u0410\u043F\u0442\u0430\u0439\u043C',de:'Laufzeit',ja:'\u7A3C\u50CD\u6642\u9593',ko:'\uAC00\uB3D9 \uC2DC\uAC04'},
 temp:{en:'Temp',zh:'\u6E29\u5EA6',es:'Temp',pt:'Temp',ru:'\u0422\u0435\u043C\u043F',de:'Temp',ja:'\u6E29\u5EA6',ko:'\uC628\uB3C4'},
 memory:{en:'Memory',zh:'\u5185\u5B58',es:'Memoria',pt:'Mem\u00F3ria',ru:'\u041F\u0430\u043C\u044F\u0442\u044C',de:'Speicher',ja:'\u30E1\u30E2\u30EA',ko:'\uBA54\uBAA8\uB9AC'},
@@ -223,13 +241,14 @@ ibd_progress:{en:'IBD Progress',zh:'IBD\u8FDB\u5EA6',es:'Progreso IBD',pt:'Progr
 connections:{en:'Conn',zh:'\u8FDE\u63A5\u6570',es:'Conexiones',pt:'Conex\u00F5es',ru:'\u0421\u043E\u0435\u0434.',de:'Verb.',ja:'\u63A5\u7D9A\u6570',ko:'\uC5F0\uACB0'},
 difficulty:{en:'Diff',zh:'\u96BE\u5EA6',es:'Dificultad',pt:'Dificuldade',ru:'\u0421\u043B\u043E\u0436\u043D\u043E\u0441\u0442\u044C',de:'Schwierigkeit',ja:'\u96E3\u6613\u5EA6',ko:'\uB09C\uC774\uB3C4'},
 rss_memory:{en:'RSS',zh:'RSS\u5185\u5B58',es:'RSS',pt:'RSS',ru:'RSS',de:'RSS',ja:'RSS',ko:'RSS'},
-card_mining:{en:'Mining',zh:'\u6316\u77FF\u72B6\u6001',es:'Miner\u00EDa',pt:'Minera\u00E7\u00E3o',ru:'\u041C\u0430\u0439\u043D\u0438\u043D\u0433',de:'Mining',ja:'\u30DE\u30A4\u30CB\u30F3\u30B0',ko:'\uB9C8\uC774\uB2DD'},
-ckpool_status:{en:'ckpool',zh:'ckpool',es:'ckpool',pt:'ckpool',ru:'ckpool',de:'ckpool',ja:'ckpool',ko:'ckpool'},
+card_mining:{en:'Stratum Service',zh:'Stratum\u670D\u52A1',es:'Servicio Stratum',pt:'Servi\u00E7o Stratum',ru:'\u0421\u0435\u0440\u0432\u0438\u0441 Stratum',de:'Stratum-Dienst',ja:'Stratum\u30B5\u30FC\u30D3\u30B9',ko:'Stratum \uC11C\uBE44\uC2A4'},
+service_status:{en:'Service',zh:'\u670D\u52A1',es:'Servicio',pt:'Servi\u00E7o',ru:'\u0421\u0435\u0440\u0432\u0438\u0441',de:'Dienst',ja:'\u30B5\u30FC\u30D3\u30B9',ko:'\uC11C\uBE44\uC2A4'},
 running:{en:'Running',zh:'\u8FD0\u884C\u4E2D',es:'En ejec.',pt:'Executando',ru:'\u0417\u0430\u043F\u0443\u0449\u0435\u043D',de:'L\u00E4uft',ja:'\u5B9F\u884C\u4E2D',ko:'\uC2E4\uD589 \uC911'},
 stopped:{en:'Stopped',zh:'\u672A\u8FD0\u884C',es:'Detenido',pt:'Parado',ru:'\u041E\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D',de:'Gestoppt',ja:'\u505C\u6B62\u4E2D',ko:'\uC911\uC9C0\uB428'},
 not_synced:{en:'Not Sync',zh:'\u672A\u540C\u6B65',es:'No Sinc.',pt:'N\u00E3o Sinc.',ru:'\u041D\u0435 \u0441\u0438\u043D\u0445.',de:'Nicht sync.',ja:'\u672A\u540C\u671F',ko:'\uBBF8\uB3D9\uAE30\uD654'},
 ntp_time:{en:'NTP Time',zh:'NTP\u65F6\u95F4',es:'Hora NTP',pt:'Hora NTP',ru:'\u0412\u0440\u0435\u043C\u044F NTP',de:'NTP-Zeit',ja:'NTP\u6642\u523B',ko:'NTP \uC2DC\uAC04'},
-btc_address:{en:'BTC Addr',zh:'BTC\u5730\u5740',es:'Dir BTC',pt:'End BTC',ru:'BTC \u0430\u0434\u0440.',de:'BTC-Adr.',ja:'BTC\u30A2\u30C9\u30EC\u30B9',ko:'BTC \uC8FC\uC18C'},
+stratum_mode:{en:'Stratum Mode',zh:'Stratum\u6A21\u5F0F',es:'Modo Stratum',pt:'Modo Stratum',ru:'\u0420\u0435\u0436\u0438\u043C Stratum',de:'Stratum-Modus',ja:'Stratum\u30E2\u30FC\u30C9',ko:'Stratum \uBAA8\uB4DC'},
+btc_address:{en:'BTC Address',zh:'BTC\u5730\u5740',es:'Direcci\u00F3n BTC',pt:'Endere\u00E7o BTC',ru:'BTC \u0430\u0434\u0440\u0435\u0441',de:'BTC-Adresse',ja:'BTC\u30A2\u30C9\u30EC\u30B9',ko:'BTC \uC8FC\uC18C'},
 recent_logs:{en:'Recent Logs',zh:'\u6700\u8FD1\u65E5\u5FD7',es:'Registros',pt:'Logs Recentes',ru:'\u041B\u043E\u0433\u0438',de:'Letzte Logs',ja:'\u6700\u8FD1\u306E\u30ED\u30B0',ko:'\uCD5C\uADFC \uB85C\uADF8'},
 card_network:{en:'Network',zh:'\u7F51\u7EDC',es:'Red',pt:'Rede',ru:'\u0421\u0435\u0442\u044C',de:'Netzwerk',ja:'\u30CD\u30C3\u30C8\u30EF\u30FC\u30AF',ko:'\uB124\uD2B8\uC6CC\uD06C'},
 ip_address:{en:'IP',zh:'IP\u5730\u5740',es:'IP',pt:'IP',ru:'IP',de:'IP',ja:'IP',ko:'IP'},
