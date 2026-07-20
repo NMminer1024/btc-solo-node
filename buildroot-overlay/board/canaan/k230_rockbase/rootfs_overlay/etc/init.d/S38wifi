@@ -28,6 +28,10 @@ case "$1" in
                 exit 1
         fi
 
+        # Disable Wi-Fi power saving to reduce long-lived connection stalls.
+        iw dev ${WLAN_DEV} set power_save off 2>/dev/null || true
+        iwconfig ${WLAN_DEV} power off 2>/dev/null || true
+
         # Generate wpa_supplicant config
         cat > /tmp/wpa_supplicant.conf << EOF
 ctrl_interface=/var/run/wpa_supplicant
