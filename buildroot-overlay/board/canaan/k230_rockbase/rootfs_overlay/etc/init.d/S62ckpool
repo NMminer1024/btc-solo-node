@@ -1,0 +1,123 @@
+#!/bin/sh
+#
+# S62ckpool - BusyBox init service for ckpool
+#
+
+CONF=/root/ckpool/ckpool.conf
+LOGDIR=/root/ckpool/logs
+LOGFILE=${LOGDIR}/ckpool.log
+WAIT_PID_FILE=/root/ckpool/ckpool-autostart.pid
+BTC_CONF=/root/bitcoind/bitcoin.conf
+BTC_DATADIR=/root/block
+
+is_running() {
+    pidof ckpool >/dev/null 2>&1
+}
+
+rpc_ready() {
+    pidof bitcoind >/dev/null 2>&1 &&
+    bitcoin-cli -conf="${BTC_CONF}" -datadir="${BTC_DATADIR}" getblockchaininfo >/dev/null 2>&1
+}
+
+waiter_running() {
+    [ -f "${WAIT_PID_FILE}" ] || return 1
+
+    wait_pid=$(cat "${WAIT_PID_FILE}" 2>/dev/null)
+    [ -n "${wait_pid}" ] || return 1
+    kill -0 "${wait_pid}" 2>/dev/null
+}
+
+clear_waiter() {
+    rm -f "${WAIT_PID_FILE}"
+}
+
+stop_waiter() {
+    if waiter_running; then
+        kill "$(cat "${WAIT_PID_FILE}" 2>/dev/null)" 2>/dev/null || true
+    fi
+    clear_waiter
+}
+
+start_ckpool() {
+    mkdir -p "${LOGDIR}"
+    ckpool -c "${CONF}" > "${LOGFILE}" 2>&1 &
+    sleep 2
+    is_running
+}
+
+case "$1" in
+  start)
+        printf "Starting ckpool: "
+
+        if is_running; then
+                echo "already running"
+                exit 0
+        fi
+
+        if waiter_running; then
+                echo "waiting for bitcoind"
+                exit 0
+        fi
+
+        if rpc_ready; then
+                if start_ckpool; then
+                        echo "OK"
+                else
+                        echo "FAIL"
+                        exit 1
+                fi
+                exit 0
+        fi
+
+        (
+            retries=300
+            while [ "${retries}" -gt 0 ]; do
+                if is_running; then
+                    clear_waiter
+                    exit 0
+                fi
+
+                if rpc_ready; then
+                    start_ckpool
+                    clear_waiter
+                    exit 0
+                fi
+
+                sleep 2
+                retries=$((retries - 1))
+            done
+
+            clear_waiter
+            exit 1
+        ) &
+        echo $! > "${WAIT_PID_FILE}"
+        echo "deferred"
+        ;;
+  stop)
+        printf "Stopping ckpool: "
+
+        stop_waiter
+        if ! is_running; then
+                echo "already stopped"
+                exit 0
+        fi
+
+        if /root/ckpool/stop.sh >/dev/null 2>&1; then
+                echo "OK"
+        else
+                echo "FAIL"
+                exit 1
+        fi
+        ;;
+  restart|reload)
+        "$0" stop
+        sleep 1
+        "$0" start
+        ;;
+  *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac
+
+exit $?
