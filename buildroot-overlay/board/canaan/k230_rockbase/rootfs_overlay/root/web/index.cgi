@@ -32,9 +32,45 @@ if [ -d "$DATADIR" ]; then
 else
   block_disk_info="NOT_FOUND"
 fi
+read_temp_c() {
+  sensor_path="$1"
+  sensor_name=""
+  raw=$(cat "$sensor_path" 2>/dev/null)
+  [ -z "$raw" ] && return 1
+
+  case "$sensor_path" in
+    /sys/class/thermal/thermal_zone*/temp)
+      zone_dir=${sensor_path%/temp}
+      sensor_name=$(cat "$zone_dir/type" 2>/dev/null)
+      ;;
+    /sys/class/hwmon/hwmon*/temp*_input)
+      hwmon_dir=${sensor_path%/*}
+      sensor_name=$(cat "$hwmon_dir/name" 2>/dev/null)
+      ;;
+  esac
+
+  if [ "$sensor_name" = "canaan_thermal_zone" ]; then
+    code=$((raw % 4096))
+    temp_c=$(echo "scale=6; (0.000000000101472 * $code^4) - (0.00000110063 * $code^3) + (0.00436150 * $code^2) - (7.10128 * $code) + 3565.87" | bc -l 2>/dev/null)
+    [ -n "$temp_c" ] && printf "%.1f" "$temp_c"
+  elif echo "$raw" | grep -Eq '^[0-9]+$'; then
+    if [ "$raw" -ge 100000 ]; then
+      awk -v raw="$raw" 'BEGIN{printf "%.1f", raw/1000}'
+    elif [ "$raw" -ge 1000 ]; then
+      awk -v raw="$raw" 'BEGIN{printf "%.1f", raw/100}'
+    else
+      awk -v raw="$raw" 'BEGIN{printf "%.1f", raw}'
+    fi
+  else
+    return 1
+  fi
+}
+
 temp="N/A"
 for t in /sys/class/thermal/thermal_zone*/temp /sys/class/hwmon/hwmon*/temp1_input; do
-  [ -r "$t" ] && temp=$(awk '{printf "%.1f", $1/100}' "$t") && break
+  if [ -r "$t" ]; then
+    temp=$(read_temp_c "$t") && [ -n "$temp" ] && break
+  fi
 done
 
 # ── Bitcoin ──

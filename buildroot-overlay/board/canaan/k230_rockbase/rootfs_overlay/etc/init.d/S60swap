@@ -1,0 +1,88 @@
+#!/bin/sh
+#
+# S60swap - Ensure Rockbase has persistent 1G swap after rootfs resize
+#
+
+SWAP_FILE=/swapfile
+SWAP_SIZE_MB=1024
+RESIZE_DONE_FLAG=/resize_done
+EXPECTED_BYTES=$((SWAP_SIZE_MB * 1024 * 1024))
+
+log() {
+    echo "[S60swap] $*"
+}
+
+resize_ready() {
+    [ -f "${RESIZE_DONE_FLAG}" ]
+}
+
+swap_active() {
+    grep -q "^${SWAP_FILE}[[:space:]]" /proc/swaps 2>/dev/null
+}
+
+swap_size_ok() {
+    [ -f "${SWAP_FILE}" ] || return 1
+
+    actual_bytes=$(wc -c < "${SWAP_FILE}" 2>/dev/null)
+    [ "${actual_bytes}" = "${EXPECTED_BYTES}" ]
+}
+
+create_swapfile() {
+    log "creating ${SWAP_SIZE_MB}MB swapfile"
+    rm -f "${SWAP_FILE}"
+
+    if ! dd if=/dev/zero of="${SWAP_FILE}" bs=1M count="${SWAP_SIZE_MB}" conv=fsync >/dev/null 2>&1; then
+        log "ERROR: failed to allocate ${SWAP_FILE}"
+        rm -f "${SWAP_FILE}"
+        return 1
+    fi
+
+    chmod 600 "${SWAP_FILE}" || return 1
+    mkswap "${SWAP_FILE}" >/dev/null 2>&1 || return 1
+    return 0
+}
+
+case "$1" in
+  start)
+        printf "Starting swap: "
+
+        if ! resize_ready; then
+                echo "deferred (waiting for resize_done)"
+                exit 0
+        fi
+
+        if swap_active; then
+                echo "already active"
+                exit 0
+        fi
+
+        if ! swap_size_ok; then
+                if ! create_swapfile; then
+                        echo "FAIL"
+                        exit 1
+                fi
+        fi
+
+        chmod 600 "${SWAP_FILE}" >/dev/null 2>&1 || true
+        if swapon "${SWAP_FILE}" >/dev/null 2>&1; then
+                echo "OK"
+        else
+                echo "FAIL"
+                exit 1
+        fi
+        ;;
+  stop)
+        printf "Stopping swap: "
+
+        if ! swap_active; then
+                echo "already stopped"
+                exit 0
+        fi
+
+        if swapoff "${SWAP_FILE}" >/dev/null 2>&1; then
+                echo "OK"
+        else
+                echo "FAIL"
+                exit 1
+        fi
+        ;;
