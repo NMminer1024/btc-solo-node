@@ -25,10 +25,18 @@ load_bar_pct=$(awk -v p="$load_pct" 'BEGIN{if (p > 100) p = 100; print p}')
 mem_total=$(awk '/^MemTotal/{printf "%.0f", $2/1024}' /proc/meminfo)
 mem_free=$(awk '/^MemAvailable/{printf "%.0f", $2/1024}' /proc/meminfo)
 mem_used=$((mem_total - mem_free)); mem_pct=$((mem_used * 100 / mem_total))
+swap_total=$(awk '/^SwapTotal/{printf "%.0f", $2/1024}' /proc/meminfo)
+swap_free=$(awk '/^SwapFree/{printf "%.0f", $2/1024}' /proc/meminfo)
+swap_used=$((swap_total - swap_free))
+if [ "$swap_total" -gt 0 ]; then
+  swap_pct=$((swap_used * 100 / swap_total))
+else
+  swap_pct=0
+fi
 disk_info=$(df -h / | awk 'NR==2{print $3"/"$2" ("$5" used)"}')
 if [ -d "$DATADIR" ]; then
-  block_disk_info=$(df -h "$DATADIR" 2>/dev/null | awk 'NR==2{print $3"/"$2" ("$5" used)"}')
-  [ -z "$block_disk_info" ] && block_disk_info="—"
+  block_disk_size=$(du -sm "$DATADIR" 2>/dev/null | awk 'NR==1{print $1"M"}')
+  [ -n "$block_disk_size" ] && block_disk_info="${block_disk_size} (${DATADIR})" || block_disk_info="—"
 else
   block_disk_info="NOT_FOUND"
 fi
@@ -170,7 +178,7 @@ cat <<ENDOFHTML
 <tr><td data-i18n="load">CPU Load</td><td>${load_pct}% (${nproc} cores)<div class="bar-bg"><div class="bar-fill" style="width:${load_bar_pct}%"></div></div></td></tr>
 <tr><td data-i18n="uptime">Uptime</td><td>${uptime_fmt}</td></tr>
 <tr><td data-i18n="temp">Temperature</td><td>${temp}°C</td></tr>
-<tr><td data-i18n="memory">Memory</td><td>${mem_used}M / ${mem_total}M (${mem_pct}%)<div class="bar-bg"><div class="bar-fill" style="width:${mem_pct}%"></div></div></td></tr>
+<tr><td data-i18n="memory">Memory</td><td>${mem_used}M / ${mem_total}M (${mem_pct}%)<div class="bar-bg"><div class="bar-fill" style="width:${mem_pct}%"></div></div><div style="margin-top:6px;color:#8b949e;font-size:0.85rem"><span data-i18n="swap_usage">SWAP</span>: ${swap_used}M / ${swap_total}M (${swap_pct}%)</div></td></tr>
 <tr><td data-i18n="disk">Disk</td><td>${disk_info}</td></tr>
 ENDOFHTML
 
@@ -263,6 +271,7 @@ load:{en:'CPU Load',zh:'CPU\u8D1F\u8F7D',es:'Carga CPU',pt:'Carga CPU',ru:'\u041
 uptime:{en:'Uptime',zh:'\u8FD0\u884C\u65F6\u95F4',es:'Actividad',pt:'Tempo Ativo',ru:'\u0410\u043F\u0442\u0430\u0439\u043C',de:'Laufzeit',ja:'\u7A3C\u50CD\u6642\u9593',ko:'\uAC00\uB3D9 \uC2DC\uAC04'},
 temp:{en:'Temp',zh:'\u6E29\u5EA6',es:'Temp',pt:'Temp',ru:'\u0422\u0435\u043C\u043F',de:'Temp',ja:'\u6E29\u5EA6',ko:'\uC628\uB3C4'},
 memory:{en:'Memory',zh:'\u5185\u5B58',es:'Memoria',pt:'Mem\u00F3ria',ru:'\u041F\u0430\u043C\u044F\u0442\u044C',de:'Speicher',ja:'\u30E1\u30E2\u30EA',ko:'\uBA54\uBAA8\uB9AC'},
+swap_usage:{en:'SWAP',zh:'\u4EA4\u6362\u5206\u533A',es:'SWAP',pt:'SWAP',ru:'SWAP',de:'SWAP',ja:'SWAP',ko:'SWAP'},
 disk:{en:'Disk',zh:'\u78C1\u76D8',es:'Disco',pt:'Disco',ru:'\u0414\u0438\u0441\u043A',de:'Platte',ja:'\u30C7\u30A3\u30B9\u30AF',ko:'\uB514\uC2A4\uD06C'},
 block_disk:{en:'Block Data',zh:'\u533A\u5757\u6570\u636E',es:'Datos Block',pt:'Dados Block',ru:'\u0414\u0430\u043D\u043D\u044B\u0435 \u0431\u043B\u043E\u043A\u043E\u0432',de:'Block-Daten',ja:'\u30D6\u30ED\u30C3\u30AF\u30C7\u30FC\u30BF',ko:'\uBE14\uB85D \uB370\uC774\uD130'},
 not_detected:{en:'Not Detected',zh:'\u672A\u68C0\u6D4B\u5230',es:'No detectado',pt:'N\u00E3o detectado',ru:'\u041D\u0435 \u043E\u0431\u043D\u0430\u0440\u0443\u0436\u0435\u043D',de:'Nicht erkannt',ja:'\u672A\u691C\u51FA',ko:'\uAC10\uC9C0 \uC548 \uB428'},
