@@ -58,17 +58,29 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo " [2/4] 检查 SSH 连接 (root@$TARGET_IP)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-SSH_CMD="ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new"
+SSH_KNOWN_HOSTS="${TMPDIR:-/tmp}/sync-block-known_hosts.$$"
+trap 'rm -f "$SSH_KNOWN_HOSTS"' EXIT INT TERM
+if command -v sshpass >/dev/null 2>&1; then
+    export SSHPASS=""
+    SSH_AUTH="sshpass -e"
+else
+    SSH_AUTH=""
+fi
+SSH_CMD="$SSH_AUTH ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$SSH_KNOWN_HOSTS -o GlobalKnownHostsFile=/dev/null"
 
-if ! $SSH_CMD root@"$TARGET_IP" "echo OK" > /dev/null 2>&1; then
+SSH_ERR=$(mktemp)
+if ! $SSH_CMD root@"$TARGET_IP" "echo OK" > /dev/null 2>"$SSH_ERR"; then
     echo -e "  ${RED}✗ 无法 SSH 连接到 $TARGET_IP${NC}"
+    [ -s "$SSH_ERR" ] && sed 's/^/    /' "$SSH_ERR"
     echo ""
     echo "  请检查:"
     echo "    1. 目标设备是否开机通电"
     echo "    2. 网络是否连通 (ping $TARGET_IP)"
     echo "    3. 目标 SSH 服务是否启动"
+    rm -f "$SSH_ERR"
     exit 1
 fi
+rm -f "$SSH_ERR"
 echo -e "  ${GREEN}✓${NC} SSH 连接正常"
 echo ""
 
