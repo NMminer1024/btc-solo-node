@@ -59,12 +59,16 @@
           <div class="sync-hero">
             <div class="progress-orb">
               <div class="progress-orb-ring" id="ibdOrb">
-                <span id="ibdPct">99%</span>
+                <span id="ibdPct">--</span>
               </div>
             </div>
             <div class="sync-copy">
-              <strong id="ibdBlocks">902,120 / 903,744</strong>
-              <p id="ibdMeta">Mainnet · v28.0.0 · 2026-07-21</p>
+              <strong class="ibd-blocks">
+                <span class="ibd-blocks-current" id="ibdBlocksCurrent">--</span>
+                <span class="ibd-blocks-divider"> / </span>
+                <span class="ibd-blocks-total" id="ibdBlocksTotal">--</span>
+              </strong>
+              <p id="ibdMeta">Loading live node data...</p>
             </div>
           </div>
 
@@ -118,29 +122,38 @@
           <div class="metric-orb-grid">
             <div class="metric-orb-card">
               <div class="metric-orb metric-orb-soft" id="cpuOrb">
-                <span id="cpuPct">31%</span>
+                <span id="cpuPct">--</span>
               </div>
               <div class="metric-orb-copy">
                 <span>CPU Load</span>
-                <strong id="cpuLoadValue">1.24 / 4 cores</strong>
-              </div>
-            </div>
-            <div class="metric-orb-card">
-              <div class="metric-orb metric-orb-brand" id="memOrb">
-                <span id="memPct">48%</span>
-              </div>
-              <div class="metric-orb-copy">
-                <span>Memory</span>
-                <strong id="memValue">1.9G / 4.0G</strong>
+                <strong id="cpuLoadValue">--</strong>
               </div>
             </div>
             <div class="metric-orb-card">
               <div class="metric-orb metric-orb-warm" id="diskOrb">
-                <span id="diskPct">78%</span>
+                <span id="diskPct">--</span>
               </div>
               <div class="metric-orb-copy">
                 <span>Disk</span>
-                <strong id="diskValue">312G / 400G</strong>
+                <strong id="diskValue">--</strong>
+              </div>
+            </div>
+            <div class="metric-orb-card">
+              <div class="metric-orb metric-orb-brand" id="memOrb">
+                <span id="memPct">--</span>
+              </div>
+              <div class="metric-orb-copy">
+                <span>RAM</span>
+                <strong id="memValue">--</strong>
+              </div>
+            </div>
+            <div class="metric-orb-card">
+              <div class="metric-orb metric-orb-danger" id="swapOrb">
+                <span id="swapPct">--</span>
+              </div>
+              <div class="metric-orb-copy">
+                <span>Swap</span>
+                <strong id="swapValue">--</strong>
               </div>
             </div>
           </div>
@@ -199,10 +212,6 @@
                   <span id="netRssi">-58 dBm</span>
                 </span>
               </strong>
-            </div>
-            <div class="stack-row">
-              <span>Local Stratum Reach</span>
-              <strong id="stratumReach">Use the LAN IP above with port 3333</strong>
             </div>
           </div>
         </article>

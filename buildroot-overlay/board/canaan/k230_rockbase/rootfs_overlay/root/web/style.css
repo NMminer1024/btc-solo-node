@@ -351,7 +351,7 @@ textarea {
 
 .metric-orb-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 18px;
 }
@@ -395,6 +395,10 @@ textarea {
 
 .metric-orb-warm {
   --ring-color: var(--warm);
+}
+
+.metric-orb-danger {
+  --ring-color: var(--danger);
 }
 
 .metric-orb-copy span {
@@ -477,6 +481,86 @@ textarea {
   display: block;
   font-size: 2rem;
   letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+
+.ibd-blocks-current {
+  color: var(--brand-2);
+}
+
+.ibd-blocks-divider,
+.ibd-blocks-total {
+  color: var(--value);
+}
+
+.ibd-blocks-current,
+.ibd-blocks-total {
+  display: inline-flex;
+  align-items: baseline;
+  min-height: 1.15em;
+}
+
+.roll-char {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0.58em;
+}
+
+.roll-char-digit {
+  min-width: 0.62em;
+}
+
+.roll-char-comma {
+  min-width: 0.32em;
+}
+
+.roll-char-dot {
+  min-width: 0.28em;
+}
+
+.roll-char-percent {
+  min-width: 0.48em;
+}
+
+.roll-char-space {
+  min-width: 0.22em;
+}
+
+.roll-char-clip {
+  height: 1.05em;
+  overflow: hidden;
+  align-items: flex-start;
+}
+
+.roll-clip,
+.roll-track {
+  display: flex;
+  flex-direction: column;
+}
+
+.roll-track {
+  transform: translateY(0);
+  transition: transform 620ms cubic-bezier(0.2, 0.78, 0.18, 1);
+  will-change: transform;
+}
+
+.roll-char.is-running .roll-track {
+  transform: translateY(-50%);
+}
+
+.roll-face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.05em;
+  line-height: 1.05;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .roll-track {
+    transition: none;
+  }
 }
 
 .sync-copy p,
@@ -489,6 +573,16 @@ textarea {
 
 .sync-copy p {
   font-size: 0.95rem;
+}
+
+.ibd-meta-chain,
+.ibd-meta-date {
+  color: var(--secondary-text);
+}
+
+.ibd-meta-sep,
+.ibd-meta-time {
+  color: var(--muted);
 }
 
 .info-grid {

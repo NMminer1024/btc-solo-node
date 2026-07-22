@@ -124,6 +124,18 @@ for t in /sys/class/thermal/thermal_zone*/temp /sys/class/hwmon/hwmon*/temp1_inp
   case "$raw" in
     '' ) ;;
     * )
+      if echo "$raw" | grep -Eq '^[0-9]+$'; then
+        zone_type_file="${t%/temp}/type"
+        if [ -r "$zone_type_file" ] && grep -qx 'canaan_thermal_zone' "$zone_type_file" 2>/dev/null; then
+          ts_code=$((raw & 4095))
+          temp=$(awk -v code="$ts_code" 'BEGIN{
+            c = code + 0
+            v = (1.01472e-10 * c * c * c * c) - (1.10063e-6 * c * c * c) + (4.36150e-3 * c * c) - (7.10128 * c) + 3565.87
+            printf "%.1fC", v
+          }')
+          break
+        fi
+      fi
       if [ "$raw" -ge 100000 ] 2>/dev/null; then temp=$(awk -v r="$raw" 'BEGIN{printf "%.1fC", r/1000}'); break; fi
       if [ "$raw" -ge 1000 ] 2>/dev/null; then temp=$(awk -v r="$raw" 'BEGIN{printf "%.1fC", r/100}'); break; fi
       if echo "$raw" | grep -Eq '^[0-9]+$'; then temp=$(awk -v r="$raw" 'BEGIN{printf "%.1fC", r}'); break; fi
@@ -135,7 +147,7 @@ done
 btc_running=0
 headers="-"; headers_fmt="-"
 blocks="-"; blocks_fmt="-"
-progress_pct="0.00"; progress_ring=0; ibd=""; chain="-"; difficulty="-"
+progress_pct="0.000"; progress_ring="0.000"; ibd=""; chain="-"; difficulty="-"
 difficulty_display="-"; connections="-"; subversion="-"; rss="N/A"
 pruned="false"; best_block_date="-"; btc_context="-"
 
@@ -146,8 +158,8 @@ if pidof bitcoind >/dev/null 2>&1; then
   headers=$(echo "$btc_info" | grep -o '"headers": *[0-9]*' | grep -o '[0-9]*')
   blocks=$(echo "$btc_info" | grep -o '"blocks": *[0-9]*' | grep -o '[0-9]*')
   progress=$(echo "$btc_info" | grep -o '"verificationprogress": *[0-9.e+-]*' | cut -d: -f2)
-  [ -n "$progress" ] && progress_pct=$(echo "$progress" | awk '{printf "%.2f", $1*100}')
-  progress_ring=$(awk -v p="$progress_pct" 'BEGIN{if(p<0)p=0;if(p>100)p=100;printf "%.0f",p}')
+  [ -n "$progress" ] && progress_pct=$(echo "$progress" | awk '{printf "%.3f", $1*100}')
+  progress_ring=$(awk -v p="$progress_pct" 'BEGIN{if(p<0)p=0;if(p>100)p=100;printf "%.3f",p}')
   ibd=$(echo "$btc_info" | grep -o '"initialblockdownload": *[a-z]*' | grep -o 'true\|false')
   chain=$(echo "$btc_info" | grep -o '"chain": *"[^"]*"' | cut -d'"' -f4)
   difficulty=$(echo "$btc_info" | grep -o '"difficulty": *[0-9.]*' | cut -d: -f2 | xargs)
@@ -159,7 +171,7 @@ if pidof bitcoind >/dev/null 2>&1; then
   if [ -n "$blocks" ] && [ "$blocks" != "-" ]; then
     best_block_hash=$(btc_cli getblockhash "$blocks" | tr -d '"')
     best_block_time=$(btc_cli getblockheader "$best_block_hash" 2>/dev/null | grep -o '"time": *[0-9]*' | grep -o '[0-9]*' | head -n1)
-    [ -n "$best_block_time" ] && best_block_date=$(date -u -d "@$best_block_time" '+%Y-%m-%d' 2>/dev/null || echo "-")
+    [ -n "$best_block_time" ] && best_block_date=$(date -u -d "@$best_block_time" '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || echo "-")
   fi
 fi
 headers_fmt=$(fmt_int "$headers")
@@ -183,6 +195,9 @@ CKPOOL_CONF=/root/ckpool/ckpool.conf
 btc_address=$(grep -m1 '"btcaddress"' "$CKPOOL_CONF" 2>/dev/null | cut -d'"' -f4)
 [ -z "$btc_address" ] && btc_address="-"
 ckpool_rpc_url=$(grep -m1 '"url"' "$CKPOOL_CONF" 2>/dev/null | cut -d'"' -f4)
+stratum_listen=$(grep -A2 '"serverurl"' "$CKPOOL_CONF" 2>/dev/null | grep -m1 '"[^"]*:[0-9][0-9]*"' | cut -d'"' -f2)
+stratum_port=$(printf '%s\n' "$stratum_listen" | awk -F: 'NF{print $NF}' | head -n1)
+[ -z "$stratum_port" ] && stratum_port=3333
 case "$ckpool_rpc_url" in
   127.0.0.1:*|localhost:*|::1:*) stratum_key=solo ;;
   "") stratum_key=unknown ;;
@@ -219,6 +234,16 @@ elif [ "$rssi_pct" -ge 51 ]; then signal_level=3
 elif [ "$rssi_pct" -ge 26 ]; then signal_level=2
 elif [ "$rssi_pct" -ge 1 ]; then signal_level=1
 else signal_level=0; fi
+
+stratum_host="$ip_addr"
+case "$stratum_host" in
+  ""|N/A) stratum_host="<device-ip>" ;;
+esac
+stratum_url="stratum+tcp://${stratum_host}:${stratum_port}"
+stratum_reach="${stratum_host}:${stratum_port}"
+stratum_user_hint="wallet.workername"
+stratum_pass_hint="(leave blank)"
+stratum_recommended="LAN miners -> local Stratum"
 
 ntp_running=0; ps | grep -v grep | grep -q ntpd && ntp_running=1
 if [ "$ntp_running" = "1" ]; then ntp_key=running; ntp_class=ok
@@ -274,6 +299,11 @@ printf '    "ckpool_running": %s,\n' "$ckpool_running"
 printf '    "ckpool_class": %s,\n' "$(json_str "$ckpool_class")"
 printf '    "ckpool_state": %s,\n' "$(json_str "$ckpool_state")"
 printf '    "stratum_key": %s,\n' "$(json_str "$stratum_key")"
+printf '    "stratum_port": %s,\n' "$(json_num "$stratum_port")"
+printf '    "stratum_url": %s,\n' "$(json_str "$stratum_url")"
+printf '    "user_hint": %s,\n' "$(json_str "$stratum_user_hint")"
+printf '    "pass_hint": %s,\n' "$(json_str "$stratum_pass_hint")"
+printf '    "recommended_mode": %s,\n' "$(json_str "$stratum_recommended")"
 printf '    "btc_address": %s,\n' "$(json_str "$btc_address")"
 printf '    "ckpool_tail": %s\n' "$(json_str_ml "$ckpool_tail")"
 printf '  },\n'
@@ -287,6 +317,7 @@ printf '    "mac_addr": %s,\n' "$(json_str "$mac_addr")"
 printf '    "rssi_display": %s,\n' "$(json_str "$rssi_display")"
 printf '    "rssi_pct": %s,\n' "$(json_num "$rssi_pct")"
 printf '    "signal_level": %s,\n' "$signal_level"
+printf '    "stratum_reach": %s,\n' "$(json_str "$stratum_reach")"
 printf '    "ntp_class": %s,\n' "$(json_str "$ntp_class")"
 printf '    "ntp_key": %s\n' "$(json_str "$ntp_key")"
 printf '  }\n'
