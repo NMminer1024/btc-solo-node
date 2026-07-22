@@ -1,0 +1,51 @@
+#!/bin/sh
+#
+# S42web - NMminer Web Dashboard
+# BusyBox httpd on port 80, CGI-enabled
+#
+
+PIDFILE=/var/run/httpd.pid
+WEBROOT=/root/web
+HTTPD=/usr/sbin/httpd
+HTTPD_ARGS="-f -c $WEBROOT/httpd.conf -h $WEBROOT -p 80"
+
+httpd_pids() {
+    ps | awk '/httpd/ && /-c \/root\/web\/httpd.conf/ && /-h \/root\/web/ && /-p 80/ {print $1}'
+}
+
+stop_httpd() {
+    if [ -f "$PIDFILE" ]; then
+        start-stop-daemon -K -q -p "$PIDFILE" || true
+    fi
+
+    pids=$(httpd_pids)
+    if [ -n "$pids" ]; then
+        kill $pids >/dev/null 2>&1 || true
+        sleep 1
+    fi
+
+    rm -f "$PIDFILE"
+}
+
+case "$1" in
+  start)
+    printf "Starting web dashboard: "
+    cd "$WEBROOT" || exit 1
+    stop_httpd
+    start-stop-daemon -S -b -m -q -p "$PIDFILE" -x "$HTTPD" -- $HTTPD_ARGS
+    [ $? = 0 ] && echo "OK" || echo "FAIL"
+    ;;
+  stop)
+    printf "Stopping web dashboard: "
+    stop_httpd
+    [ $? = 0 ] && echo "OK" || echo "FAIL"
+    ;;
+  restart)
+    "$0" stop
+    sleep 1
+    "$0" start
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+esac

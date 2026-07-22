@@ -6,7 +6,7 @@
 CONF=/root/ckpool/ckpool.conf
 LOGDIR=/root/ckpool/logs
 LOGFILE=${LOGDIR}/ckpool.log
-WAIT_PID_FILE=/root/ckpool/ckpool-autostart.pid
+WAIT_PID_FILE=/var/run/ckpool-autostart.pid
 BTC_CONF=/root/bitcoind/bitcoin.conf
 BTC_DATADIR=/root/block
 RESIZE_DONE_FLAG=/resize_done
@@ -19,9 +19,11 @@ resize_ready() {
     [ -f "${RESIZE_DONE_FLAG}" ]
 }
 
-rpc_ready() {
-    pidof bitcoind >/dev/null 2>&1 &&
-    bitcoin-cli -conf="${BTC_CONF}" -datadir="${BTC_DATADIR}" getblockchaininfo >/dev/null 2>&1
+bitcoind_ready() {
+    pidof bitcoind >/dev/null 2>&1 || return 1
+
+    info=$(bitcoin-cli -conf="${BTC_CONF}" -datadir="${BTC_DATADIR}" getblockchaininfo 2>/dev/null) || return 1
+    echo "${info}" | grep -q '"initialblockdownload": *false'
 }
 
 waiter_running() {
@@ -41,6 +43,40 @@ stop_waiter() {
         kill "$(cat "${WAIT_PID_FILE}" 2>/dev/null)" 2>/dev/null || true
     fi
     clear_waiter
+}
+
+start_waiter() {
+    start-stop-daemon -S -b -m -q -p "${WAIT_PID_FILE}" -x /bin/sh -- -c '
+        while :; do
+            if ps | grep -v grep | grep -q ckpool; then
+                rm -f "'"${WAIT_PID_FILE}"'"
+                exit 0
+            fi
+
+            if pidof bitcoind >/dev/null 2>&1; then
+                info=$(bitcoin-cli -conf="'"${BTC_CONF}"'" -datadir="'"${BTC_DATADIR}"'" getblockchaininfo 2>/dev/null) || {
+                    sleep 60
+                    continue
+                }
+
+                echo "${info}" | grep -q '"'"'"initialblockdownload": *false'"'"' || {
+                    sleep 60
+                    continue
+                }
+
+                mkdir -p "'"${LOGDIR}"'"
+                ckpool -c "'"${CONF}"'" > "'"${LOGFILE}"'" 2>&1 &
+                sleep 2
+
+                if ps | grep -v grep | grep -q ckpool; then
+                    rm -f "'"${WAIT_PID_FILE}"'"
+                    exit 0
+                fi
+            fi
+
+            sleep 60
+        done
+    '
 }
 
 start_ckpool() {
@@ -66,11 +102,11 @@ case "$1" in
         fi
 
         if waiter_running; then
-                echo "waiting for bitcoind"
+                echo "waiting for bitcoind sync"
                 exit 0
         fi
 
-        if rpc_ready; then
+        if bitcoind_ready; then
                 if start_ckpool; then
                         echo "OK"
                 else
@@ -80,29 +116,8 @@ case "$1" in
                 exit 0
         fi
 
-        (
-            retries=300
-            while [ "${retries}" -gt 0 ]; do
-                if is_running; then
-                    clear_waiter
-                    exit 0
-                fi
-
-                if rpc_ready; then
-                    start_ckpool
-                    clear_waiter
-                    exit 0
-                fi
-
-                sleep 2
-                retries=$((retries - 1))
-            done
-
-            clear_waiter
-            exit 1
-        ) &
-        echo $! > "${WAIT_PID_FILE}"
-        echo "deferred"
+        start_waiter
+        echo "deferred (waiting for bitcoind sync)"
         ;;
   stop)
         printf "Stopping ckpool: "

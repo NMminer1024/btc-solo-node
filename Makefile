@@ -40,14 +40,22 @@ copy-img:
 		echo "用法: make copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/Iot/k230/img"; \
 		exit 1; \
 	fi
-	@img=$$(ls -t $(BRW_BUILD_DIR)/images/sysimage-sdcard.img.gz 2>/dev/null | head -1); \
+	@img="$(BRW_BUILD_DIR)/images/sysimage-sdcard.img"; \
+	ver_file="$(BRW_BUILD_DIR)/target/etc/version/release_version"; \
+	build_stamp=$$(grep -m1 '^sdk:' "$$ver_file" 2>/dev/null | grep -oE '[0-9]{8}-[0-9]{6}' | head -n1); \
+	[ -n "$$build_stamp" ] || build_stamp=$$(date +%Y%m%d-%H%M%S); \
+	export_dir="$(IMG_OUTPUT_DIR)/sysimage-sdcard-$$build_stamp"; \
 	if [ -z "$$img" ]; then \
 		echo "错误: 未找到镜像文件，请先执行 make CONF=$(CONF) 编译"; \
 		exit 1; \
 	fi; \
-	mkdir -p "$(IMG_OUTPUT_DIR)" 2>/dev/null || true; \
-	cp -v "$$img" "$(IMG_OUTPUT_DIR)/"; \
-	echo "镜像已拷贝到: $(IMG_OUTPUT_DIR)/$$(basename $$img)"
+	if [ ! -f "$$img" ]; then \
+		echo "错误: 未找到镜像文件 $$img，请先执行 make CONF=$(CONF) 编译"; \
+		exit 1; \
+	fi; \
+	mkdir -p "$$export_dir" 2>/dev/null || true; \
+	cp -v "$$img" "$$export_dir/"; \
+	echo "镜像已拷贝到: $$export_dir/sysimage-sdcard.img"
 
 ddr_test_img_% :sync buildroot ###128/512/1024/2048
 	@echo "build ddr test img ,ddr size: $*"
@@ -120,7 +128,7 @@ sync:
 	make -f tools/sync.mk sync   BR_SRC_DIR=$(BR_SRC_DIR)  BR_OVERLAY_DIR=$(BR_OVERLAY_DIR)  BR_NAME=$(BR_NAME)
 
 this-makefile := $(lastword $(MAKEFILE_LIST))  all dl help  savedefconfig  sync  %_defconfig  \
-				 debian ubuntu openouler  debian_rootfs ubuntu_rootfs list_def list-def  toolchain_and_depend buildroot  ddr_test_img_%
+				 debian ubuntu openouler  debian_rootfs ubuntu_rootfs list_def list-def  toolchain_and_depend buildroot  ddr_test_img_% copy-img
 $(filter-out $(this-makefile) , $(MAKECMDGOALS)):	$(BRW_BUILD_DIR)/.config
 	[ -d $(BRW_BUILD_DIR) ] && make -C $(BRW_BUILD_DIR) $@ BR2_PRIMARY_SITE=$(BR2_PRIMARY_SITE)
 	@( if [ $@ = linux-savedefconfig ];then \

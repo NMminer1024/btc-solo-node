@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NM full node monitor</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="wrap">
+<div class="header">
+  <div>
+    <h1>NM full node monitor</h1>
+    <div class="sub" data-i18n="subtitle">Bitcoin Full Node + Solo Mining Pool</div>
+  </div>
+  <div class="lang-selector">
+    <label data-i18n="lang_label">Language</label>
+    <select id="langSelect" onchange="switchLang(this.value)">
+      <option value="en">English</option>
+      <option value="zh">中文</option>
+      <option value="es">Español</option>
+      <option value="pt">Português</option>
+      <option value="ru">Русский</option>
+      <option value="de">Deutsch</option>
+      <option value="ja">日本語</option>
+      <option value="ko">한국어</option>
+    </select>
+  </div>
+</div>
+
+<div class="grid">
+
+<!-- System Card -->
+<div class="card">
+  <div class="card-head"><h2 data-i18n="card_sys">System</h2></div>
+  <div class="metrics sys-metrics">
+    <div class="metric">
+      <b data-i18n="load">CPU Load</b>
+      <div class="ring" id="ring_load" style="--p:0;--c:#38bdf8"><span id="ring_load_span">-%</span></div>
+      <strong id="val_load">-</strong>
+    </div>
+    <div class="metric">
+      <b data-i18n="memory">Memory</b>
+      <div class="ring" id="ring_mem" style="--p:0;--c:#34d399"><span id="ring_mem_span">-%</span></div>
+      <strong id="val_mem">-</strong>
+    </div>
+    <div class="metric">
+      <b data-i18n="disk">Disk</b>
+      <div class="ring" id="ring_disk" style="--p:0;--c:#f59e0b"><span id="ring_disk_span">-%</span></div>
+      <strong id="val_disk">-</strong>
+    </div>
+    <div class="metric">
+      <b data-i18n="swap_usage">SWAP</b>
+      <div class="ring" id="ring_swap" style="--p:0;--c:#60a5fa"><span id="ring_swap_span">-%</span></div>
+      <strong id="val_swap">-</strong>
+    </div>
+  </div>
+  <div class="kv">
+    <div class="row"><label data-i18n="cpu">CPU</label><div class="val" id="val_cpu">-</div></div>
+    <div class="row"><label data-i18n="uptime">Uptime</label><div class="val" id="val_uptime">-</div></div>
+    <div class="row"><label data-i18n="temp">Temp</label><div class="val" id="val_temp">-</div></div>
+    <div class="row" id="row_blockdisk">
+      <label data-i18n="block_disk">Block Data</label>
+      <div class="val val-stack" id="val_blockdisk"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Bitcoin Node Card -->
+<div class="card">
+  <div class="card-head">
+    <h2 data-i18n="card_btc">Bitcoin Node</h2>
+    <div class="badges status-badges">
+      <div class="badge" id="badge_sync"><span data-i18n="sync_status">Sync</span><span data-i18n="syncing">-</span></div>
+      <div class="badge" id="badge_prune"><span data-i18n="mode_label">Mode</span><span data-i18n="full_mode">-</span></div>
+    </div>
+  </div>
+  <div class="metrics btc-metrics">
+    <div class="metric metric-ibd">
+      <b data-i18n="ibd_progress">IBD Progress</b>
+      <div class="ibd-hero">
+        <div class="ring" id="ring_ibd" style="--p:0;--c:#14b8a6"><span id="ring_ibd_span">-%</span></div>
+        <div class="ibd-copy">
+          <strong id="val_ibd_blocks">-</strong>
+          <span class="stamp" id="val_ibd_date">-</span>
+          <small class="metric-compact" id="val_ibd_context">-</small>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="kv">
+    <div class="row"><label data-i18n="connections">Conn</label><div class="val" id="val_conn">-</div></div>
+    <div class="row"><label data-i18n="difficulty">Diff</label><div class="val" id="val_diff">-</div></div>
+    <div class="row"><label data-i18n="node_ram">Node RAM (RSS)</label><div class="val" id="val_rss">-</div></div>
+  </div>
+</div>
+
+<!-- Mining Card -->
+<div class="card card-mining">
+  <div class="card-head">
+    <h2 data-i18n="card_mining">Stratum Service</h2>
+    <div class="badges status-badges">
+      <div class="badge" id="badge_ckpool"><span data-i18n="service_status">Service</span><span data-i18n="stopped">-</span></div>
+      <div class="badge soft"><span data-i18n="stratum_mode">Stratum Mode</span><span data-i18n="solo" id="val_stratum_mode">-</span></div>
+    </div>
+  </div>
+  <div class="kv">
+    <div class="row address-row">
+      <label data-i18n="btc_address">BTC Address</label>
+      <div class="val address-wrap">
+        <div class="copy-wrap">
+          <input class="copy" type="text" readonly id="inp_btcaddr" value="-" onclick="this.select();" onfocus="this.select();" spellcheck="false">
+          <button class="copy-btn" type="button" onclick="copyField(this)" data-i18n-title="copy_address" title="Copy address" aria-label="Copy address">⌘</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="log-box" id="log_ckpool">-</div>
+</div>
+
+<!-- Network Card -->
+<div class="card">
+  <div class="card-head">
+    <h2 data-i18n="card_network">Network</h2>
+    <div class="badges">
+      <div class="badge" id="badge_ntp"><span data-i18n="ntp_status">NTP</span><span data-i18n="not_synced">-</span></div>
+    </div>
+  </div>
+  <div class="kv">
+    <div class="row"><label data-i18n="ip_address">IP</label><div class="val" id="val_ip">-</div></div>
+    <div class="row"><label data-i18n="wifi_ssid">WiFi</label><div class="val" id="val_wifi">-</div></div>
+    <div class="row"><label data-i18n="mac_address">MAC</label><div class="val" id="val_mac">-</div></div>
+    <div class="row"><label data-i18n="rssi">RSSI</label><div class="val" id="val_rssi">-</div></div>
+  </div>
+</div>
+
+</div><!-- .grid -->
+
+<div class="footer" data-i18n="footer">Auto-refresh 10s | Busybox httpd + Shell CGI (AJAX)</div>
+</div><!-- .wrap -->
+
+<script>
+// ============ i18n Translations ============
+var L = {
+subtitle:{en:'Bitcoin Full Node + Solo Mining Pool',zh:'Bitcoin全节点 + 独立挖矿池',es:'Nodo Completo Bitcoin + Pool Solo',pt:'Nó Completo Bitcoin + Pool Solo',ru:'Полная нода Bitcoin + соло-пул',de:'Bitcoin Full Node + Solo-Pool',ja:'Bitcoinフルノード + ソロプール',ko:'Bitcoin 풀노드 + 솔로 풀'},
+lang_label:{en:'Language',zh:'语言',es:'Idioma',pt:'Idioma',ru:'Язык',de:'Sprache',ja:'言語',ko:'언어'},
+card_sys:{en:'System',zh:'系统信息',es:'Sistema',pt:'Sistema',ru:'Система',de:'System',ja:'システム',ko:'시스템'},
+cpu:{en:'CPU',zh:'CPU',es:'CPU',pt:'CPU',ru:'CPU',de:'CPU',ja:'CPU',ko:'CPU'},
+load:{en:'CPU Load',zh:'CPU负载',es:'Carga CPU',pt:'Carga CPU',ru:'Нагрузка CPU',de:'CPU-Last',ja:'CPU負荷',ko:'CPU 부하'},
+uptime:{en:'Uptime',zh:'运行时间',es:'Actividad',pt:'Tempo Ativo',ru:'Аптайм',de:'Laufzeit',ja:'稼働時間',ko:'가동 시간'},
+temp:{en:'Temp',zh:'温度',es:'Temp',pt:'Temp',ru:'Темп',de:'Temp',ja:'温度',ko:'온도'},
+memory:{en:'Memory',zh:'内存',es:'Memoria',pt:'Memória',ru:'Память',de:'Speicher',ja:'メモリ',ko:'메모리'},
+swap_usage:{en:'SWAP',zh:'SWAP',es:'SWAP',pt:'SWAP',ru:'SWAP',de:'SWAP',ja:'SWAP',ko:'SWAP'},
+disk:{en:'Disk',zh:'磁盘',es:'Disco',pt:'Disco',ru:'Диск',de:'Platte',ja:'ディスク',ko:'디스크'},
+block_disk:{en:'Block Data',zh:'区块数据',es:'Datos Block',pt:'Dados Block',ru:'Данные блоков',de:'Block-Daten',ja:'ブロックデータ',ko:'블록 데이터'},
+not_detected:{en:'Not Detected',zh:'未检测到',es:'No detectado',pt:'Não detectado',ru:'Не обнаружен',de:'Nicht erkannt',ja:'未検出',ko:'감지 안 됨'},
+card_btc:{en:'Bitcoin Node',zh:'Bitcoin 节点',es:'Nodo Bitcoin',pt:'Nó Bitcoin',ru:'Нода Bitcoin',de:'Bitcoin-Knoten',ja:'Bitcoinノード',ko:'Bitcoin 노드'},
+sync_status:{en:'Sync',zh:'状态',es:'Sincro',pt:'Sincro',ru:'Синх',de:'Sync',ja:'同期',ko:'동기화'},
+syncing:{en:'IBD Syncing',zh:'IBD同步中',es:'Sincronizando',pt:'Sincronizando',ru:'Синхронизация',de:'IBD Sync',ja:'IBD同期中',ko:'IBD 동기화 중'},
+synced:{en:'Synced',zh:'已同步',es:'Sincronizado',pt:'Sincronizado',ru:'Синхр.',de:'Sync',ja:'同期済',ko:'동기화 완료'},
+btc_not_running:{en:'Not Running',zh:'未运行',es:'No ejec.',pt:'Não exec.',ru:'Не запущ.',de:'Nicht gest.',ja:'未起動',ko:'실행 안 됨'},
+block_height:{en:'Height',zh:'区块高度',es:'Altura',pt:'Altura',ru:'Высота',de:'Höhe',ja:'ブロック高',ko:'블록 높이'},
+ibd_progress:{en:'IBD Progress',zh:'IBD进度',es:'Progreso IBD',pt:'Progresso IBD',ru:'Прогресс IBD',de:'IBD Fortschritt',ja:'IBD進捗',ko:'IBD 진행률'},
+connections:{en:'Conn',zh:'连接数',es:'Conexiones',pt:'Conexões',ru:'Соед.',de:'Verb.',ja:'接続数',ko:'연결'},
+difficulty:{en:'Diff',zh:'难度',es:'Dificultad',pt:'Dificuldade',ru:'Сложность',de:'Schwierigkeit',ja:'難易度',ko:'난이도'},
+node_ram:{en:'Node RAM (RSS)',zh:'节点内存 (RSS)',es:'RAM Nodo (RSS)',pt:'RAM do Nó (RSS)',ru:'Память узла (RSS)',de:'Node-RAM (RSS)',ja:'ノードメモリ (RSS)',ko:'노드 RAM (RSS)'},
+mode_label:{en:'Mode',zh:'模式',es:'Modo',pt:'Modo',ru:'Режим',de:'Modus',ja:'モード',ko:'모드'},
+pruned_mode:{en:'Pruned',zh:'剪枝',es:'Podado',pt:'Podado',ru:'Pruned',de:'Pruned',ja:'剪枝',ko:'잘라내기'},
+full_mode:{en:'Full Node',zh:'全节点',es:'Nodo completo',pt:'Nó completo',ru:'Полный узел',de:'Full Node',ja:'フルノード',ko:'풀 노드'},
+card_mining:{en:'Stratum Service',zh:'Stratum服务',es:'Servicio Stratum',pt:'Serviço Stratum',ru:'Сервис Stratum',de:'Stratum-Dienst',ja:'Stratumサービス',ko:'Stratum 서비스'},
+service_status:{en:'Service',zh:'服务',es:'Servicio',pt:'Serviço',ru:'Сервис',de:'Dienst',ja:'サービス',ko:'서비스'},
+running:{en:'Running',zh:'运行中',es:'En ejec.',pt:'Executando',ru:'Запущен',de:'Läuft',ja:'実行中',ko:'실행 중'},
+stopped:{en:'Stopped',zh:'未运行',es:'Detenido',pt:'Parado',ru:'Остановлен',de:'Gestoppt',ja:'停止中',ko:'중지됨'},
+stratum_mode:{en:'Stratum Mode',zh:'Stratum模式',es:'Modo Stratum',pt:'Modo Stratum',ru:'Режим Stratum',de:'Stratum-Modus',ja:'Stratumモード',ko:'Stratum 모드'},
+solo:{en:'Solo',zh:'Solo',es:'Solo',pt:'Solo',ru:'Solo',de:'Solo',ja:'Solo',ko:'Solo'},
+pool:{en:'Pool',zh:'Pool',es:'Pool',pt:'Pool',ru:'Pool',de:'Pool',ja:'Pool',ko:'Pool'},
+unknown:{en:'Unknown',zh:'未知',es:'Desconocido',pt:'Desconhecido',ru:'Неизвестно',de:'Unbekannt',ja:'不明',ko:'알 수 없음'},
+btc_address:{en:'BTC Address',zh:'BTC地址',es:'Dirección BTC',pt:'Endereço BTC',ru:'BTC адрес',de:'BTC-Adresse',ja:'BTCアドレス',ko:'BTC 주소'},
+copy_address:{en:'Copy address',zh:'复制地址',es:'Copiar dirección',pt:'Copiar endereço',ru:'Скопировать адрес',de:'Adresse kopieren',ja:'アドレスをコピー',ko:'주소 복사'},
+card_network:{en:'Network',zh:'网络',es:'Red',pt:'Rede',ru:'Сеть',de:'Netzwerk',ja:'ネットワーク',ko:'네트워크'},
+ip_address:{en:'IP',zh:'IP地址',es:'IP',pt:'IP',ru:'IP',de:'IP',ja:'IP',ko:'IP'},
+wifi_ssid:{en:'WiFi',zh:'WiFi',es:'WiFi',pt:'WiFi',ru:'WiFi',de:'WLAN',ja:'WiFi',ko:'WiFi'},
+mac_address:{en:'MAC',zh:'MAC地址',es:'MAC',pt:'MAC',ru:'MAC',de:'MAC',ja:'MAC',ko:'MAC'},
+rssi:{en:'RSSI',zh:'RSSI信号',es:'RSSI',pt:'RSSI',ru:'RSSI',de:'RSSI',ja:'RSSI',ko:'RSSI'},
+ntp_status:{en:'NTP',zh:'NTP',es:'NTP',pt:'NTP',ru:'NTP',de:'NTP',ja:'NTP',ko:'NTP'},
+not_synced:{en:'Not Sync',zh:'未同步',es:'No Sinc.',pt:'Não Sinc.',ru:'Не синх.',de:'Nicht sync.',ja:'未同期',ko:'미동기화'},
+footer:{en:'Auto-refresh 10s | Busybox httpd + Shell CGI (AJAX)',zh:'自动刷新10秒 | Busybox httpd + Shell CGI (AJAX)',es:'Auto-refresh 10s | Busybox httpd + Shell CGI (AJAX)',pt:'Auto-refresh 10s | Busybox httpd + Shell CGI (AJAX)',ru:'Автообновление 10с | Busybox httpd + Shell CGI (AJAX)',de:'Auto-refresh 10s | Busybox httpd + Shell CGI (AJAX)',ja:'10秒自動更新 | Busybox httpd + Shell CGI (AJAX)',ko:'10초 자동 갱신 | Busybox httpd + Shell CGI (AJAX)'}
+};
+
+// ============ Language switching ============
+function switchLang(l){
+  localStorage.setItem('nmm_lang', l);
+  document.querySelectorAll('[data-i18n]').forEach(function(e){
+    var k = e.getAttribute('data-i18n');
+    if(L[k] && L[k][l]) e.textContent = L[k][l];
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(function(e){
+    var k = e.getAttribute('data-i18n-title');
+    if(L[k] && L[k][l]){
+      e.title = L[k][l];
+      e.setAttribute('aria-label', L[k][l]);
+    }
+  });
+  document.getElementById('langSelect').value = l;
+}
+
+// ============ Copy button ============
+function flashCopied(btn){
+  var prev = btn.innerHTML;
+  btn.classList.add('copied');
+  btn.textContent = 'OK';
+  setTimeout(function(){ btn.classList.remove('copied'); btn.innerHTML = prev; }, 1200);
+}
+
+function copyField(btn){
+  var input = btn.parentNode.querySelector('input');
+  if(!input) return;
+  input.focus(); input.select();
+  var ok = false;
+  try { ok = document.execCommand('copy'); } catch(e) {}
+  if(ok) { flashCopied(btn); return; }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(input.value).then(function(){ flashCopied(btn); });
+  }
+}
+
+// ============ Set ring progress ============
+function setRing(id, pct, color){
+  var ring = document.getElementById('ring_' + id);
+  var span = document.getElementById('ring_' + id + '_span');
+  if(ring) ring.style.setProperty('--p', pct);
+  if(color && ring) ring.style.setProperty('--c', color);
+  if(span) span.textContent = pct + '%';
+}
+
+// ============ Render data from JSON ============
+function render(d){
+  if(!d) return;
+  var s = d.system || {};
+  var b = d.bitcoin || {};
+  var m = d.mining || {};
+  var n = d.network || {};
+
+  // System rings
+  setRing('load', s.load_pct || 0);
+  setRing('mem', s.mem_pct || 0);
+  setRing('disk', s.disk_pct || 0);
+  setRing('swap', s.swap_pct || 0);
+
+  // System values
+  setText('val_load', s.load_display);
+  setText('val_mem', (s.mem_used_display || '-') + ' / ' + (s.mem_total_display || '-'));
+  setText('val_disk', s.disk_size_info);
+  setText('val_swap', (s.swap_used_display || '-') + ' / ' + (s.swap_total_display || '-'));
+  setText('val_cpu', s.cpu_model);
+  setText('val_uptime', s.uptime);
+  setText('val_temp', s.temp);
+
+  // Block data
+  var bdEl = document.getElementById('val_blockdisk');
+  var bdRow = document.getElementById('row_blockdisk');
+  if(bdEl){
+    if(s.block_disk_found === false){
+      bdEl.innerHTML = '<span class="err" data-i18n="not_detected">Not Detected</span>';
+      bdEl.className = 'val err';
+    } else {
+      bdEl.innerHTML = '<span>' + escHtml(s.block_disk_value || '-') + '</span><span class="subval">' + escHtml(s.block_disk_path || '') + '</span>';
+      bdEl.className = 'val val-stack';
+    }
+  }
+
+  // Bitcoin badges
+  setBadge('badge_sync', 'sync_status', b.sync_key || 'btc_not_running', b.sync_class || 'err');
+  setBadge('badge_prune', 'mode_label', b.prune_key || 'full_mode', b.prune_class || 'ok');
+
+  // IBD
+  setRing('ibd', b.progress_ring || 0, '#14b8a6');
+  setText('val_ibd_blocks', (b.headers_fmt || '-') + ' / ' + (b.blocks_fmt || '-'));
+  setText('val_ibd_date', b.best_block_date);
+  setText('val_ibd_context', b.btc_context);
+  setText('val_conn', b.connections);
+  setText('val_diff', b.difficulty_display);
+  setText('val_rss', b.rss);
+
+  // Mining
+  setBadge('badge_ckpool', 'service_status', m.ckpool_state || 'stopped', m.ckpool_class || 'err');
+  setI18nText('val_stratum_mode', m.stratum_key || 'unknown');
+  setAttr('inp_btcaddr', 'value', m.btc_address || '-');
+
+  // CKPool log - handle \n from JSON
+  var logText = (m.ckpool_tail || '-');
+  logText = logText.replace(/\\n/g, '\n');
+  setText('log_ckpool', logText);
+
+  // Network
+  setText('val_ip', (n.ip_addr || 'N/A') + '<span class="subval">' + escHtml(n.iface || '') + '</span>');
+  setText('val_wifi', n.wifi_ssid);
+  setText('val_mac', n.mac_addr);
+  setText('val_rssi', n.rssi_display);
+
+  // WiFi signal bars
+  var sigEl = document.getElementById('val_rssi');
+  if(sigEl && n.signal_level !== undefined){
+    var barsHtml = '<div class="signal"><div class="signal-bars" data-level="' + n.signal_level + '"><span></span><span></span><span></span><span></span></div></div>';
+    sigEl.innerHTML = (n.rssi_display || 'N/A') + barsHtml;
+  }
+
+  // NTP badge
+  setBadge('badge_ntp', 'ntp_status', n.ntp_key || 'not_synced', n.ntp_class || 'err');
+}
+
+// ============ Helper: set text content ============
+function setText(id, text){
+  var el = document.getElementById(id);
+  if(el){
+    if(text === undefined || text === null) text = '-';
+    el.innerHTML = String(text);
+  }
+}
+
+// ============ Helper: set attribute value ============
+function setAttr(id, attr, val){
+  var el = document.getElementById(id);
+  if(el) el.setAttribute(attr, val || '');
+}
+
+// ============ Helper: set badge ============
+function setBadge(id, labelKey, stateKey, cssClass){
+  var el = document.getElementById(id);
+  if(!el) return;
+  el.className = 'badge ' + (cssClass || '');
+  var spans = el.querySelectorAll('span');
+  if(spans.length >= 2){
+    spans[0].setAttribute('data-i18n', labelKey);
+    spans[1].setAttribute('data-i18n', stateKey);
+  }
+  // Re-apply current language
+  var lang = localStorage.getItem('nmm_lang') || 'zh';
+  if(L[labelKey] && L[labelKey][lang] && spans[0]) spans[0].textContent = L[labelKey][lang];
+  if(L[stateKey] && L[stateKey][lang] && spans[1]) spans[1].textContent = L[stateKey][lang];
+}
+
+// ============ Helper: set i18n text ============
+function setI18nText(id, key){
+  var el = document.getElementById(id);
+  if(!el) return;
+  el.setAttribute('data-i18n', key);
+  var lang = localStorage.getItem('nmm_lang') || 'zh';
+  if(L[key] && L[key][lang]) el.textContent = L[key][lang];
+}
+
+// ============ HTML escape ============
+function escHtml(s){
+  if(!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ============ Fetch & Update loop ============
+var fetchTimer = null;
+var fetchErrorCount = 0;
+
+function fetchStatus(){
+  fetch('/api/status.cgi')
+    .then(function(r){
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(function(d){
+      fetchErrorCount = 0;
+      render(d);
+    })
+    .catch(function(e){
+      fetchErrorCount++;
+      if(fetchErrorCount <= 2) console.warn('API fetch error:', e.message);
+    });
+}
+
+// ============ Init ============
+(function(){
+  var saved = localStorage.getItem('nmm_lang') || 'zh';
+  document.getElementById('langSelect').value = saved;
+  switchLang(saved);
+
+  fetchStatus();            // first load
+  fetchTimer = setInterval(fetchStatus, 10000);  // poll every 10s
+})();
+</script>
+</body>
+</html>
