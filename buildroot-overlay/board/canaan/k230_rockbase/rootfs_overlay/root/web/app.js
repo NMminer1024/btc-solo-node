@@ -16,6 +16,9 @@
     },
     bitcoin: {
       syncBadge: "...",
+      syncDetail: "...",
+      ibdStageKey: "",
+      ibdStageHeight: "",
       pruneBadge: "...",
       progressPct: null,
       blocks: "-- / --",
@@ -51,6 +54,13 @@
   var labels = {
     sync: {
       syncing: "IBD Syncing",
+      pre_headers: "Pre-sync blockheaders",
+      sync_headers: "Synchronizing blockheaders",
+      loading_index: "Loading block index",
+      loading_blocks: "Loading block files",
+      verifying_blocks: "Verifying blocks",
+      rewinding_blocks: "Rewinding blocks",
+      pruning: "Pruning blocks",
       synced: "Synced",
       btc_not_running: "Not Running"
     },
@@ -183,7 +193,7 @@
     var nextValue = toText(value, "--");
     var prevValue = el.dataset.rollValue || "";
     var isInitial = !prevValue;
-    var shouldAnimate = !isInitial && prevValue !== nextValue && /^[0-9,.%\s-]+$/.test(prevValue) && /^[0-9,.%\s-]+$/.test(nextValue) && nextValue.indexOf("--") === -1;
+    var shouldAnimate = !isInitial && prevValue !== nextValue && /\d/.test(prevValue) && /\d/.test(nextValue) && nextValue.indexOf("--") === -1;
 
     clearRollCleanup(el);
     buildRollingChars(el, prevValue || nextValue, nextValue, shouldAnimate);
@@ -197,18 +207,30 @@
     }
   }
 
-  function setIbdMeta(id, chainName, blockDate) {
+  function setIbdMeta(id, chainName, blockDate, stageKey) {
     var el = document.getElementById(id);
     if (!el) return;
 
     var chainText = toText(chainName, "");
     var blockText = toText(blockDate, "");
+    var isIbdStage = stageKey === "pre_headers" || stageKey === "sync_headers" || stageKey === "syncing";
     var hasDate = blockText && blockText !== "-" && blockText !== "N/A";
     var hasChain = chainText && chainText !== "-" && chainText !== "N/A";
 
     if (!hasChain && !hasDate) {
       el.textContent = mock.bitcoin.meta;
       return;
+    }
+
+    if (isIbdStage) {
+      if (hasChain) {
+        el.innerHTML = '<span class="ibd-meta-chain">' + chainText + "</span>";
+        return;
+      }
+      if (hasDate) {
+        el.innerHTML = '<span class="ibd-meta-date">' + blockText + "</span>";
+        return;
+      }
     }
 
     if (!hasDate) {
@@ -227,6 +249,24 @@
       html += '<span class="ibd-meta-date">' + blockText + "</span>";
     }
     el.innerHTML = html;
+  }
+
+  function setIbdStage(id, stageKey, stageText, blockDate) {
+    var el = document.getElementById(id);
+    if (!el) return;
+
+    var text = toText(stageText, "");
+    var dateText = toText(blockDate, "");
+    var isDateStage = stageKey === "syncing" || stageKey === "sync_headers";
+    var match = dateText.match(/^(\d{4}-\d{2}-\d{2})\s+(.+)$/);
+
+    if (isDateStage && match) {
+      el.innerHTML = '<span class="ibd-stage-date">' + match[1] + '</span>' +
+        ' <span class="ibd-stage-time">' + match[2] + '</span>';
+      return;
+    }
+
+    el.textContent = text || dateText || mock.bitcoin.syncDetail;
   }
 
   function setProgress(id, pct) {
@@ -257,6 +297,19 @@
     var num = Number(value);
     if (!Number.isFinite(num)) return "--";
     return num.toFixed(digits) + "%";
+  }
+
+  function formatPercentSig(value, digits) {
+    var num = Number(value);
+    if (!Number.isFinite(num)) return "--";
+    return num.toPrecision(digits) + "%";
+  }
+
+  function formatIbdPercent(value) {
+    var num = Number(value);
+    if (!Number.isFinite(num)) return "--";
+    if (num < 1) return num.toPrecision(2) + "%";
+    return num.toFixed(2) + "%";
   }
 
   function joinParts(parts, fallback) {
@@ -312,6 +365,9 @@
       },
       bitcoin: {
         syncBadge: syncLabel,
+        syncDetail: toText(bitcoin.sync_detail, mock.bitcoin.syncDetail),
+        ibdStageKey: toText(bitcoin.ibd_stage_key, mock.bitcoin.ibdStageKey),
+        ibdStageHeight: toText(bitcoin.ibd_stage_height, mock.bitcoin.ibdStageHeight),
         syncClass: mapStatusClass(toText(bitcoin.sync_class, ""), "status-ok"),
         pruneBadge: pruneLabel,
         pruneClass: mapStatusClass(toText(bitcoin.prune_class, ""), "status-soft"),
@@ -386,6 +442,8 @@
   function renderDashboard(viewData) {
     var data = viewData || mock;
     var blockParts = String(data.bitcoin.blocks || "-- / --").split(" / ");
+    var stageHeight = toText(data.bitcoin.ibdStageHeight, "");
+    var isIbdStage = data.bitcoin.ibdStageKey === "pre_headers" || data.bitcoin.ibdStageKey === "sync_headers";
 
     setText("cpuPct", formatPercent(data.system.cpuPct, 0));
     setText("cpuLoadValue", data.system.cpuLoad);
@@ -402,14 +460,24 @@
 
     setBadgeState("syncBadge", data.bitcoin.syncBadge, data.bitcoin.syncClass);
     setBadgeState("pruneBadge", data.bitcoin.pruneBadge, data.bitcoin.pruneClass);
-    setRollingValue("ibdPct", formatPercent(data.bitcoin.progressPct, 3));
-    setRollingValue("ibdBlocksCurrent", blockParts[0] || "--");
-    setRollingValue("ibdBlocksTotal", blockParts[1] || "--");
-    setIbdMeta("ibdMeta", data.bitcoin.chainName, data.bitcoin.bestBlockDate);
-    setText("nodeConn", data.bitcoin.connections);
-    setText("nodeDiff", data.bitcoin.difficulty);
-    setText("nodeRss", data.bitcoin.rss);
-    setText("nodeUptime", data.bitcoin.uptime);
+    setIbdStage("ibdStage", data.bitcoin.ibdStageKey, data.bitcoin.syncDetail, data.bitcoin.bestBlockDate);
+    setRollingValue("ibdPct", formatIbdPercent(data.bitcoin.progressPct));
+    if (isIbdStage && stageHeight) {
+      setRollingValue("ibdBlocksCurrent", stageHeight);
+      setText("ibdBlocksTotal", "");
+      var divider = document.getElementById("ibdBlocksDivider");
+      if (divider) divider.style.display = "none";
+    } else {
+      setRollingValue("ibdBlocksCurrent", blockParts[0] || "--");
+      setRollingValue("ibdBlocksTotal", blockParts[1] || "--");
+      var dividerShow = document.getElementById("ibdBlocksDivider");
+      if (dividerShow) dividerShow.style.display = "";
+    }
+    setIbdMeta("ibdMeta", data.bitcoin.chainName, data.bitcoin.bestBlockDate, data.bitcoin.ibdStageKey);
+    setRollingValue("nodeConn", data.bitcoin.connections);
+    setRollingValue("nodeDiff", data.bitcoin.difficulty);
+    setRollingValue("nodeRss", data.bitcoin.rss);
+    setRollingValue("nodeUptime", data.bitcoin.uptime);
 
     var orb = document.getElementById("ibdOrb");
     if (orb) orb.style.setProperty("--pct", data.bitcoin.progressPct);

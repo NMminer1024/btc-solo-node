@@ -26,6 +26,7 @@
   --brand-soft: rgba(28, 61, 99, 0.1);
   --nav-text: #26344b;
   --nav-active-text: #8a5b16;
+  --ibd-time: #667085;
   --soft: #3a6d9a;
   --warm: #c19549;
   --danger: #c44c40;
@@ -60,6 +61,7 @@ html[data-theme="dark"] {
   --log-text: #edf2fb;
   --nav-text: #d4ddea;
   --nav-active-text: #d7b16a;
+  --ibd-time: #7f8998;
   --shadow: 0 20px 44px rgba(0, 0, 0, 0.34);
 }
 
@@ -571,6 +573,16 @@ textarea {
   line-height: 1.55;
 }
 
+.sync-stage {
+  font-size: 0.9rem;
+  color: var(--warm);
+  font-weight: 600;
+}
+
+.sync-stage .ibd-stage-time {
+  color: var(--ibd-time);
+}
+
 .sync-copy p {
   font-size: 0.95rem;
 }
@@ -583,6 +595,11 @@ textarea {
 .ibd-meta-sep,
 .ibd-meta-time {
   color: var(--muted);
+}
+
+.ibd-meta-time {
+  color: var(--ibd-time);
+  opacity: 1;
 }
 
 .info-grid {

@@ -4,6 +4,7 @@
 
 CONF=/root/bitcoind/bitcoin.conf
 DATADIR=/root/block
+DEBUG_LOG=/root/bitcoind/debug.log
 btc_cli(){ bitcoin-cli -conf="$CONF" -datadir="$DATADIR" "$@" 2>/dev/null || echo "{}"; }
 
 # --- JSON string escaping helper ---
@@ -150,6 +151,8 @@ blocks="-"; blocks_fmt="-"
 progress_pct="0.000"; progress_ring="0.000"; ibd=""; chain="-"; difficulty="-"
 difficulty_display="-"; connections="-"; subversion="-"; rss="N/A"
 pruned="false"; best_block_date="-"; btc_context="-"
+ibd_stage_key="syncing"; ibd_stage_label="IBD Syncing"; ibd_stage_detail=""
+ibd_stage_height="-"; ibd_stage_pct=""
 
 if pidof bitcoind >/dev/null 2>&1; then
   btc_running=1
@@ -158,7 +161,7 @@ if pidof bitcoind >/dev/null 2>&1; then
   headers=$(echo "$btc_info" | grep -o '"headers": *[0-9]*' | grep -o '[0-9]*')
   blocks=$(echo "$btc_info" | grep -o '"blocks": *[0-9]*' | grep -o '[0-9]*')
   progress=$(echo "$btc_info" | grep -o '"verificationprogress": *[0-9.e+-]*' | cut -d: -f2)
-  [ -n "$progress" ] && progress_pct=$(echo "$progress" | awk '{printf "%.3f", $1*100}')
+  [ -n "$progress" ] && progress_pct=$(echo "$progress" | awk '{printf "%.3g", $1*100}')
   progress_ring=$(awk -v p="$progress_pct" 'BEGIN{if(p<0)p=0;if(p>100)p=100;printf "%.3f",p}')
   ibd=$(echo "$btc_info" | grep -o '"initialblockdownload": *[a-z]*' | grep -o 'true\|false')
   chain=$(echo "$btc_info" | grep -o '"chain": *"[^"]*"' | cut -d'"' -f4)
@@ -168,10 +171,81 @@ if pidof bitcoind >/dev/null 2>&1; then
   pruned=$(echo "$btc_info" | grep -o '"pruned": *[a-z]*' | grep -o 'true\|false')
   btc_pid=$(pidof bitcoind 2>/dev/null | awk '{print $1}')
   [ -n "$btc_pid" ] && rss=$(awk '/^VmRSS/{printf "%.0fM",$2/1024}' "/proc/$btc_pid/status" 2>/dev/null)
-  if [ -n "$blocks" ] && [ "$blocks" != "-" ]; then
+  if [ -n "$blocks" ] && [ "$blocks" != "-" ] && [ "$blocks" != "0" ]; then
     best_block_hash=$(btc_cli getblockhash "$blocks" | tr -d '"')
     best_block_time=$(btc_cli getblockheader "$best_block_hash" 2>/dev/null | grep -o '"time": *[0-9]*' | grep -o '[0-9]*' | head -n1)
     [ -n "$best_block_time" ] && best_block_date=$(date -u -d "@$best_block_time" '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || echo "-")
+  fi
+
+  if [ "$ibd" = "true" ] && [ -r "$DEBUG_LOG" ]; then
+    stage_scan=$(tail -n 500 "$DEBUG_LOG" 2>/dev/null | awk '
+      /Loading block index/ { key="loading_index"; line=$0 }
+      /Loading block files/ { key="loading_blocks"; line=$0 }
+      /Pre-synchronizing blockheaders, height: [0-9]+ \(~[0-9.]+%\)/ { key="pre_headers"; line=$0 }
+      /Synchronizing blockheaders, height: [0-9]+ \(~[0-9.]+%\)/ { key="sync_headers"; line=$0 }
+      /Verifying blocks/ { key="verifying_blocks"; line=$0 }
+      /Rewinding blocks/ { key="rewinding_blocks"; line=$0 }
+      /Pruning block files/ { key="pruning"; line=$0 }
+      END { if (line != "") print key "\n" line }')
+    if [ -n "$stage_scan" ]; then
+      ibd_stage_key=$(printf '%s\n' "$stage_scan" | sed -n '1p')
+      stage_line=$(printf '%s\n' "$stage_scan" | sed -n '2p')
+      case "$ibd_stage_key" in
+        pre_headers)
+          ibd_stage_label="Pre-sync blockheaders"
+          ibd_stage_height=$(printf '%s\n' "$stage_line" | sed -n 's/.*height: \([0-9][0-9]*\).*/\1/p')
+          ibd_stage_pct=$(printf '%s\n' "$stage_line" | sed -n 's/.*(~\([0-9.][0-9.]*\)%).*/\1/p')
+          [ -n "$ibd_stage_height" ] && ibd_stage_height=$(fmt_int "$ibd_stage_height")
+          if [ -n "$ibd_stage_pct" ]; then
+            progress_pct=$(awk -v p="$ibd_stage_pct" 'BEGIN{printf "%.3f", p+0}')
+            progress_ring=$(awk -v p="$ibd_stage_pct" 'BEGIN{p=p+0;if(p<0)p=0;if(p>100)p=100;printf "%.3f",p}')
+          fi
+          if [ -n "$ibd_stage_height" ]; then
+            ibd_stage_detail="height ${ibd_stage_height}"
+          elif [ -n "$ibd_stage_pct" ]; then
+            ibd_stage_detail="${ibd_stage_pct}%"
+          fi
+        ;;
+        sync_headers)
+          ibd_stage_label="Synchronizing blockheaders"
+          ibd_stage_height=$(printf '%s\n' "$stage_line" | sed -n 's/.*height: \([0-9][0-9]*\).*/\1/p')
+          ibd_stage_pct=$(printf '%s\n' "$stage_line" | sed -n 's/.*(~\([0-9.][0-9.]*\)%).*/\1/p')
+          [ -n "$ibd_stage_height" ] && ibd_stage_height=$(fmt_int "$ibd_stage_height")
+          if [ -n "$ibd_stage_pct" ]; then
+            progress_pct=$(awk -v p="$ibd_stage_pct" 'BEGIN{printf "%.3f", p+0}')
+            progress_ring=$(awk -v p="$ibd_stage_pct" 'BEGIN{p=p+0;if(p<0)p=0;if(p>100)p=100;printf "%.3f",p}')
+          fi
+          if [ -n "$ibd_stage_height" ]; then
+            ibd_stage_detail="height ${ibd_stage_height}"
+          fi
+          if [ -n "$headers" ] && [ "$headers" != "-" ] && [ "$headers" != "0" ]; then
+            best_header_hash=$(btc_cli getblockhash "$headers" | tr -d '"')
+            best_header_time=$(btc_cli getblockheader "$best_header_hash" 2>/dev/null | grep -o '"time": *[0-9]*' | grep -o '[0-9]*' | head -n1)
+            [ -n "$best_header_time" ] && best_block_date=$(date -u -d "@$best_header_time" '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || echo "-")
+          fi
+        ;;
+        loading_index)
+          ibd_stage_label="Loading block index"
+          ibd_stage_detail="building block index"
+        ;;
+        loading_blocks)
+          ibd_stage_label="Loading block files"
+          ibd_stage_detail="loading block files"
+        ;;
+        verifying_blocks)
+          ibd_stage_label="Verifying blocks"
+          ibd_stage_detail="verifying chain state"
+        ;;
+        rewinding_blocks)
+          ibd_stage_label="Rewinding blocks"
+          ibd_stage_detail="rewinding chain state"
+        ;;
+        pruning)
+          ibd_stage_label="Pruning blocks"
+          ibd_stage_detail="pruning old block data"
+        ;;
+      esac
+    fi
   fi
 fi
 headers_fmt=$(fmt_int "$headers")
@@ -182,9 +256,14 @@ difficulty_display=$(compact_metric "$difficulty")
 btc_context=$(printf '%s %s' "$chain" "$subversion" | xargs)
 [ -z "$btc_context" ] && btc_context="-"
 
-if [ "$btc_running" = "0" ]; then sync_key=btc_not_running; sync_class=err
-elif [ "$ibd" = "true" ]; then sync_key=syncing; sync_class=warn
-else sync_key=synced; sync_class=ok; fi
+if [ "$btc_running" = "0" ]; then
+  sync_key=btc_not_running; sync_class=err; sync_detail="bitcoind not running"
+elif [ "$ibd" = "true" ]; then
+  sync_key="$ibd_stage_key"; sync_class=warn
+  sync_detail="$ibd_stage_label"
+else
+  sync_key=synced; sync_class=ok; sync_detail="initial sync complete"
+fi
 
 if [ "$pruned" = "true" ]; then prune_key=pruned_mode; prune_class=soft
 else prune_key=full_mode; prune_class=ok; fi
@@ -280,10 +359,16 @@ printf '  "bitcoin": {\n'
 printf '    "running": %s,\n' "$btc_running"
 printf '    "sync_key": %s,\n' "$(json_str "$sync_key")"
 printf '    "sync_class": %s,\n' "$(json_str "$sync_class")"
+printf '    "sync_detail": %s,\n' "$(json_str "$sync_detail")"
 printf '    "prune_key": %s,\n' "$(json_str "$prune_key")"
 printf '    "prune_class": %s,\n' "$(json_str "$prune_class")"
 printf '    "progress_pct": %s,\n' "$(json_str "$progress_pct")"
 printf '    "progress_ring": %s,\n' "$(json_num "$progress_ring")"
+printf '    "ibd_stage_key": %s,\n' "$(json_str "$ibd_stage_key")"
+printf '    "ibd_stage_label": %s,\n' "$(json_str "$ibd_stage_label")"
+printf '    "ibd_stage_detail": %s,\n' "$(json_str "$ibd_stage_detail")"
+printf '    "ibd_stage_height": %s,\n' "$(json_str "$ibd_stage_height")"
+printf '    "ibd_stage_pct": %s,\n' "$(json_str "$ibd_stage_pct")"
 printf '    "headers_fmt": %s,\n' "$(json_str "$headers_fmt")"
 printf '    "blocks_fmt": %s,\n' "$(json_str "$blocks_fmt")"
 printf '    "best_block_date": %s,\n' "$(json_str "$best_block_date")"
