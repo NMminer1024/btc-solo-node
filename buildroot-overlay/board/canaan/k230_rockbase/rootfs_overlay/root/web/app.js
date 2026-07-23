@@ -108,6 +108,7 @@
   var hasLoadedDashboardData = false;
   var DASHBOARD_REFRESH_SECONDS = 10;
   var countdownTimer = null;
+  var countdownDeadline = 0;
   var refreshInFlight = false;
   var refreshSecondsLeft = DASHBOARD_REFRESH_SECONDS;
   var LOG_REFRESH_SECONDS = 5;
@@ -264,16 +265,16 @@
 
   function setRefreshCountdown(secondsLeft) {
     var value = Number(secondsLeft);
-    var safeSeconds = Number.isFinite(value) ? Math.max(0, Math.ceil(value)) : DASHBOARD_REFRESH_SECONDS;
+    var safeSeconds = Number.isFinite(value) ? Math.max(0, value) : DASHBOARD_REFRESH_SECONDS;
     var orb = document.getElementById("bitcoinRefreshOrb");
     var label = document.getElementById("bitcoinRefreshCountdown");
     if (orb) orb.style.setProperty("--pct", safeSeconds * 100 / DASHBOARD_REFRESH_SECONDS);
-    if (label) label.textContent = safeSeconds + "s";
+    if (label) label.textContent = Math.ceil(safeSeconds) + "s";
   }
 
   function clearRefreshCountdownTimer() {
     if (!countdownTimer) return;
-    window.clearInterval(countdownTimer);
+    window.cancelAnimationFrame(countdownTimer);
     countdownTimer = null;
   }
 
@@ -281,22 +282,31 @@
     refreshInFlight = false;
     refreshSecondsLeft = DASHBOARD_REFRESH_SECONDS;
     setRefreshCountdown(refreshSecondsLeft);
+    countdownDeadline = window.performance.now() + DASHBOARD_REFRESH_SECONDS * 1000;
   }
 
   function startRefreshCountdown() {
     clearRefreshCountdownTimer();
     refreshSecondsLeft = DASHBOARD_REFRESH_SECONDS;
+    countdownDeadline = window.performance.now() + DASHBOARD_REFRESH_SECONDS * 1000;
     setRefreshCountdown(refreshSecondsLeft);
-    countdownTimer = window.setInterval(function () {
-      if (refreshInFlight) return;
-      refreshSecondsLeft -= 1;
-      if (refreshSecondsLeft <= 0) {
-        setRefreshCountdown(0);
-        fetchDashboardData();
+    var tick = function (now) {
+      if (!countdownDeadline) {
+        countdownTimer = window.requestAnimationFrame(tick);
         return;
       }
-      setRefreshCountdown(refreshSecondsLeft);
-    }, 1000);
+
+      var remainingSeconds = Math.max(0, (countdownDeadline - now) / 1000);
+      refreshSecondsLeft = remainingSeconds;
+      setRefreshCountdown(remainingSeconds);
+
+      if (!refreshInFlight && remainingSeconds <= 0) {
+        fetchDashboardData();
+      }
+
+      countdownTimer = window.requestAnimationFrame(tick);
+    };
+    countdownTimer = window.requestAnimationFrame(tick);
   }
 
   function isRollDigit(char) {

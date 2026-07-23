@@ -183,7 +183,7 @@ pruned="false"; best_block_date="-"; btc_context="-"
 ibd_stage_key="syncing"; ibd_stage_label="IBD Syncing"; ibd_stage_detail=""
 ibd_stage_height="-"; ibd_stage_pct=""
 stage_height_num=""; stage_pct_num=""
-header_gap="0"; header_stage_fresh="0"; header_stage_active="0"
+header_gap="0"
 
 if pidof bitcoind >/dev/null 2>&1; then
   btc_running=1
@@ -315,20 +315,16 @@ if pidof bitcoind >/dev/null 2>&1; then
       ;;
     esac
 
-    # Use live headers/blocks counters as the primary source of truth.
-    # Once header sync is effectively complete, any remaining headers>blocks
-    # gap means block validation/import is still the active stage, even if
-    # the log prints a fresh 100% blockheaders line for new tip blocks.
-    if [ "$header_gap" -gt 0 ] 2>/dev/null; then
-      if [ "$header_stage_active" != "1" ]; then
-        ibd_stage_key="sync_blocks"
-        ibd_stage_label="Synchronizing blocks"
-        ibd_stage_height=$(fmt_int "$blocks")
-        ibd_stage_pct=""
-        ibd_stage_detail="headers $(fmt_int "$headers")"
-        [ -n "$progress" ] && progress_pct=$(echo "$progress" | awk '{printf "%.3g", $1*100}')
-        progress_ring=$(awk -v p="$progress_pct" 'BEGIN{p=p+0;if(p<0)p=0;if(p>100)p=100;printf "%.3f",p}')
-      fi
+    # Log stage is authoritative. Keep the RPC counters only as fallback
+    # when no useful stage line is present.
+    if [ -z "$stage_scan" ] && [ "$header_gap" -gt 0 ] 2>/dev/null; then
+      ibd_stage_key="sync_blocks"
+      ibd_stage_label="Synchronizing blocks"
+      ibd_stage_height=$(fmt_int "$blocks")
+      ibd_stage_pct=""
+      ibd_stage_detail="headers $(fmt_int "$headers")"
+      [ -n "$progress" ] && progress_pct=$(echo "$progress" | awk '{printf "%.3g", $1*100}')
+      progress_ring=$(awk -v p="$progress_pct" 'BEGIN{p=p+0;if(p<0)p=0;if(p>100)p=100;printf "%.3f",p}')
     fi
   fi
 fi
