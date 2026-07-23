@@ -13,7 +13,7 @@
       <div class="brand-mark">NM</div>
       <div>
         <p class="brand-kicker">Rockbase</p>
-        <h1>NM Monitor</h1>
+        <h1>BTC Prune Node</h1>
       </div>
     </div>
 
@@ -51,6 +51,11 @@
               <h3>Bitcoind</h3>
             </div>
             <div class="status-pair">
+              <div class="refresh-orb-chip" title="Next dashboard refresh">
+                <div class="refresh-orb" id="bitcoinRefreshOrb">
+                  <span id="bitcoinRefreshCountdown">10s</span>
+                </div>
+              </div>
               <span class="status-badge status-ok" id="syncBadge">IBD Syncing</span>
               <span class="status-badge status-soft" id="pruneBadge">Pruned Node</span>
             </div>
@@ -126,8 +131,9 @@
                 <span id="cpuPct">--</span>
               </div>
               <div class="metric-orb-copy">
-                <span>CPU Load</span>
+                <span>CPU Usage</span>
                 <strong id="cpuLoadValue">--</strong>
+                <small id="cpuLoadAvgValue" class="metric-orb-subtext">Load avg 1m -- · 5m --</small>
               </div>
             </div>
             <div class="metric-orb-card">
@@ -254,17 +260,20 @@
     </section>
 
     <section class="panel-view" data-view-panel="logs">
-      <section class="subpage-hero">
-        <p>In the final design, logs stay here and are fetched on demand, not on every dashboard refresh.</p>
-      </section>
-      <section class="subpage-grid">
-        <article class="surface-card surface-card-large">
-          <h3>ckpool.log tail</h3>
-          <pre class="log-view" id="logsPanel">[mock] log output will move here once the backend API is available.
-[mock] this keeps heavy log reads out of the dashboard.
-[mock] manual refresh and tail limits are planned.</pre>
-        </article>
-      </section>
+      <article class="surface-card surface-card-large log-shell">
+        <div class="log-header">
+          <div class="log-tabs" role="tablist" aria-label="Log sources">
+            <button class="log-tab is-active" type="button" data-log-service="bitcoind">Bitcoind</button>
+            <button class="log-tab" type="button" data-log-service="stratum">Stratum</button>
+          </div>
+          <div class="log-meta">
+            <span class="status-badge status-soft" id="logServiceBadge">Bitcoind log</span>
+            <span class="mono" id="logPath">/root/bitcoind/debug.log</span>
+          </div>
+        </div>
+        <div class="log-summary" id="logSummary">Tail 300 lines · live cursor</div>
+        <pre class="log-view" id="logsPanel">Loading logs...</pre>
+      </article>
     </section>
 
     <section class="panel-view" data-view-panel="settings">

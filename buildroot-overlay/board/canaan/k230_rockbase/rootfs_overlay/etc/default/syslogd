@@ -1,0 +1,2 @@
+# Persist syslog to the writable rootfs and keep seven rotated files.
+SYSLOGD_ARGS="-O /root/log/messages -s 256 -b 7"

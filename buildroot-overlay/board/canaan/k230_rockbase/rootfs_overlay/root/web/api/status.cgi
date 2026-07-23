@@ -78,11 +78,40 @@ cpu_model=$(cat /proc/device-tree/model 2>/dev/null | tr '\0' ' ' | xargs)
 [ -z "$cpu_model" ] && cpu_model="K230 RISC-V"
 uptime_sec=$(awk -F. '{print $1}' /proc/uptime)
 uptime_fmt=$(printf '%dd %02dh:%02dm' $((uptime_sec/86400)) $((uptime_sec%86400/3600)) $((uptime_sec%3600/60)))
-nproc=$(grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 1)
-load1=$(awk '{print $1}' /proc/loadavg)
-load_pct=$(awk -v l="$load1" -v n="$nproc" 'BEGIN{printf "%.0f", l/n*100}')
-if [ "$load_pct" -lt 0 ] 2>/dev/null; then load_pct=0; elif [ "$load_pct" -gt 100 ] 2>/dev/null; then load_pct=100; fi
-load_display="${load1} / ${nproc} cores"
+cpu_stat_sample() {
+  awk '/^cpu /{
+    total = 0
+    for (i = 2; i <= 8; i++) total += $i
+    idle = $5 + $6
+    print total, idle
+    exit
+  }' /proc/stat
+}
+set -- $(cpu_stat_sample)
+cpu_total_1=$1
+cpu_idle_1=$2
+sleep 0.2
+set -- $(cpu_stat_sample)
+cpu_total_2=$1
+cpu_idle_2=$2
+load_pct=$(awk -v t1="$cpu_total_1" -v i1="$cpu_idle_1" -v t2="$cpu_total_2" -v i2="$cpu_idle_2" 'BEGIN{
+  dt = t2 - t1
+  di = i2 - i1
+  if (dt <= 0) { print 0; exit }
+  pct = (dt - di) * 100 / dt
+  if (pct < 0) pct = 0
+  if (pct > 100) pct = 100
+  printf "%.0f", pct
+}')
+set -- $(awk '{print $1, $2, $3}' /proc/loadavg)
+load_avg_1=$1
+load_avg_5=$2
+load_avg_15=$3
+load_avg_1_display=$(awk -v v="$load_avg_1" 'BEGIN{if (v == "" || v == "-" || v == "null") print "-"; else printf "%.2f", v + 0}')
+load_avg_5_display=$(awk -v v="$load_avg_5" 'BEGIN{if (v == "" || v == "-" || v == "null") print "-"; else printf "%.2f", v + 0}')
+load_avg_15_display=$(awk -v v="$load_avg_15" 'BEGIN{if (v == "" || v == "-" || v == "null") print "-"; else printf "%.2f", v + 0}')
+load_display="${load_pct}% busy"
+load_avg_display="1m ${load_avg_1_display} · 5m ${load_avg_5_display}"
 
 mem_total=$(awk '/^MemTotal/{printf "%.0f", $2/1024}' /proc/meminfo)
 mem_free=$(awk '/^MemAvailable/{printf "%.0f", $2/1024}' /proc/meminfo)
@@ -153,6 +182,8 @@ difficulty_display="-"; connections="-"; subversion="-"; rss="N/A"
 pruned="false"; best_block_date="-"; btc_context="-"
 ibd_stage_key="syncing"; ibd_stage_label="IBD Syncing"; ibd_stage_detail=""
 ibd_stage_height="-"; ibd_stage_pct=""
+stage_height_num=""; stage_pct_num=""
+header_gap="0"; header_stage_fresh="0"; header_stage_active="0"
 
 if pidof bitcoind >/dev/null 2>&1; then
   btc_running=1
@@ -171,6 +202,13 @@ if pidof bitcoind >/dev/null 2>&1; then
   pruned=$(echo "$btc_info" | grep -o '"pruned": *[a-z]*' | grep -o 'true\|false')
   btc_pid=$(pidof bitcoind 2>/dev/null | awk '{print $1}')
   [ -n "$btc_pid" ] && rss=$(awk '/^VmRSS/{printf "%.0fM",$2/1024}' "/proc/$btc_pid/status" 2>/dev/null)
+  if [ -n "$headers" ] && [ -n "$blocks" ] && [ "$headers" != "-" ] && [ "$blocks" != "-" ]; then
+    header_gap=$(awk -v h="$headers" -v b="$blocks" 'BEGIN{
+      gap = (h + 0) - (b + 0)
+      if (gap < 0) gap = 0
+      printf "%.0f", gap
+    }')
+  fi
   if [ -n "$blocks" ] && [ "$blocks" != "-" ] && [ "$blocks" != "0" ]; then
     best_block_hash=$(btc_cli getblockhash "$blocks" | tr -d '"')
     best_block_time=$(btc_cli getblockheader "$best_block_hash" 2>/dev/null | grep -o '"time": *[0-9]*' | grep -o '[0-9]*' | head -n1)
@@ -179,22 +217,29 @@ if pidof bitcoind >/dev/null 2>&1; then
 
   if [ "$ibd" = "true" ] && [ -r "$DEBUG_LOG" ]; then
     stage_scan=$(tail -n 500 "$DEBUG_LOG" 2>/dev/null | awk '
-      /Loading block index/ { key="loading_index"; line=$0 }
-      /Loading block files/ { key="loading_blocks"; line=$0 }
-      /Pre-synchronizing blockheaders, height: [0-9]+ \(~[0-9.]+%\)/ { key="pre_headers"; line=$0 }
-      /Synchronizing blockheaders, height: [0-9]+ \(~[0-9.]+%\)/ { key="sync_headers"; line=$0 }
-      /Verifying blocks/ { key="verifying_blocks"; line=$0 }
-      /Rewinding blocks/ { key="rewinding_blocks"; line=$0 }
-      /Pruning block files/ { key="pruning"; line=$0 }
-      END { if (line != "") print key "\n" line }')
+      /Loading block index/ { key="loading_index"; line=$0; stage_nr=NR }
+      /Loading block files/ { key="loading_blocks"; line=$0; stage_nr=NR }
+      /Pre-synchronizing blockheaders, height: [0-9]+ \(~[0-9.]+%\)/ { key="pre_headers"; line=$0; stage_nr=NR }
+      /Synchronizing blockheaders, height: [0-9]+ \(~[0-9.]+%\)/ { key="sync_headers"; line=$0; stage_nr=NR }
+      /Verifying blocks/ { key="verifying_blocks"; line=$0; stage_nr=NR }
+      /Rewinding blocks/ { key="rewinding_blocks"; line=$0; stage_nr=NR }
+      /Pruning block files/ { key="pruning"; line=$0; stage_nr=NR }
+      END {
+        if (key != "") {
+          print key
+          if (line != "") print line
+        }
+      }')
     if [ -n "$stage_scan" ]; then
       ibd_stage_key=$(printf '%s\n' "$stage_scan" | sed -n '1p')
       stage_line=$(printf '%s\n' "$stage_scan" | sed -n '2p')
       case "$ibd_stage_key" in
         pre_headers)
           ibd_stage_label="Pre-sync blockheaders"
-          ibd_stage_height=$(printf '%s\n' "$stage_line" | sed -n 's/.*height: \([0-9][0-9]*\).*/\1/p')
-          ibd_stage_pct=$(printf '%s\n' "$stage_line" | sed -n 's/.*(~\([0-9.][0-9.]*\)%).*/\1/p')
+          stage_height_num=$(printf '%s\n' "$stage_line" | sed -n 's/.*height: \([0-9][0-9]*\).*/\1/p')
+          stage_pct_num=$(printf '%s\n' "$stage_line" | sed -n 's/.*(~\([0-9.][0-9.]*\)%).*/\1/p')
+          ibd_stage_height="$stage_height_num"
+          ibd_stage_pct="$stage_pct_num"
           [ -n "$ibd_stage_height" ] && ibd_stage_height=$(fmt_int "$ibd_stage_height")
           if [ -n "$ibd_stage_pct" ]; then
             progress_pct=$(awk -v p="$ibd_stage_pct" 'BEGIN{printf "%.3f", p+0}')
@@ -208,8 +253,10 @@ if pidof bitcoind >/dev/null 2>&1; then
         ;;
         sync_headers)
           ibd_stage_label="Synchronizing blockheaders"
-          ibd_stage_height=$(printf '%s\n' "$stage_line" | sed -n 's/.*height: \([0-9][0-9]*\).*/\1/p')
-          ibd_stage_pct=$(printf '%s\n' "$stage_line" | sed -n 's/.*(~\([0-9.][0-9.]*\)%).*/\1/p')
+          stage_height_num=$(printf '%s\n' "$stage_line" | sed -n 's/.*height: \([0-9][0-9]*\).*/\1/p')
+          stage_pct_num=$(printf '%s\n' "$stage_line" | sed -n 's/.*(~\([0-9.][0-9.]*\)%).*/\1/p')
+          ibd_stage_height="$stage_height_num"
+          ibd_stage_pct="$stage_pct_num"
           [ -n "$ibd_stage_height" ] && ibd_stage_height=$(fmt_int "$ibd_stage_height")
           if [ -n "$ibd_stage_pct" ]; then
             progress_pct=$(awk -v p="$ibd_stage_pct" 'BEGIN{printf "%.3f", p+0}')
@@ -245,6 +292,43 @@ if pidof bitcoind >/dev/null 2>&1; then
           ibd_stage_detail="pruning old block data"
         ;;
       esac
+    fi
+
+    if [ -n "$stage_height_num" ] && [ -n "$headers" ] && [ "$headers" != "-" ]; then
+      stage_delta=$(awk -v h="$headers" -v s="$stage_height_num" 'BEGIN{
+        d = (h + 0) - (s + 0)
+        if (d < 0) d = -d
+        printf "%.0f", d
+      }')
+      if [ "$stage_delta" -le 8192 ] 2>/dev/null; then
+        header_stage_fresh="1"
+      fi
+    fi
+
+    case "$ibd_stage_key" in
+      pre_headers|sync_headers)
+        if [ "$header_stage_fresh" = "1" ] && [ -n "$stage_pct_num" ]; then
+          if awk -v p="$stage_pct_num" 'BEGIN{exit !((p + 0) < 99.9)}'; then
+            header_stage_active="1"
+          fi
+        fi
+      ;;
+    esac
+
+    # Use live headers/blocks counters as the primary source of truth.
+    # Once header sync is effectively complete, any remaining headers>blocks
+    # gap means block validation/import is still the active stage, even if
+    # the log prints a fresh 100% blockheaders line for new tip blocks.
+    if [ "$header_gap" -gt 0 ] 2>/dev/null; then
+      if [ "$header_stage_active" != "1" ]; then
+        ibd_stage_key="sync_blocks"
+        ibd_stage_label="Synchronizing blocks"
+        ibd_stage_height=$(fmt_int "$blocks")
+        ibd_stage_pct=""
+        ibd_stage_detail="headers $(fmt_int "$headers")"
+        [ -n "$progress" ] && progress_pct=$(echo "$progress" | awk '{printf "%.3g", $1*100}')
+        progress_ring=$(awk -v p="$progress_pct" 'BEGIN{p=p+0;if(p<0)p=0;if(p>100)p=100;printf "%.3f",p}')
+      fi
     fi
   fi
 fi
@@ -341,6 +425,10 @@ printf '    "uptime": %s,\n' "$(json_str "$uptime_fmt")"
 printf '    "temp": %s,\n' "$(json_str "$temp")"
 printf '    "load_pct": %s,\n' "$(json_num "$load_pct")"
 printf '    "load_display": %s,\n' "$(json_str "$load_display")"
+printf '    "load_avg_1": %s,\n' "$(json_str "$load_avg_1_display")"
+printf '    "load_avg_5": %s,\n' "$(json_str "$load_avg_5_display")"
+printf '    "load_avg_15": %s,\n' "$(json_str "$load_avg_15_display")"
+printf '    "load_avg_display": %s,\n' "$(json_str "$load_avg_display")"
 printf '    "mem_pct": %s,\n' "$(json_num "$mem_pct")"
 printf '    "mem_used_display": %s,\n' "$(json_str "$mem_used_display")"
 printf '    "mem_total_display": %s,\n' "$(json_str "$mem_total_display")"

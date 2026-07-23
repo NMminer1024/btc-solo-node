@@ -1,10 +1,10 @@
 #!/bin/sh
 #
-# S60swap - Ensure Rockbase has persistent 1G swap after rootfs resize
+# S60swap - Ensure Rockbase has persistent 4G swap after rootfs resize
 #
 
 SWAP_FILE=/swapfile
-SWAP_SIZE_MB=1024
+SWAP_SIZE_MB=4096
 RESIZE_DONE_FLAG=/resize_done
 EXPECTED_BYTES=$((SWAP_SIZE_MB * 1024 * 1024))
 

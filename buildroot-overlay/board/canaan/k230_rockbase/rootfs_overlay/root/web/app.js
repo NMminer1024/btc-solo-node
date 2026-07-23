@@ -3,6 +3,7 @@
     system: {
       cpuPct: null,
       cpuLoad: "--",
+      loadAverage: "--",
       diskPct: null,
       diskUsage: "--",
       memPct: null,
@@ -56,6 +57,7 @@
       syncing: "IBD Syncing",
       pre_headers: "Pre-sync blockheaders",
       sync_headers: "Synchronizing blockheaders",
+      sync_blocks: "Synchronizing blocks",
       loading_index: "Loading block index",
       loading_blocks: "Loading block files",
       verifying_blocks: "Verifying blocks",
@@ -104,10 +106,197 @@
   };
 
   var hasLoadedDashboardData = false;
+  var DASHBOARD_REFRESH_SECONDS = 10;
+  var countdownTimer = null;
+  var refreshInFlight = false;
+  var refreshSecondsLeft = DASHBOARD_REFRESH_SECONDS;
+  var LOG_REFRESH_SECONDS = 5;
+  var LOG_TAIL_LIMIT = 300;
+  var logPollTimer = null;
+  var activeViewName = "dashboard";
+  var activeLogService = "bitcoind";
+  var logRequestSeq = {
+    bitcoind: 0,
+    stratum: 0
+  };
+  var logState = {
+    bitcoind: {
+      cursor: 0,
+      text: "",
+      loaded: false,
+      loading: false,
+      path: "/root/bitcoind/debug.log",
+      label: "Bitcoind log",
+      summary: "Tail 300 lines · live cursor"
+    },
+    stratum: {
+      cursor: 0,
+      text: "",
+      loaded: false,
+      loading: false,
+      path: "/root/ckpool/logs/ckpool.log",
+      label: "Stratum log",
+      summary: "Tail 300 lines · live cursor"
+    }
+  };
 
   function setText(id, value) {
     var el = document.getElementById(id);
     if (el) el.textContent = value;
+  }
+
+  function getLogState(service) {
+    return logState[service] || logState.bitcoind;
+  }
+
+  function setLogSummary(service, text) {
+    var state = getLogState(service);
+    state.summary = text;
+    if (activeLogService === service) setText("logSummary", text);
+  }
+
+  function renderLogView(service) {
+    var state = getLogState(service);
+    if (activeViewName !== "logs" || activeLogService !== service) return;
+    setText("logServiceBadge", state.label);
+    setText("logPath", state.path);
+    setText("logSummary", state.summary);
+    setText("logsPanel", state.text || "[empty]");
+    var panel = document.getElementById("logsPanel");
+    if (panel) panel.scrollTop = panel.scrollHeight;
+  }
+
+  function applyLogPayload(service, payload, initialRequest) {
+    var state = getLogState(service);
+    var incoming = payload && typeof payload.text === "string" ? payload.text : "";
+    var reset = payload && payload.reset === true;
+    var initial = initialRequest || (payload && payload.initial === true);
+    var summary = initial ? "Tail 300 lines · live cursor" : "Polling live updates every 5s";
+
+    if (reset || initial || !state.loaded) {
+      state.text = incoming;
+    } else if (incoming) {
+      state.text += incoming;
+    }
+
+    state.cursor = toNumber(payload && payload.cursor, state.cursor);
+    state.loaded = true;
+    state.path = toText(payload && payload.path, state.path);
+    state.label = (payload && payload.service === "stratum") ? "Stratum log" : "Bitcoind log";
+    state.loading = false;
+    setLogSummary(service, reset ? "Log rotated or truncated · reloaded tail" : summary);
+    renderLogView(service);
+  }
+
+  function stopLogPolling() {
+    if (logPollTimer) {
+      window.clearInterval(logPollTimer);
+      logPollTimer = null;
+    }
+  }
+
+  function fetchLogData(service, initialRequest) {
+    var state = getLogState(service);
+    if (state.loading) return Promise.resolve(null);
+
+    state.loading = true;
+    var seq = (logRequestSeq[service] || 0) + 1;
+    logRequestSeq[service] = seq;
+    var cursor = initialRequest ? 0 : state.cursor;
+    var url = "/api/log.cgi?service=" + encodeURIComponent(service) +
+      "&cursor=" + encodeURIComponent(cursor || 0) +
+      "&limit=" + LOG_TAIL_LIMIT +
+      "&_ts=" + Date.now();
+
+    return window.fetch(url, { cache: "no-store" })
+      .then(function (response) {
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        return response.json();
+      })
+      .then(function (payload) {
+        if (logRequestSeq[service] !== seq) return null;
+        applyLogPayload(service, payload, initialRequest);
+        return payload;
+      })
+      .catch(function () {
+        if (logRequestSeq[service] !== seq) return null;
+        state.loading = false;
+        if (!state.loaded) {
+          state.text = "Log unavailable.";
+          renderLogView(service);
+        }
+        return null;
+      })
+      .then(function (result) {
+        state.loading = false;
+        return result;
+      });
+  }
+
+  function startLogPolling(service) {
+    stopLogPolling();
+    activeLogService = service;
+    setLogSummary(service, getLogState(service).loaded ? "Polling live updates every 5s" : "Tail 300 lines · live cursor");
+    renderLogView(service);
+    if (!getLogState(service).loaded) {
+      fetchLogData(service, true);
+    } else {
+      fetchLogData(service, false);
+    }
+    logPollTimer = window.setInterval(function () {
+      if (activeLogService !== service) return;
+      fetchLogData(service, false);
+    }, LOG_REFRESH_SECONDS * 1000);
+  }
+
+  function bindLogTabs() {
+    var tabs = document.querySelectorAll("[data-log-service]");
+    tabs.forEach(function (tab) {
+      tab.addEventListener("click", function () {
+        var service = tab.getAttribute("data-log-service") || "bitcoind";
+        tabs.forEach(function (item) {
+          item.classList.toggle("is-active", item.getAttribute("data-log-service") === service);
+        });
+        startLogPolling(service);
+      });
+    });
+  }
+
+  function setRefreshCountdown(secondsLeft) {
+    var value = Number(secondsLeft);
+    var safeSeconds = Number.isFinite(value) ? Math.max(0, Math.ceil(value)) : DASHBOARD_REFRESH_SECONDS;
+    var orb = document.getElementById("bitcoinRefreshOrb");
+    var label = document.getElementById("bitcoinRefreshCountdown");
+    if (orb) orb.style.setProperty("--pct", safeSeconds * 100 / DASHBOARD_REFRESH_SECONDS);
+    if (label) label.textContent = safeSeconds + "s";
+  }
+
+  function clearRefreshCountdownTimer() {
+    if (!countdownTimer) return;
+    window.clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
+
+  function completeRefreshCycle() {
+    refreshInFlight = false;
+    refreshSecondsLeft = DASHBOARD_REFRESH_SECONDS;
+    setRefreshCountdown(refreshSecondsLeft);
+  }
+
+  function startRefreshCountdown() {
+    clearRefreshCountdownTimer();
+    refreshSecondsLeft = DASHBOARD_REFRESH_SECONDS;
+    setRefreshCountdown(refreshSecondsLeft);
+    countdownTimer = window.setInterval(function () {
+      if (refreshInFlight) return;
+      refreshSecondsLeft -= 1;
+      if (refreshSecondsLeft <= 0) {
+        setRefreshCountdown(0);
+        fetchDashboardData();
+        return;
+      }
+      setRefreshCountdown(refreshSecondsLeft);
+    }, 1000);
   }
 
   function isRollDigit(char) {
@@ -213,7 +402,7 @@
 
     var chainText = toText(chainName, "");
     var blockText = toText(blockDate, "");
-    var isIbdStage = stageKey === "pre_headers" || stageKey === "sync_headers" || stageKey === "syncing";
+    var isIbdStage = stageKey === "pre_headers" || stageKey === "sync_headers" || stageKey === "sync_blocks" || stageKey === "syncing";
     var hasDate = blockText && blockText !== "-" && blockText !== "N/A";
     var hasChain = chainText && chainText !== "-" && chainText !== "N/A";
 
@@ -257,7 +446,7 @@
 
     var text = toText(stageText, "");
     var dateText = toText(blockDate, "");
-    var isDateStage = stageKey === "syncing" || stageKey === "sync_headers";
+    var isDateStage = stageKey === "syncing" || stageKey === "sync_headers" || stageKey === "sync_blocks";
     var match = dateText.match(/^(\d{4}-\d{2}-\d{2})\s+(.+)$/);
 
     if (isDateStage && match) {
@@ -347,11 +536,16 @@
     var ntpLabel = labels.ntp[toText(network.ntp_key, "")] || mock.network.ntpBadge;
     var stratumLabel = labels.stratum[toText(mining.ckpool_state, "")] || mock.stratum.badge;
     var chainName = toText(bitcoin.btc_context, "").replace(/^main\b/, "Mainnet");
+    var loadAverageFallback = joinParts([
+      system.load_avg_1 && "1m " + system.load_avg_1,
+      system.load_avg_5 && "5m " + system.load_avg_5
+    ], mock.system.loadAverage);
 
     return {
       system: {
         cpuPct: toNumber(system.load_pct, mock.system.cpuPct),
         cpuLoad: toText(system.load_display, mock.system.cpuLoad),
+        loadAverage: toText(system.load_avg_display, loadAverageFallback),
         diskPct: toNumber(system.disk_pct, mock.system.diskPct),
         diskUsage: toText(system.disk_size_info, mock.system.diskUsage),
         memPct: toNumber(system.mem_pct, mock.system.memPct),
@@ -447,6 +641,7 @@
 
     setText("cpuPct", formatPercent(data.system.cpuPct, 0));
     setText("cpuLoadValue", data.system.cpuLoad);
+    setText("cpuLoadAvgValue", data.system.loadAverage);
     setText("diskPct", formatPercent(data.system.diskPct, 0));
     setText("diskValue", data.system.diskUsage);
     setText("memPct", formatPercent(data.system.memPct, 0));
@@ -511,6 +706,8 @@
   }
 
   function fetchDashboardData() {
+    if (refreshInFlight) return Promise.resolve(null);
+    refreshInFlight = true;
     return window.fetch("/api/status.cgi?_ts=" + Date.now(), {
       cache: "no-store"
     }).then(function (response) {
@@ -520,9 +717,11 @@
       var viewData = normalizeDashboardData(api);
       renderDashboard(viewData);
       hasLoadedDashboardData = true;
+      completeRefreshCycle();
       return viewData;
     }).catch(function () {
       if (!hasLoadedDashboardData) renderDashboard(mock);
+      completeRefreshCycle();
       return null;
     });
   }
@@ -538,6 +737,10 @@
     panels.forEach(function (panel) {
       panel.classList.toggle("is-visible", panel.getAttribute("data-view-panel") === view);
     });
+
+    activeViewName = view;
+    if (view === "logs") startLogPolling(activeLogService || "bitcoind");
+    else stopLogPolling();
 
     window.location.hash = view;
   }
@@ -562,11 +765,13 @@
 
   function init() {
     renderDashboard(mock);
+    setRefreshCountdown(DASHBOARD_REFRESH_SECONDS);
     bindNav();
+    bindLogTabs();
     bindThemeToggle();
     setTheme(getStoredTheme());
     fetchDashboardData();
-    window.setInterval(fetchDashboardData, 10000);
+    startRefreshCountdown();
 
     var initial = window.location.hash ? window.location.hash.slice(1) : "dashboard";
     initial = viewAliases[initial] || initial;
