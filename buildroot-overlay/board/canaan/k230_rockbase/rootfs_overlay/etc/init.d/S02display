@@ -1,0 +1,23 @@
+#!/bin/sh
+#
+# Early Rockbase display bring-up after device nodes are ready.
+#
+
+case "$1" in
+start)
+	[ -x /usr/bin/vo_init ] || exit 0
+	/usr/bin/vo_init >/dev/null 2>&1 || true
+	;;
+stop)
+	;;
+restart|reload)
+	[ -x /usr/bin/vo_init ] || exit 0
+	/usr/bin/vo_init >/dev/null 2>&1 || true
+	;;
+*)
+	echo "Usage: $0 {start|stop|restart}"
+	exit 1
+	;;
+esac
+
+exit 0

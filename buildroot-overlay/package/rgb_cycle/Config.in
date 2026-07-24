@@ -1,0 +1,7 @@
+config BR2_PACKAGE_RGB_CYCLE
+	bool "rgb_cycle"
+	select BR2_PACKAGE_DISPLAY
+
+	help
+	  RGB panel cycle test utility for Rockbase. It renders full-screen
+	  red, green, and blue frames in a 1-second loop for LCD validation.
