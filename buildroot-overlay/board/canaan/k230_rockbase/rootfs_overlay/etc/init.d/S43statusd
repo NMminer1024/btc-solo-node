@@ -1,0 +1,50 @@
+#!/bin/sh
+#
+# S43statusd - Rockbase async web status cache daemon
+#
+
+DAEMON=/usr/bin/rockbase_statusd.sh
+PIDFILE=/var/run/rockbase-statusd.pid
+
+start_service() {
+    start-stop-daemon -S -b -m -q -p "${PIDFILE}" -x "${DAEMON}" -- daemon
+}
+
+stop_service() {
+    if [ -f "${PIDFILE}" ]; then
+        start-stop-daemon -K -q -p "${PIDFILE}" || true
+    fi
+    pids=$(ps | awk '/rockbase_statusd\.sh daemon/ && !/awk/ {print $1}')
+    [ -n "${pids}" ] && kill ${pids} >/dev/null 2>&1 || true
+    rm -rf /var/run/rockbase-statusd.lock >/dev/null 2>&1 || true
+    rm -f "${PIDFILE}"
+}
+
+case "$1" in
+    start)
+        printf "Starting rockbase statusd: "
+        stop_service
+        if start_service; then
+            echo "OK"
+        else
+            echo "FAIL"
+            exit 1
+        fi
+        ;;
+    stop)
+        printf "Stopping rockbase statusd: "
+        stop_service
+        echo "OK"
+        ;;
+    restart|reload)
+        "$0" stop
+        sleep 1
+        "$0" start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac
+
+exit 0
