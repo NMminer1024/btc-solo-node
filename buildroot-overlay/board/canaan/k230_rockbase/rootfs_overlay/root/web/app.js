@@ -46,6 +46,17 @@
       rssi: "--",
       signalLevel: 0
     },
+    wifi: {
+      statusBadge: "Idle",
+      statusClass: "status-soft",
+      savedSsid: "-",
+      connectedSsid: "-",
+      connectedIp: "-",
+      applyState: "idle",
+      applyMessage: "",
+      scanSupported: false,
+      scanResults: []
+    },
     about: {
       firmware: "--",
       updated: "--"
@@ -120,6 +131,18 @@
     bitcoind: 0,
     stratum: 0
   };
+  var wifiRequestSeq = 0;
+  var wifiState = {
+    loaded: false,
+    loading: false,
+    scanning: false,
+    applying: false,
+    current: mock.wifi,
+    scanResults: [],
+    selectedSsid: "",
+    scanCacheLoaded: false
+  };
+  var wifiPollTimer = null;
   var logState = {
     bitcoind: {
       cursor: 0,
@@ -606,6 +629,298 @@
     };
   }
 
+  function normalizeWifiData(api) {
+    if (!api || typeof api !== "object") return mock.wifi;
+
+    var scanResults = Array.isArray(api.scan_results) ? api.scan_results : [];
+    var applyState = toText(api.apply_state, "idle");
+    var currentState = toText(api.current_state, "");
+    var statusBadge = "Idle";
+    var statusClass = "status-soft";
+    if (applyState === "applying") {
+      statusBadge = "Applying";
+      statusClass = "status-warm";
+    } else if (currentState === "COMPLETED" || toText(api.current_ip, "-") !== "-") {
+      statusBadge = "Connected";
+      statusClass = "status-ok";
+    } else if (applyState === "ready") {
+      statusBadge = "Ready";
+      statusClass = "status-ok";
+    } else if (applyState === "error") {
+      statusBadge = "Error";
+      statusClass = "status-danger";
+    }
+
+    return {
+      statusBadge: statusBadge,
+      statusClass: statusClass,
+      savedSsid: toText(api.saved_ssid, "-"),
+      connectedSsid: toText(api.current_ssid, "-"),
+      connectedIp: toText(api.current_ip, "-"),
+      connectedState: toText(api.current_state, "-"),
+      applyState: applyState,
+      applyMessage: toText(api.apply_message, ""),
+      scanSupported: !!api.scan_supported,
+      scanResults: scanResults,
+      iface: toText(api.iface, "wlan0")
+    };
+  }
+
+  function stopWifiPolling() {
+    if (wifiPollTimer) {
+      window.clearInterval(wifiPollTimer);
+      wifiPollTimer = null;
+    }
+  }
+
+  function setWifiMessage(text) {
+    setText("wifiMessage", text || "Wi-Fi changes only reconfigure the network stack. On a single-radio board, scan may pause Wi-Fi briefly. Bitcoind data stays on /root/block.");
+  }
+
+  function setWifiControlsDisabled(disabled) {
+    var buttons = ["wifiScanBtn", "wifiApplyBtn", "wifiSsidSelect", "wifiSsidManual", "wifiPassword"];
+    buttons.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.disabled = !!disabled;
+    });
+  }
+
+  function setWifiScanAvailable(available) {
+    var el = document.getElementById("wifiScanBtn");
+    if (el) el.disabled = !available || !!wifiState.applying || !!wifiState.scanning;
+  }
+
+  function wifiSelectManualVisible(show) {
+    var field = document.getElementById("wifiManualField");
+    if (field) field.hidden = !show;
+  }
+
+  function wifiSelectedValue() {
+    var select = document.getElementById("wifiSsidSelect");
+    var manual = document.getElementById("wifiSsidManual");
+    if (!select) return "";
+    if (select.value === "__custom__") return manual ? manual.value.trim() : "";
+    return select.value;
+  }
+
+  function buildWifiOptions(wifi) {
+    var select = document.getElementById("wifiSsidSelect");
+    if (!select) return;
+
+    var current = wifi || mock.wifi;
+    var preferred = current.savedSsid && current.savedSsid !== "-" ? current.savedSsid : current.connectedSsid;
+    var seen = {};
+    var options = [];
+
+    function addOption(ssid, label) {
+      if (!ssid || seen[ssid]) return;
+      seen[ssid] = true;
+      options.push({ value: ssid, label: label || ssid });
+    }
+
+    addOption(preferred, preferred);
+    (current.scanResults || []).forEach(function (item) {
+      if (!item || !item.ssid) return;
+      var label = item.ssid;
+      if (item.signal !== undefined && item.signal !== null && item.signal !== "") {
+        label += " (" + item.signal + " dBm)";
+      }
+      addOption(item.ssid, label);
+    });
+
+    select.innerHTML = "";
+    var placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = options.length ? "Choose a Wi-Fi network" : "Scan to discover networks";
+    select.appendChild(placeholder);
+
+    options.forEach(function (item) {
+      var opt = document.createElement("option");
+      opt.value = item.value;
+      opt.textContent = item.label;
+      select.appendChild(opt);
+    });
+
+    var custom = document.createElement("option");
+    custom.value = "__custom__";
+    custom.textContent = "Custom / Hidden SSID";
+    select.appendChild(custom);
+
+    var target = preferred || (options[0] && options[0].value) || "__custom__";
+    if (target && seen[target]) {
+      select.value = target;
+      wifiSelectManualVisible(false);
+    } else {
+      select.value = "__custom__";
+      wifiSelectManualVisible(true);
+    }
+  }
+
+  function renderWifiView(wifi) {
+    var data = wifi || mock.wifi;
+    wifiState.current = data;
+    setBadgeState("wifiStatusBadge", data.statusBadge, data.statusClass);
+    setText("wifiSavedSsid", data.savedSsid);
+    setText("wifiConnectedSsid", data.connectedSsid);
+    setText("wifiConnectedIp", data.connectedIp);
+    setText("wifiApplyState", data.applyState);
+    setWifiMessage(data.applyMessage || "Wi-Fi changes only reconfigure the network stack. On a single-radio board, scan may pause Wi-Fi briefly. Bitcoind data stays on /root/block.");
+    buildWifiOptions(data);
+
+    var manual = document.getElementById("wifiSsidManual");
+    var password = document.getElementById("wifiPassword");
+    var select = document.getElementById("wifiSsidSelect");
+    if (manual && data.savedSsid && data.savedSsid !== "-") manual.value = data.savedSsid;
+    if (password && !password.value) password.value = "";
+    if (select && select.value === "__custom__" && manual) {
+      manual.value = data.savedSsid && data.savedSsid !== "-" ? data.savedSsid : "";
+    }
+    setWifiControlsDisabled(data.applyState === "applying");
+    setWifiScanAvailable(!!data.scanSupported);
+  }
+
+  function wifiRequest(action, options) {
+    var opt = options || {};
+    var seq = ++wifiRequestSeq;
+    var fetchOptions = {
+      cache: "no-store"
+    };
+    var url = "/api/wifi.cgi?action=" + encodeURIComponent(action) + "&_ts=" + Date.now();
+
+    if (opt.method === "POST") {
+      fetchOptions.method = "POST";
+      fetchOptions.headers = { "Content-Type": "application/x-www-form-urlencoded" };
+      fetchOptions.body = opt.body || "";
+    }
+
+    return window.fetch(url, fetchOptions)
+      .then(function (response) {
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        return response.json();
+      })
+      .then(function (payload) {
+        if (seq !== wifiRequestSeq) return null;
+        return payload;
+      });
+  }
+
+  function loadWifiSettings() {
+    if (wifiState.loading) return Promise.resolve(null);
+    wifiState.loading = true;
+    return wifiRequest("get")
+      .then(function (payload) {
+        if (!payload) return null;
+        wifiState.loaded = true;
+        wifiState.current = normalizeWifiData(payload);
+        renderWifiView(wifiState.current);
+        if (wifiState.current.applyState === "applying") {
+          startWifiApplyPolling();
+        } else {
+          stopWifiPolling();
+        }
+        return wifiState.current;
+      })
+      .catch(function () {
+        renderWifiView(mock.wifi);
+        setWifiMessage("Wi-Fi settings are unavailable right now.");
+        return null;
+      })
+      .then(function (result) {
+        wifiState.loading = false;
+        return result;
+      });
+  }
+
+  function refreshWifiScan() {
+    if (wifiState.scanning) return Promise.resolve(null);
+    if (!wifiState.current || !wifiState.current.scanSupported) {
+      setWifiMessage("Wi-Fi scanning is not available on this image.");
+      return Promise.resolve(null);
+    }
+    wifiState.scanning = true;
+    setWifiMessage("Scanning nearby Wi-Fi networks...");
+    setWifiControlsDisabled(true);
+    return wifiRequest("scan")
+      .then(function (payload) {
+        if (!payload) return null;
+        wifiState.current.scanResults = Array.isArray(payload.scan) ? payload.scan : [];
+        wifiState.current.scanSupported = true;
+        renderWifiView(wifiState.current);
+        setWifiMessage(wifiState.current.scanResults.length ? "Select a network and apply the profile." : "No Wi-Fi networks found.");
+        return wifiState.current.scanResults;
+      })
+      .catch(function () {
+        setWifiMessage("Wi-Fi scan failed. Make sure wlan0 is up and wpa_supplicant is running.");
+        renderWifiView(wifiState.current);
+        return null;
+      })
+      .then(function (result) {
+        wifiState.scanning = false;
+        setWifiScanAvailable(!!(wifiState.current && wifiState.current.scanSupported));
+        return result;
+      });
+  }
+
+  function startWifiApplyPolling() {
+    stopWifiPolling();
+    wifiPollTimer = window.setInterval(function () {
+      if (!wifiState.applying) {
+        loadWifiSettings();
+        return;
+      }
+      loadWifiSettings().then(function (data) {
+        if (!data) return;
+        if (data.applyState !== "applying") {
+          wifiState.applying = false;
+          stopWifiPolling();
+          setWifiControlsDisabled(false);
+          setWifiMessage(data.applyMessage || "Wi-Fi profile updated.");
+        }
+      });
+    }, 2000);
+  }
+
+  function applyWifiProfile() {
+    var select = document.getElementById("wifiSsidSelect");
+    var manual = document.getElementById("wifiSsidManual");
+    var password = document.getElementById("wifiPassword");
+    var ssid = wifiSelectedValue();
+    var hidden = select && select.value === "__custom__" ? "1" : "0";
+    var pass = password ? password.value : "";
+
+    if (!ssid) {
+      setWifiMessage("SSID is required.");
+      return Promise.resolve(null);
+    }
+
+    wifiState.applying = true;
+    setWifiControlsDisabled(true);
+    setWifiMessage("Applying Wi-Fi profile. The device may reconnect for a few seconds.");
+
+    var body = "ssid=" + encodeURIComponent(ssid) +
+      "&password=" + encodeURIComponent(pass) +
+      "&hidden=" + encodeURIComponent(hidden);
+
+    return wifiRequest("apply", {
+      method: "POST",
+      body: body
+    }).then(function (payload) {
+      if (!payload || payload.ok === false) {
+        wifiState.applying = false;
+        setWifiControlsDisabled(false);
+        setWifiMessage((payload && payload.error) ? payload.error : "Failed to start Wi-Fi apply.");
+        return null;
+      }
+      startWifiApplyPolling();
+      return payload;
+    }).catch(function () {
+      wifiState.applying = false;
+      setWifiControlsDisabled(false);
+      setWifiMessage("Failed to start Wi-Fi apply.");
+      return null;
+    });
+  }
+
   function getRssiLevel(rssi) {
     if (!rssi && rssi !== 0) return 0;
     if (rssi >= -50) return 4;
@@ -751,6 +1066,8 @@
     activeViewName = view;
     if (view === "logs") startLogPolling(activeLogService || "bitcoind");
     else stopLogPolling();
+    if (view === "settings") loadWifiSettings();
+    else if (!wifiState.applying) stopWifiPolling();
 
     window.location.hash = view;
   }
@@ -773,11 +1090,40 @@
     });
   }
 
+  function bindWifiControls() {
+    var select = document.getElementById("wifiSsidSelect");
+    var manual = document.getElementById("wifiSsidManual");
+    var scanBtn = document.getElementById("wifiScanBtn");
+    var applyBtn = document.getElementById("wifiApplyBtn");
+
+    if (select) {
+      select.addEventListener("change", function () {
+        wifiSelectManualVisible(select.value === "__custom__");
+        if (select.value !== "__custom__" && manual) {
+          manual.value = select.value;
+        }
+      });
+    }
+
+    if (scanBtn) {
+      scanBtn.addEventListener("click", function () {
+        refreshWifiScan();
+      });
+    }
+
+    if (applyBtn) {
+      applyBtn.addEventListener("click", function () {
+        applyWifiProfile();
+      });
+    }
+  }
+
   function init() {
     renderDashboard(mock);
     setRefreshCountdown(DASHBOARD_REFRESH_SECONDS);
     bindNav();
     bindLogTabs();
+    bindWifiControls();
     bindThemeToggle();
     setTheme(getStoredTheme());
     fetchDashboardData();

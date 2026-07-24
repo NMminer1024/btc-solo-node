@@ -763,6 +763,70 @@ textarea {
   gap: 12px;
 }
 
+.wifi-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.wifi-field {
+  display: grid;
+  gap: 8px;
+}
+
+.wifi-field label {
+  color: var(--label);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.wifi-field input,
+.wifi-field select {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--pill-bg);
+  color: var(--value);
+  padding: 0 14px;
+  outline: 0;
+}
+
+.wifi-field input::placeholder {
+  color: var(--muted);
+}
+
+.wifi-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.action-button {
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--pill-bg);
+  color: var(--secondary-text);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.action-button-primary {
+  background: linear-gradient(135deg, rgba(193, 149, 73, 0.22), rgba(28, 61, 99, 0.18));
+  border-color: rgba(193, 149, 73, 0.28);
+  color: var(--value);
+}
+
+.wifi-note {
+  margin: 14px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
 .connect-item {
   padding: 16px;
   border-radius: var(--radius-md);

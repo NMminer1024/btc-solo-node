@@ -329,21 +329,39 @@
       </section>
       <section class="subpage-grid">
         <article class="surface-card">
-          <h3>LAN</h3>
-          <div class="stack-list">
-            <div class="stack-row"><span>IP</span><strong>192.168.124.15</strong></div>
-            <div class="stack-row"><span>Interface</span><strong>wlan0</strong></div>
-            <div class="stack-row"><span>WiFi</span><strong>Rockbase-Lab</strong></div>
-            <div class="stack-row"><span>RSSI</span><strong>-58 dBm</strong></div>
+          <div class="surface-head">
+            <div>
+              <h3>Wi-Fi Setup</h3>
+            </div>
+            <span class="status-badge status-soft" id="wifiStatusBadge">Idle</span>
           </div>
+          <div class="wifi-form">
+            <div class="wifi-field">
+              <label for="wifiSsidSelect">SSID</label>
+              <select id="wifiSsidSelect" aria-label="Available Wi-Fi networks"></select>
+            </div>
+            <div class="wifi-field" id="wifiManualField" hidden>
+              <label for="wifiSsidManual">Manual SSID</label>
+              <input id="wifiSsidManual" type="text" placeholder="Hidden SSID or manual entry">
+            </div>
+            <div class="wifi-field">
+              <label for="wifiPassword">Password</label>
+              <input id="wifiPassword" type="password" autocomplete="new-password" placeholder="Wi-Fi password">
+            </div>
+          </div>
+          <div class="wifi-actions">
+            <button class="action-button" id="wifiScanBtn" type="button">Scan</button>
+            <button class="action-button action-button-primary" id="wifiApplyBtn" type="button">Apply</button>
+          </div>
+          <p class="wifi-note" id="wifiMessage" aria-live="polite">Wi-Fi changes only reconfigure the network stack. On a single-radio board, scan may pause Wi-Fi briefly. Bitcoind data stays on /root/block.</p>
         </article>
         <article class="surface-card">
-          <h3>Preferences</h3>
+          <h3>Current Link</h3>
           <div class="stack-list">
-            <div class="stack-row"><span>Hostname</span><strong>rockbase-nm</strong></div>
-            <div class="stack-row"><span>WiFi Profile</span><strong>Rockbase-Lab</strong></div>
-            <div class="stack-row"><span>NTP</span><strong>Ready</strong></div>
-            <div class="stack-row"><span>Clock Drift</span><strong>&lt; 20 ms</strong></div>
+            <div class="stack-row"><span>Saved SSID</span><strong id="wifiSavedSsid">-</strong></div>
+            <div class="stack-row"><span>Connected SSID</span><strong id="wifiConnectedSsid">-</strong></div>
+            <div class="stack-row"><span>IP</span><strong id="wifiConnectedIp">-</strong></div>
+            <div class="stack-row"><span>Apply State</span><strong id="wifiApplyState">idle</strong></div>
           </div>
         </article>
       </section>
