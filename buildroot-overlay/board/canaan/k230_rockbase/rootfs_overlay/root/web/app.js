@@ -117,7 +117,7 @@
   };
 
   var hasLoadedDashboardData = false;
-  var DASHBOARD_REFRESH_SECONDS = 10;
+  var DASHBOARD_REFRESH_SECONDS = 30;
   var countdownTimer = null;
   var countdownDeadline = 0;
   var refreshInFlight = false;
@@ -1033,7 +1033,12 @@
   function fetchDashboardData() {
     if (refreshInFlight) return Promise.resolve(null);
     refreshInFlight = true;
+    var controller = typeof AbortController === "function" ? new AbortController() : null;
+    var timeoutId = controller ? window.setTimeout(function () {
+      controller.abort();
+    }, 4500) : 0;
     return window.fetch("/api/status.cgi?_ts=" + Date.now(), {
+      signal: controller ? controller.signal : undefined,
       cache: "no-store"
     }).then(function (response) {
       if (!response.ok) throw new Error("HTTP " + response.status);
@@ -1048,6 +1053,8 @@
       if (!hasLoadedDashboardData) renderDashboard(mock);
       completeRefreshCycle();
       return null;
+    }).finally(function () {
+      if (timeoutId) window.clearTimeout(timeoutId);
     });
   }
 

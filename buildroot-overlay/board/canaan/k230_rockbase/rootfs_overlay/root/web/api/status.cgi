@@ -5,7 +5,97 @@
 CONF=/root/bitcoind/bitcoin.conf
 DATADIR=/root/block
 DEBUG_LOG=/root/bitcoind/debug.log
-btc_cli(){ bitcoin-cli -conf="$CONF" -datadir="$DATADIR" "$@" 2>/dev/null || echo "{}"; }
+BTC_RPC_TIMEOUT=3
+CACHE_FILE=/tmp/status-api.json
+CACHE_STAMP=/tmp/status-api.stamp
+CACHE_TTL=2
+LOCK_DIR=/tmp/status-api.lock
+LOCK_HELD=0
+
+btc_cli(){
+  bitcoin-cli -rpcclienttimeout="$BTC_RPC_TIMEOUT" -conf="$CONF" -datadir="$DATADIR" "$@" 2>/dev/null || echo "{}"
+}
+
+read_cache() {
+  [ -r "$CACHE_FILE" ] && cat "$CACHE_FILE"
+}
+
+cache_is_fresh() {
+  [ -r "$CACHE_FILE" ] || return 1
+  [ -r "$CACHE_STAMP" ] || return 1
+  now=$(date +%s 2>/dev/null || echo 0)
+  stamp=$(cat "$CACHE_STAMP" 2>/dev/null || echo 0)
+  [ -n "$stamp" ] || return 1
+  age=$((now - stamp))
+  [ "$age" -ge 0 ] 2>/dev/null || return 1
+  [ "$age" -le "$CACHE_TTL" ] 2>/dev/null
+}
+
+acquire_render_lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo $$ > "$LOCK_DIR/pid"
+    LOCK_HELD=1
+    return 0
+  fi
+  return 1
+}
+
+release_render_lock() {
+  if [ "$LOCK_HELD" = "1" ]; then
+    rm -rf "$LOCK_DIR" 2>/dev/null || true
+  fi
+}
+
+if cache_is_fresh; then
+  read_cache
+  exit 0
+fi
+
+if ! acquire_render_lock; then
+  tries=0
+  while [ "$tries" -lt 6 ]; do
+    if cache_is_fresh; then
+      read_cache
+      exit 0
+    fi
+    sleep 1
+    tries=$((tries + 1))
+  done
+  if [ -r "$CACHE_FILE" ]; then
+    read_cache
+    exit 0
+  fi
+fi
+
+trap 'release_render_lock' EXIT INT TERM
+
+latest_tip_date_from_log() {
+  [ -r "$DEBUG_LOG" ] || return 0
+  tail -n 200 "$DEBUG_LOG" 2>/dev/null | sed -n "s/.*date='\([^']*\)'.*/\1/p" | tail -n1 | sed "s/T/ /; s/Z$/ UTC/"
+}
+
+latest_update_tip_line() {
+  [ -r "$DEBUG_LOG" ] || return 0
+  tail -n 400 "$DEBUG_LOG" 2>/dev/null | awk '/UpdateTip: new best=/{line=$0} END{print line}'
+}
+
+latest_peer_blocks_from_log() {
+  [ -r "$DEBUG_LOG" ] || return 0
+  tail -n 400 "$DEBUG_LOG" 2>/dev/null | sed -n 's/.*blocks=\([0-9][0-9]*\).*/\1/p' | tail -n1
+}
+
+latest_block_tree_size_from_log() {
+  [ -r "$DEBUG_LOG" ] || return 0
+  tail -n 400 "$DEBUG_LOG" 2>/dev/null | sed -n 's/.*block tree size = \([0-9][0-9]*\).*/\1/p' | tail -n1
+}
+
+pruned_from_conf() {
+  prune_target=$(sed -n 's/^prune=\([0-9][0-9]*\).*/\1/p' "$CONF" 2>/dev/null | head -n1)
+  case "$prune_target" in
+    ''|0) echo false ;;
+    *) echo true ;;
+  esac
+}
 
 # --- JSON string escaping helper ---
 json_str() {
@@ -138,12 +228,7 @@ disk_pct=$(df -h / | awk 'NR==2{gsub("%","",$5);print $5}')
 block_disk_found="true"
 block_disk_value="-"
 block_disk_path="$DATADIR"
-if [ -d "$DATADIR" ]; then
-  block_disk_mb=$(du -sm "$DATADIR" 2>/dev/null | awk 'NR==1{print $1}')
-  if [ -n "$block_disk_mb" ]; then
-    block_disk_value=$(compact_size_mb "$block_disk_mb")
-  fi
-else
+if [ ! -d "$DATADIR" ]; then
   block_disk_found="false"
 fi
 
@@ -188,7 +273,6 @@ header_gap="0"
 if pidof bitcoind >/dev/null 2>&1; then
   btc_running=1
   btc_info=$(btc_cli getblockchaininfo)
-  btc_net=$(btc_cli getnetworkinfo)
   headers=$(echo "$btc_info" | grep -o '"headers": *[0-9]*' | grep -o '[0-9]*')
   blocks=$(echo "$btc_info" | grep -o '"blocks": *[0-9]*' | grep -o '[0-9]*')
   progress=$(echo "$btc_info" | grep -o '"verificationprogress": *[0-9.e+-]*' | cut -d: -f2)
@@ -197,11 +281,46 @@ if pidof bitcoind >/dev/null 2>&1; then
   ibd=$(echo "$btc_info" | grep -o '"initialblockdownload": *[a-z]*' | grep -o 'true\|false')
   chain=$(echo "$btc_info" | grep -o '"chain": *"[^"]*"' | cut -d'"' -f4)
   difficulty=$(echo "$btc_info" | grep -o '"difficulty": *[0-9.]*' | cut -d: -f2 | xargs)
-  connections=$(echo "$btc_net" | grep -o '"connections": *[0-9]*' | grep -o '[0-9]*')
-  subversion=$(echo "$btc_net" | grep -o '"subversion": *"[^"]*"' | cut -d'"' -f4)
+  block_disk_bytes=$(echo "$btc_info" | grep -o '"size_on_disk": *[0-9]*' | grep -o '[0-9]*')
+  if [ -n "$block_disk_bytes" ]; then
+    block_disk_mb=$(awk -v b="$block_disk_bytes" 'BEGIN{printf "%.0f", (b+0)/1048576}')
+    block_disk_value=$(compact_size_mb "$block_disk_mb")
+  fi
+  latest_tip_date=$(latest_tip_date_from_log)
+  [ -n "$latest_tip_date" ] && best_block_date="$latest_tip_date"
+
+  connections="-"
+  subversion="-"
   pruned=$(echo "$btc_info" | grep -o '"pruned": *[a-z]*' | grep -o 'true\|false')
   btc_pid=$(pidof bitcoind 2>/dev/null | awk '{print $1}')
   [ -n "$btc_pid" ] && rss=$(awk '/^VmRSS/{printf "%.0fM",$2/1024}' "/proc/$btc_pid/status" 2>/dev/null)
+
+  update_tip_line=$(latest_update_tip_line)
+  log_blocks=$(printf '%s\n' "$update_tip_line" | sed -n 's/.* height=\([0-9][0-9]*\).*/\1/p')
+  log_progress=$(printf '%s\n' "$update_tip_line" | sed -n "s/.* progress=\([0-9.][0-9.]*\).*/\1/p")
+  log_best_date=$(printf '%s\n' "$update_tip_line" | sed -n "s/.* date='\([^']*\)'.*/\1/p" | sed 's/T/ /; s/Z$/ UTC/')
+  log_headers=$(latest_block_tree_size_from_log)
+  [ -z "$log_headers" ] && log_headers=$(latest_peer_blocks_from_log)
+
+  [ -z "$blocks" ] && blocks="$log_blocks"
+  [ -z "$headers" ] && headers="$log_headers"
+  if [ -z "$progress" ] && [ -n "$log_progress" ]; then
+    progress="$log_progress"
+    progress_pct=$(awk -v p="$progress" 'BEGIN{printf "%.3f", (p+0)*100}')
+    progress_ring=$(awk -v p="$progress_pct" 'BEGIN{if(p<0)p=0;if(p>100)p=100;printf "%.3f",p}')
+  fi
+  if { [ -z "$best_block_date" ] || [ "$best_block_date" = "-" ]; } && [ -n "$log_best_date" ]; then
+    best_block_date="$log_best_date"
+  fi
+  [ -z "$pruned" ] && pruned=$(pruned_from_conf)
+  if [ -z "$ibd" ] && [ -n "$progress" ]; then
+    if awk -v p="$progress" 'BEGIN{exit !((p + 0) < 0.99999)}'; then
+      ibd="true"
+    else
+      ibd="false"
+    fi
+  fi
+
   if [ -n "$headers" ] && [ -n "$blocks" ] && [ "$headers" != "-" ] && [ "$blocks" != "-" ]; then
     header_gap=$(awk -v h="$headers" -v b="$blocks" 'BEGIN{
       gap = (h + 0) - (b + 0)
@@ -209,12 +328,6 @@ if pidof bitcoind >/dev/null 2>&1; then
       printf "%.0f", gap
     }')
   fi
-  if [ -n "$blocks" ] && [ "$blocks" != "-" ] && [ "$blocks" != "0" ]; then
-    best_block_hash=$(btc_cli getblockhash "$blocks" | tr -d '"')
-    best_block_time=$(btc_cli getblockheader "$best_block_hash" 2>/dev/null | grep -o '"time": *[0-9]*' | grep -o '[0-9]*' | head -n1)
-    [ -n "$best_block_time" ] && best_block_date=$(date -u -d "@$best_block_time" '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || echo "-")
-  fi
-
   if [ "$ibd" = "true" ] && [ -r "$DEBUG_LOG" ]; then
     stage_scan=$(tail -n 500 "$DEBUG_LOG" 2>/dev/null | awk '
       /Loading block index/ { key="loading_index"; line=$0; stage_nr=NR }
@@ -265,11 +378,6 @@ if pidof bitcoind >/dev/null 2>&1; then
           if [ -n "$ibd_stage_height" ]; then
             ibd_stage_detail="height ${ibd_stage_height}"
           fi
-          if [ -n "$headers" ] && [ "$headers" != "-" ] && [ "$headers" != "0" ]; then
-            best_header_hash=$(btc_cli getblockhash "$headers" | tr -d '"')
-            best_header_time=$(btc_cli getblockheader "$best_header_hash" 2>/dev/null | grep -o '"time": *[0-9]*' | grep -o '[0-9]*' | head -n1)
-            [ -n "$best_header_time" ] && best_block_date=$(date -u -d "@$best_header_time" '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || echo "-")
-          fi
         ;;
         loading_index)
           ibd_stage_label="Loading block index"
@@ -315,17 +423,39 @@ if pidof bitcoind >/dev/null 2>&1; then
       ;;
     esac
 
-    # Log stage is authoritative. Keep the RPC counters only as fallback
-    # when no useful stage line is present.
-    if [ -z "$stage_scan" ] && [ "$header_gap" -gt 0 ] 2>/dev/null; then
+    block_sync_needed=""
+    if [ "$header_gap" -gt 0 ] 2>/dev/null; then
+      if [ -z "$stage_scan" ]; then
+        block_sync_needed="1"
+      else
+        case "$ibd_stage_key" in
+          pre_headers|sync_headers)
+            if [ "$header_stage_active" != "1" ]; then
+              block_sync_needed="1"
+            fi
+          ;;
+        esac
+      fi
+    fi
+
+    # Header-stage log lines become stale once header sync is effectively done.
+    # At that point the live RPC counters should drive the UI back to block sync.
+    if [ "$block_sync_needed" = "1" ]; then
       ibd_stage_key="sync_blocks"
       ibd_stage_label="Synchronizing blocks"
       ibd_stage_height=$(fmt_int "$blocks")
       ibd_stage_pct=""
       ibd_stage_detail="headers $(fmt_int "$headers")"
-      [ -n "$progress" ] && progress_pct=$(echo "$progress" | awk '{printf "%.3g", $1*100}')
+      [ -n "$progress" ] && progress_pct=$(echo "$progress" | awk '{printf "%.3f", $1*100}')
       progress_ring=$(awk -v p="$progress_pct" 'BEGIN{p=p+0;if(p<0)p=0;if(p>100)p=100;printf "%.3f",p}')
     fi
+  fi
+
+  if [ "$ibd" = "true" ] && [ "$ibd_stage_height" = "-" -o -z "$ibd_stage_height" ] && [ -n "$blocks" ] && [ "$blocks" != "-" ]; then
+    ibd_stage_key="sync_blocks"
+    ibd_stage_label="Synchronizing blocks"
+    ibd_stage_height=$(fmt_int "$blocks")
+    ibd_stage_detail="headers $(fmt_int "$headers")"
   fi
 fi
 headers_fmt=$(fmt_int "$headers")
@@ -409,6 +539,8 @@ if [ "$ntp_running" = "1" ]; then ntp_key=running; ntp_class=ok
 else ntp_key=not_synced; ntp_class=err; fi
 
 # ============ Output JSON ============
+OUTPUT_FILE="/tmp/status-api.$$"
+{
 echo "Content-Type: application/json; charset=utf-8"
 echo ""
 
@@ -492,3 +624,9 @@ printf '    "ntp_key": %s\n' "$(json_str "$ntp_key")"
 printf '  }\n'
 
 printf '}\n'
+} > "$OUTPUT_FILE"
+
+cp "$OUTPUT_FILE" "$CACHE_FILE"
+date +%s > "$CACHE_STAMP"
+cat "$OUTPUT_FILE"
+rm -f "$OUTPUT_FILE"

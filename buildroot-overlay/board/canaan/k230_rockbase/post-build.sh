@@ -12,6 +12,55 @@ GENIMAGE_CFG_SD=$(dirname $(realpath "$0"))/genimage.cfg
 BR2_ROOTFS_OVERLAY=$(cat ${BASE_DIR}/.config | grep BR2_ROOTFS_OVERLAY | cut -d= -f2 | tr -d '"')
 
 BR_OVERLAY_DIR=${K230_SDK_ROOT}/buildroot-overlay
+BLOCK_SEED_DIR_DEFAULT="/mnt/d/code/pony/IoT/k230/img/seed/current/root-block"
+BLOCK_SEED_DIR="${BLOCK_SEED_DIR:-${ROCKBASE_BLOCK_SEED_DIR:-${BLOCK_SEED_DIR_DEFAULT}}}"
+
+cleanup_block_seed_runtime_files()
+{
+	local target_block_dir="$1"
+
+	[ -d "${target_block_dir}" ] || return 0
+
+	find "${target_block_dir}" -type f \
+		\( -name ".lock" -o -name ".cookie" -o -name "bitcoind.pid" -o -name "LOCK" \) \
+		-delete 2>/dev/null || true
+	find "${target_block_dir}" -type s -delete 2>/dev/null || true
+}
+
+inject_block_seed()
+{
+	local seed_dir="${BLOCK_SEED_DIR%/}"
+	local target_block_dir="${TARGET_DIR}/root/block"
+
+	[ -n "${seed_dir}" ] || return 0
+
+	if [ ! -e "${seed_dir}" ]; then
+		echo "block seed: skip (path not found: ${seed_dir})"
+		return 0
+	fi
+
+	if [ ! -d "${seed_dir}" ]; then
+		echo "ERROR: block seed path is not a directory: ${seed_dir}"
+		exit 1
+	fi
+
+	if [ -z "$(find "${seed_dir}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+		echo "block seed: skip (directory is empty: ${seed_dir})"
+		return 0
+	fi
+
+	if [ ! -d "${seed_dir}/blocks" ] || [ ! -d "${seed_dir}/chainstate" ]; then
+		echo "ERROR: block seed must contain blocks/ and chainstate/: ${seed_dir}"
+		exit 1
+	fi
+
+	echo "block seed: injecting from ${seed_dir}"
+	rm -rf "${target_block_dir}"
+	mkdir -p "${target_block_dir}"
+	cp -a "${seed_dir}/." "${target_block_dir}/"
+	cleanup_block_seed_runtime_files "${target_block_dir}"
+	du -sh "${target_block_dir}" 2>/dev/null || true
+}
 
 # Generate the build version file inside the target rootfs only.
 gen_version()
@@ -96,6 +145,7 @@ EOF
 
 gen_version
 auto_boot_proc
+inject_block_seed
 [ -f "${STAGING_DIR}/lib/libasan.so.8" ] && cp "${STAGING_DIR}/lib/libasan.so.8" "${TARGET_DIR}/lib/"
 # Remove non-essential init scripts (mining-only K230)
 rm -f "${TARGET_DIR}/etc/init.d/S50telnet"
