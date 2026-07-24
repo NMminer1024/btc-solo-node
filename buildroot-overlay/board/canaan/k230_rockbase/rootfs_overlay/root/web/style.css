@@ -11,9 +11,11 @@
   --line-strong: rgba(50, 61, 80, 0.2);
   --text: #182235;
   --muted: #6e7582;
+  --heading: #22314a;
   --secondary-text: #22314a;
   --label: #7b8494;
   --value: #152033;
+  --value-strong: #152033;
   --sidebar-bg: rgba(244, 239, 230, 0.94);
   --sidebar-note-bg: rgba(193, 149, 73, 0.08);
   --sidebar-note-text: #5e4f33;
@@ -48,10 +50,12 @@ html[data-theme="dark"] {
   --line: rgba(232, 238, 246, 0.1);
   --line-strong: rgba(232, 238, 246, 0.16);
   --text: #edf2f8;
-  --muted: #9aa6b7;
-  --secondary-text: #f5f7fb;
-  --label: #8d97a7;
-  --value: #f4f7fb;
+  --muted: #8e98a9;
+  --heading: #aab5c2;
+  --secondary-text: #b6c0cb;
+  --label: #738091;
+  --value: #bcc6d0;
+  --value-strong: #c9b487;
   --sidebar-bg: rgba(16, 21, 28, 0.96);
   --sidebar-note-bg: rgba(193, 149, 73, 0.1);
   --sidebar-note-text: #d7c39b;
@@ -279,6 +283,7 @@ textarea {
   font-size: clamp(1.2rem, 1.8vw, 1.6rem);
   line-height: 1.06;
   letter-spacing: -0.03em;
+  color: var(--heading);
 }
 
 .subpage-hero p {
@@ -388,7 +393,7 @@ textarea {
 .metric-orb span {
   font-size: 1rem;
   font-weight: 700;
-  color: var(--value);
+  color: var(--value-strong);
 }
 
 .metric-orb-soft {
@@ -464,7 +469,7 @@ textarea {
   font-size: 0.62rem;
   line-height: 1;
   font-weight: 700;
-  color: var(--value);
+  color: var(--value-strong);
   font-variant-numeric: tabular-nums;
 }
 
@@ -520,6 +525,7 @@ textarea {
   font-size: 1.7rem;
   font-weight: 700;
   letter-spacing: -0.04em;
+  color: var(--value-strong);
 }
 
 .sync-copy strong {
@@ -527,6 +533,7 @@ textarea {
   font-size: 2rem;
   letter-spacing: -0.05em;
   font-variant-numeric: tabular-nums;
+  color: var(--value-strong);
 }
 
 .ibd-blocks-current {

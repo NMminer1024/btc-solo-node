@@ -4,13 +4,16 @@
 # 将本地 bitcoind 区块数据通过 rsync 推送到另一台 K230
 #
 # 用法: /root/script/sync-block.sh
-#       按提示输入目标设备 IP 即可
+#       按提示输入本地源目录、目标设备 IP、目标设备区块目录
+#       任一目录直接回车使用默认值
 # ============================================================
 
 set -e
 
-LOCAL_DATADIR="/root/block"
-REMOTE_DATADIR="/root/block"
+DEFAULT_LOCAL_DATADIR="/root/block"
+LOCAL_DATADIR="$DEFAULT_LOCAL_DATADIR"
+DEFAULT_REMOTE_DATADIR="/root/block"
+REMOTE_DATADIR="$DEFAULT_REMOTE_DATADIR"
 
 # ---- 颜色 ----
 RED='\033[0;31m'
@@ -24,16 +27,36 @@ echo "  K230 区块数据同步脚本"
 echo "============================================"
 echo ""
 
+shell_quote() {
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
 # ============================================================
-# 1. 输入目标 IP
+# 1. 输入本地源目录 / 目标 IP / 目标路径
 # ============================================================
+printf "请输入本地区块源路径 [默认: %s]: " "$DEFAULT_LOCAL_DATADIR"
+read -r LOCAL_DATADIR_INPUT
+if [ -n "$LOCAL_DATADIR_INPUT" ]; then
+    LOCAL_DATADIR="$LOCAL_DATADIR_INPUT"
+fi
+
 printf "请输入目标设备 IP 地址: "
 read -r TARGET_IP
 if [ -z "$TARGET_IP" ]; then
     echo -e "${RED}错误: 必须输入目标 IP${NC}"
     exit 1
 fi
+
+printf "请输入目标设备区块路径 [默认: %s]: " "$DEFAULT_REMOTE_DATADIR"
+read -r REMOTE_DATADIR_INPUT
+if [ -n "$REMOTE_DATADIR_INPUT" ]; then
+    REMOTE_DATADIR="$REMOTE_DATADIR_INPUT"
+fi
+
+REMOTE_DATADIR_Q=$(shell_quote "$REMOTE_DATADIR")
+echo "本地源路径: $LOCAL_DATADIR"
 echo "目标: $TARGET_IP"
+echo "目标路径: $REMOTE_DATADIR"
 echo ""
 
 # ============================================================
@@ -121,7 +144,7 @@ LOCAL_SIZE=$(du -sh "$LOCAL_DATADIR" | awk '{print $1}')
 echo "  本地区块数据: $LOCAL_SIZE"
 
 # 远程磁盘空间
-REMOTE_FREE=$($SSH_CMD root@"$TARGET_IP" "df -k $REMOTE_DATADIR | tail -1" 2>/dev/null | awk '{print $4}')
+REMOTE_FREE=$($SSH_CMD root@"$TARGET_IP" "df -k $REMOTE_DATADIR_Q | tail -1" 2>/dev/null | awk '{print $4}')
 LOCAL_USED=$(du -sk "$LOCAL_DATADIR" | awk '{print $1}')
 
 if [ -n "$REMOTE_FREE" ] && [ "$REMOTE_FREE" -gt 0 ]; then
@@ -138,9 +161,9 @@ else
 fi
 
 # 远程已存在数据
-REMOTE_HAS_DATA=$($SSH_CMD root@"$TARGET_IP" "[ -d $REMOTE_DATADIR/blocks ] && echo yes || echo no" 2>/dev/null)
+REMOTE_HAS_DATA=$($SSH_CMD root@"$TARGET_IP" "[ -d $REMOTE_DATADIR_Q/blocks ] && echo yes || echo no" 2>/dev/null)
 if [ "$REMOTE_HAS_DATA" = "yes" ]; then
-    REMOTE_SIZE=$($SSH_CMD root@"$TARGET_IP" "du -sh $REMOTE_DATADIR" 2>/dev/null | awk '{print $1}')
+    REMOTE_SIZE=$($SSH_CMD root@"$TARGET_IP" "du -sh $REMOTE_DATADIR_Q" 2>/dev/null | awk '{print $1}')
     echo -e "  ${YELLOW}⚠ 远程已有数据: $REMOTE_SIZE (将被清空后重新拷贝)${NC}"
 fi
 echo ""
@@ -151,7 +174,8 @@ echo ""
 echo "============================================"
 echo "  确认信息"
 echo "============================================"
-echo "  数据路径:  $LOCAL_DATADIR"
+echo "  本地路径:  $LOCAL_DATADIR"
+echo "  目标路径:  $REMOTE_DATADIR"
 echo "  数据大小:  $LOCAL_SIZE"
 echo "  源  →  目标"
 echo "  localhost  →  $TARGET_IP"
@@ -174,7 +198,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo " [5/5] 清空目标端旧数据"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  正在清空 root@$TARGET_IP:$REMOTE_DATADIR/ ..."
-$SSH_CMD root@"$TARGET_IP" "rm -rf $REMOTE_DATADIR && mkdir -p $REMOTE_DATADIR"
+$SSH_CMD root@"$TARGET_IP" "rm -rf $REMOTE_DATADIR_Q && mkdir -p $REMOTE_DATADIR_Q"
 if [ $? -ne 0 ]; then
     echo -e "  ${RED}✗ 清空失败${NC}"
     exit 1
