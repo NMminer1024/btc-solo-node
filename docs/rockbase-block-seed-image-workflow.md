@@ -10,7 +10,7 @@ The seed data stays outside this git repo and is injected only during image buil
 
 Rockbase `post-build.sh` now checks this path by default:
 
-- `/mnt/d/code/pony/IoT/k230/img/seed/current/root-block`
+- `/home/bitpony/rockbase-seed/current/root-block`
 
 You can override it for one build with either environment variable:
 
@@ -24,7 +24,7 @@ You can override it for one build with either environment variable:
 The external seed directory must contain at least:
 
 ```text
-/mnt/d/code/pony/IoT/k230/img/seed/current/root-block/
+/home/bitpony/rockbase-seed/current/root-block/
   blocks/
   chainstate/
 ```
@@ -50,16 +50,53 @@ Runtime garbage should not be kept in the seed. The build step will delete these
 1. Stop `bitcoind` cleanly on the source device.
 2. Remove the source SD card and mount it on the host.
 3. Copy `/root/block` from the source card into a fresh directory under:
-   - `/mnt/d/code/pony/IoT/k230/img/seed/releases/YYYYMMDD-HHMMSS/root-block`
+   - `/home/bitpony/rockbase-seed/releases/YYYYMMDD-HHMMSS/root-block`
 4. After the copy completes, update:
-   - `/mnt/d/code/pony/IoT/k230/img/seed/current/root-block`
+   - `/home/bitpony/rockbase-seed/current/root-block`
 
 Recommended rule:
 
 - Do not overwrite `current/root-block` in place while a build may be reading it.
 - Prepare a full new release directory first, then replace `current/root-block` atomically.
 
-## 5. Build Behavior
+Helper script:
+
+- `tools/init-rockbase-seed.sh`
+- `tools/attach-sd-to-wsl.ps1`
+- `tools/mount-sdcard-in-wsl.sh`
+- `tools/umount-sdcard-in-wsl.sh`
+- `tools/detach-sd-from-wsl.ps1`
+
+This creates the recommended WSL-local directory skeleton:
+
+- `/home/bitpony/rockbase-seed/current`
+- `/home/bitpony/rockbase-seed/releases`
+- `/home/bitpony/rockbase-seed/staging`
+
+## 5. Attach the Source SD Card to WSL On Demand
+
+The SD card is not bridged into WSL automatically just because it is inserted into Windows.
+
+Recommended flow:
+
+1. Insert the USB card reader into Windows.
+2. In Windows PowerShell, run:
+   - `powershell -ExecutionPolicy Bypass -File .\tools\attach-sd-to-wsl.ps1`
+3. In WSL, mount the ext4 partition read-only:
+   - `sudo tools/mount-sdcard-in-wsl.sh`
+4. After the copy finishes, unmount in WSL:
+   - `sudo tools/umount-sdcard-in-wsl.sh`
+5. Then detach in Windows PowerShell:
+   - `powershell -ExecutionPolicy Bypass -File .\tools\detach-sd-from-wsl.ps1`
+
+Notes:
+
+- `attach-sd-to-wsl.ps1` relaunches itself with Administrator privileges when needed.
+- If multiple USB storage devices are connected, pass the explicit bus id:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\attach-sd-to-wsl.ps1 -BusId 6-2`
+- `mount-sdcard-in-wsl.sh` mounts the detected ext4 partition with `ro` by default for seed-copy safety.
+
+## 6. Build Behavior
 
 During Rockbase image build, `post-build.sh` does the following:
 
@@ -73,7 +110,7 @@ During Rockbase image build, `post-build.sh` does the following:
 7. Lets `post-image.sh` assemble the final:
    - `sysimage-sdcard.img`
 
-## 6. Outputs
+## 7. Outputs
 
 Intermediate output after seed injection:
 
@@ -91,7 +128,7 @@ Exported image:
 
 - `/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-YYYYMMDD-HHMMSS/sysimage-sdcard.img`
 
-## 7. Capacity Warning
+## 8. Capacity Warning
 
 The current Rockbase rootfs size in defconfig is still the normal small-image setting.
 

@@ -221,7 +221,7 @@ sync_image_outputs()
 	[ -z "$build_stamp" ] && build_stamp=$(date +%Y%m%d-%H%M%S)-$$
 	export_dir="${K230_IMAGE_OUT_DIR}/sysimage-sdcard-${build_stamp}"
 	mkdir -p "${export_dir}"
-	cp -f "${BINARIES_DIR}/sysimage-sdcard.img" "${export_dir}/"
+	cp --sparse=never -f "${BINARIES_DIR}/sysimage-sdcard.img" "${export_dir}/"
 	echo "exported flash image to ${export_dir}/sysimage-sdcard.img"
 }
 

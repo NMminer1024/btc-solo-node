@@ -54,7 +54,7 @@ copy-img:
 		exit 1; \
 	fi; \
 	mkdir -p "$$export_dir" 2>/dev/null || true; \
-	cp -v "$$img" "$$export_dir/"; \
+	cp --sparse=never -v "$$img" "$$export_dir/"; \
 	echo "镜像已拷贝到: $$export_dir/sysimage-sdcard.img"
 
 ddr_test_img_% :sync buildroot ###128/512/1024/2048

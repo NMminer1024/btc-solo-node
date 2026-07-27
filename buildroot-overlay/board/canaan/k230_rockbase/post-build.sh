@@ -12,7 +12,7 @@ GENIMAGE_CFG_SD=$(dirname $(realpath "$0"))/genimage.cfg
 BR2_ROOTFS_OVERLAY=$(cat ${BASE_DIR}/.config | grep BR2_ROOTFS_OVERLAY | cut -d= -f2 | tr -d '"')
 
 BR_OVERLAY_DIR=${K230_SDK_ROOT}/buildroot-overlay
-BLOCK_SEED_DIR_DEFAULT="/mnt/d/code/pony/IoT/k230/img/seed/current/root-block"
+BLOCK_SEED_DIR_DEFAULT="/home/bitpony/rockbase-seed/current/root-block"
 BLOCK_SEED_DIR="${BLOCK_SEED_DIR:-${ROCKBASE_BLOCK_SEED_DIR:-${BLOCK_SEED_DIR_DEFAULT}}}"
 
 cleanup_block_seed_runtime_files()
@@ -44,7 +44,7 @@ inject_block_seed()
 		exit 1
 	fi
 
-	if [ -z "$(find "${seed_dir}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+	if [ -z "$(find -L "${seed_dir}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
 		echo "block seed: skip (directory is empty: ${seed_dir})"
 		return 0
 	fi

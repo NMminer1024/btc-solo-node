@@ -1,0 +1,33 @@
+#!/bin/sh
+#
+# S02bootaudit - Track clean vs unclean reboots on Rockbase
+#
+
+DAEMON=/usr/bin/rockbase_boot_audit.sh
+
+case "$1" in
+    start)
+        printf "Starting rockbase boot audit: "
+        if "${DAEMON}" start; then
+            echo "OK"
+        else
+            echo "FAIL"
+            exit 1
+        fi
+        ;;
+    stop)
+        printf "Stopping rockbase boot audit: "
+        "${DAEMON}" stop || true
+        echo "OK"
+        ;;
+    restart|reload)
+        "$0" stop
+        "$0" start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac
+
+exit 0

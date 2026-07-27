@@ -138,6 +138,22 @@ fmt_int() {
     }'
 }
 
+max_int() {
+    max=""
+    for v in "$@"; do
+        case "${v}" in
+            ''|'-'|'null') continue ;;
+        esac
+        if ! echo "${v}" | grep -Eq '^[0-9]+$'; then
+            continue
+        fi
+        if [ -z "${max}" ] || [ "${v}" -gt "${max}" ]; then
+            max="${v}"
+        fi
+    done
+    printf '%s' "${max}"
+}
+
 pruned_from_conf() {
     prune_target=$(sed -n 's/^prune=\([0-9][0-9]*\).*/\1/p' "${CONF}" 2>/dev/null | head -n1)
     case "${prune_target}" in
@@ -360,9 +376,6 @@ collect_bitcoin_log() {
     log_progress=$(printf '%s\n' "${update_tip_line}" | sed -n "s/.* progress=\([0-9.][0-9.]*\).*/\1/p")
     log_best_date=$(printf '%s\n' "${update_tip_line}" | sed -n "s/.* date='\([^']*\)'.*/\1/p" | sed 's/T/ /; s/Z$/ UTC/')
     [ -n "${log_best_date}" ] && best_block_date="${log_best_date}"
-    log_headers=$(latest_block_tree_size_from_log)
-    [ -n "${log_headers}" ] || log_headers=$(latest_peer_blocks_from_log)
-
     stage_scan=$(tail -n 500 "${DEBUG_LOG}" 2>/dev/null | awk '
       /Loading block index/ { key="loading_index"; line=$0 }
       /Loading block files/ { key="loading_blocks"; line=$0 }
@@ -388,6 +401,10 @@ collect_bitcoin_log() {
             stage_pct_num=$(printf '%s\n' "${stage_line}" | sed -n 's/.*(~\([0-9.][0-9.]*\)%).*/\1/p')
             ;;
     esac
+
+    tree_headers=$(latest_block_tree_size_from_log)
+    peer_headers=$(latest_peer_blocks_from_log)
+    log_headers=$(max_int "${tree_headers}" "${peer_headers}" "${stage_height_num}")
 
     {
         state_num updated_at "$(now_epoch)"
