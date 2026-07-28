@@ -530,8 +530,9 @@
   function formatIbdPercent(value) {
     var num = Number(value);
     if (!Number.isFinite(num)) return "--";
+    if (num >= 100) return "100%";
     if (num < 1) return num.toPrecision(2) + "%";
-    return num.toFixed(2) + "%";
+    return (Math.floor(num * 100) / 100).toFixed(2) + "%";
   }
 
   function joinParts(parts, fallback) {

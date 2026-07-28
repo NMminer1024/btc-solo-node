@@ -12,7 +12,7 @@ GENIMAGE_CFG_SD=$(dirname $(realpath "$0"))/genimage.cfg
 BR2_ROOTFS_OVERLAY=$(cat ${BASE_DIR}/.config | grep BR2_ROOTFS_OVERLAY | cut -d= -f2 | tr -d '"')
 
 BR_OVERLAY_DIR=${K230_SDK_ROOT}/buildroot-overlay
-BLOCK_SEED_DIR_DEFAULT="/home/bitpony/rockbase-seed/current/root-block"
+BLOCK_SEED_DIR_DEFAULT="${K230_SDK_ROOT}/seed/root-block"
 BLOCK_SEED_DIR="${BLOCK_SEED_DIR:-${ROCKBASE_BLOCK_SEED_DIR:-${BLOCK_SEED_DIR_DEFAULT}}}"
 
 cleanup_block_seed_runtime_files()
@@ -25,6 +25,32 @@ cleanup_block_seed_runtime_files()
 		\( -name ".lock" -o -name ".cookie" -o -name "bitcoind.pid" -o -name "LOCK" \) \
 		-delete 2>/dev/null || true
 	find "${target_block_dir}" -type s -delete 2>/dev/null || true
+}
+
+validate_leveldb_manifest()
+{
+	local db_dir="$1"
+	local label="$2"
+	local current_file
+	local manifest_file
+
+	current_file="${db_dir}/CURRENT"
+
+	if [ ! -f "${current_file}" ]; then
+		echo "ERROR: block seed ${label} is missing CURRENT: ${current_file}"
+		exit 1
+	fi
+
+	manifest_file=$(tr -d '\r\n' < "${current_file}")
+	if [ -z "${manifest_file}" ]; then
+		echo "ERROR: block seed ${label} CURRENT is empty: ${current_file}"
+		exit 1
+	fi
+
+	if [ ! -f "${db_dir}/${manifest_file}" ]; then
+		echo "ERROR: block seed ${label} manifest is missing: ${db_dir}/${manifest_file}"
+		exit 1
+	fi
 }
 
 inject_block_seed()
@@ -54,10 +80,28 @@ inject_block_seed()
 		exit 1
 	fi
 
+	if [ ! -d "${seed_dir}/blocks/index" ]; then
+		echo "ERROR: block seed must contain blocks/index/: ${seed_dir}"
+		exit 1
+	fi
+
+	validate_leveldb_manifest "${seed_dir}/chainstate" "chainstate"
+	validate_leveldb_manifest "${seed_dir}/blocks/index" "blocks/index"
+
 	echo "block seed: injecting from ${seed_dir}"
-	rm -rf "${target_block_dir}"
 	mkdir -p "${target_block_dir}"
-	cp -a "${seed_dir}/." "${target_block_dir}/"
+	if command -v rsync >/dev/null 2>&1; then
+		rsync -aH --delete \
+			--exclude=".lock" \
+			--exclude=".cookie" \
+			--exclude="bitcoind.pid" \
+			--exclude="LOCK" \
+			"${seed_dir}/" "${target_block_dir}/"
+	else
+		rm -rf "${target_block_dir}"
+		mkdir -p "${target_block_dir}"
+		cp -a "${seed_dir}/." "${target_block_dir}/"
+	fi
 	cleanup_block_seed_runtime_files "${target_block_dir}"
 	du -sh "${target_block_dir}" 2>/dev/null || true
 }

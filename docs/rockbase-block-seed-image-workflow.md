@@ -4,13 +4,13 @@
 
 This document defines the Rockbase image-build workflow for bundling an external pruned Bitcoin data seed into the final `sysimage-sdcard.img`.
 
-The seed data stays outside this git repo and is injected only during image build.
+The seed data is stored in a git-ignored repo-local directory and is injected only during image build.
 
 ## 2. Default Seed Path
 
 Rockbase `post-build.sh` now checks this path by default:
 
-- `/home/bitpony/rockbase-seed/current/root-block`
+- `seed/root-block`
 
 You can override it for one build with either environment variable:
 
@@ -24,7 +24,7 @@ You can override it for one build with either environment variable:
 The external seed directory must contain at least:
 
 ```text
-/home/bitpony/rockbase-seed/current/root-block/
+seed/root-block/
   blocks/
   chainstate/
 ```
@@ -49,29 +49,28 @@ Runtime garbage should not be kept in the seed. The build step will delete these
 
 1. Stop `bitcoind` cleanly on the source device.
 2. Remove the source SD card and mount it on the host.
-3. Copy `/root/block` from the source card into a fresh directory under:
-   - `/home/bitpony/rockbase-seed/releases/YYYYMMDD-HHMMSS/root-block`
-4. After the copy completes, update:
-   - `/home/bitpony/rockbase-seed/current/root-block`
+3. Copy the source Bitcoin data directly into:
+   - `seed/root-block`
 
 Recommended rule:
 
-- Do not overwrite `current/root-block` in place while a build may be reading it.
-- Prepare a full new release directory first, then replace `current/root-block` atomically.
+- Do not copy directly into `seed/root-block` by hand while a build may be reading it.
+- Use `tools/copy-rockbase-seed-from-sd.sh`; it copies into a temporary directory, validates LevelDB manifest files, then replaces `seed/root-block`.
+- The default source path is the RDK X5 layout: `/mnt/sdcard/home/sunrise/Desktop/bitcoind/data`.
+- If the source card is a K230 layout, pass the source path explicitly: `tools/copy-rockbase-seed-from-sd.sh /mnt/sdcard/root/block`.
 
 Helper script:
 
 - `tools/init-rockbase-seed.sh`
+- `tools/copy-rockbase-seed-from-sd.sh`
 - `tools/attach-sd-to-wsl.ps1`
 - `tools/mount-sdcard-in-wsl.sh`
 - `tools/umount-sdcard-in-wsl.sh`
 - `tools/detach-sd-from-wsl.ps1`
 
-This creates the recommended WSL-local directory skeleton:
+This creates the git-ignored seed directory:
 
-- `/home/bitpony/rockbase-seed/current`
-- `/home/bitpony/rockbase-seed/releases`
-- `/home/bitpony/rockbase-seed/staging`
+- `seed/root-block`
 
 ## 5. Attach the Source SD Card to WSL On Demand
 

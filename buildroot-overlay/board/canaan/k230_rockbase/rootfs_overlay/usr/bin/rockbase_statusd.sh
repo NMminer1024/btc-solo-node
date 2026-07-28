@@ -138,6 +138,18 @@ fmt_int() {
     }'
 }
 
+height_progress_pct() {
+    awk -v b="$1" -v h="$2" 'BEGIN {
+      blocks = b + 0
+      headers = h + 0
+      if (headers <= 0 || blocks < 0) { print ""; exit }
+      pct = blocks / headers * 100
+      if (pct < 0) pct = 0
+      if (pct > 100) pct = 100
+      printf "%.6f", pct
+    }'
+}
+
 max_int() {
     max=""
     for v in "$@"; do
@@ -618,12 +630,14 @@ render_status_json() {
     fi
 
     header_gap=0
+    height_based_progress=""
     if [ -n "${headers}" ] && [ -n "${blocks}" ] && [ "${headers}" != "-" ] && [ "${blocks}" != "-" ]; then
         header_gap=$(awk -v h="${headers}" -v b="${blocks}" 'BEGIN{
           gap = (h + 0) - (b + 0)
           if (gap < 0) gap = 0
           printf "%.0f", gap
         }')
+        height_based_progress=$(height_progress_pct "${blocks}" "${headers}")
     fi
 
     ibd_stage_key="syncing"
@@ -735,9 +749,12 @@ render_status_json() {
             ibd_stage_height=$(fmt_int "${blocks}")
             ibd_stage_pct=""
             ibd_stage_detail="headers $(fmt_int "${headers}")"
-            if [ -n "${progress}" ]; then
-                progress_pct=$(awk -v p="${progress}" 'BEGIN{printf "%.3f", (p+0)*100}')
-                progress_ring=$(awk -v p="${progress_pct}" 'BEGIN{p=p+0;if(p<0)p=0;if(p>100)p=100;printf "%.3f",p}')
+            if [ -n "${height_based_progress}" ]; then
+                progress_pct="${height_based_progress}"
+                progress_ring="${height_based_progress}"
+            elif [ -n "${progress}" ]; then
+                progress_pct=$(awk -v p="${progress}" 'BEGIN{printf "%.6f", (p+0)*100}')
+                progress_ring=$(awk -v p="${progress_pct}" 'BEGIN{p=p+0;if(p<0)p=0;if(p>100)p=100;printf "%.6f",p}')
             fi
         fi
 
@@ -747,6 +764,11 @@ render_status_json() {
             ibd_stage_height=$(fmt_int "${blocks}")
             ibd_stage_detail="headers $(fmt_int "${headers}")"
         fi
+    fi
+
+    if [ "${ibd_stage_key}" = "sync_blocks" ] && [ "${header_gap}" -gt 0 ] 2>/dev/null && [ -n "${height_based_progress}" ]; then
+        progress_pct="${height_based_progress}"
+        progress_ring="${height_based_progress}"
     fi
 
     headers_fmt=$(fmt_int "${headers}")

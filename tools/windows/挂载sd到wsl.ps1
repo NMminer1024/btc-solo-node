@@ -57,18 +57,32 @@ function Get-AutoBusId {
     $usbipd = Get-UsbipdPath
     $lines = & $usbipd list
     $candidates = @()
+    $fallbackCandidates = @()
 
     foreach ($line in $lines) {
-        if ($line -match '^(?<busid>\d+-\d+)\s+\S+\s+(?<device>.+?)\s{2,}(?<state>Not shared|Shared|Attached)$') {
+        if ($line -match '^(?<busid>\d+-\d+)\s+(?<vidpid>[0-9a-fA-F]{4}:[0-9a-fA-F]{4})\s+(?<device>.+?)\s{2,}(?<state>Not shared|Shared(?: \(forced\))?|Attached)$') {
             $device = $Matches["device"].Trim()
-            if ($device -match 'Mass Storage|Storage|Reader|Card|SD|大容量存储') {
-                $candidates += [PSCustomObject]@{
-                    BusId  = $Matches["busid"]
-                    Device = $device
-                    State  = $Matches["state"]
-                }
+            $candidate = [PSCustomObject]@{
+                BusId  = $Matches["busid"]
+                VidPid = $Matches["vidpid"]
+                Device = $device
+                State  = $Matches["state"]
+            }
+
+            if ($device -match 'Mass Storage|Storage|Reader|Card|SD|Flash Disk|USB DISK' -or $candidate.VidPid -match '^(05e3:0747)$') {
+                $candidates += $candidate
+                continue
+            }
+
+            if ($device -notmatch 'Bluetooth|Camera|Webcam|Audio|Display|Ethernet|Network|GbE|Controller|Keyboard|Mouse') {
+                $fallbackCandidates += $candidate
             }
         }
+    }
+
+    $candidates = @($candidates)
+    if ($candidates.Count -eq 0) {
+        $candidates = @($fallbackCandidates)
     }
 
     if ($candidates.Count -eq 1) {
@@ -76,12 +90,14 @@ function Get-AutoBusId {
     }
 
     if ($candidates.Count -eq 0) {
+        Write-Host "Current usbipd device list:" -ForegroundColor Cyan
+        $lines | ForEach-Object { Write-Host $_ }
         throw "No USB mass storage candidate found. Use -BusId explicitly."
     }
 
     Write-Host "Multiple USB storage candidates found:" -ForegroundColor Yellow
     $candidates | ForEach-Object {
-        Write-Host ("  {0}  {1}  [{2}]" -f $_.BusId, $_.Device, $_.State)
+        Write-Host ("  {0}  {1}  {2}  [{3}]" -f $_.BusId, $_.VidPid, $_.Device, $_.State)
     }
     throw "Please rerun with -BusId <busid>."
 }
@@ -93,8 +109,14 @@ function Invoke-UsbipdSafe {
     )
 
     $usbipd = Get-UsbipdPath
-    $output = & $usbipd @Arguments 2>&1
-    $exitCode = $LASTEXITCODE
+    $oldErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = & $usbipd @Arguments 2>&1
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $oldErrorActionPreference
+    }
 
     if ($output) {
         $output | ForEach-Object { Write-Host $_ }
@@ -109,10 +131,12 @@ function Invoke-UsbipdSafe {
 }
 
 function Mount-InWsl {
-    $escapedMountPoint = $MountPoint.Replace("'", "'\"'\"'")
+    if ($MountPoint.Contains("'")) {
+        throw "MountPoint must not contain single quotes."
+    }
     $mountScript = @'
 set -euo pipefail
-mount_point='__MOUNT_POINT__'
+mount_point="$1"
 mkdir -p "$mount_point"
 if mountpoint -q "$mount_point"; then
     findmnt -no SOURCE,TARGET,FSTYPE,OPTIONS "$mount_point"
@@ -124,11 +148,11 @@ device=$(lsblk -prno NAME,FSTYPE,MOUNTPOINT | awk '
     $3 != "/" &&
     $3 !~ /^\/mnt\/wsl/ &&
     $3 !~ /^\/home\// &&
-    $3 != "__MOUNT_POINT__" {
+    $3 != mount_point {
         print $1
         exit
     }
-')
+' mount_point="$mount_point")
 [ -n "$device" ] || {
     echo "No ext4 SD partition candidate found in WSL." >&2
     exit 1
@@ -136,9 +160,8 @@ device=$(lsblk -prno NAME,FSTYPE,MOUNTPOINT | awk '
 mount -o ro "$device" "$mount_point"
 findmnt -no SOURCE,TARGET,FSTYPE,OPTIONS "$mount_point"
 '@
-    $mountScript = $mountScript.Replace("__MOUNT_POINT__", $escapedMountPoint)
 
-    & wsl.exe -d $Distribution -u root -- bash -lc $mountScript
+    $mountScript | & wsl.exe -d $Distribution -u root -- bash -s -- $MountPoint
     if ($LASTEXITCODE -ne 0) {
         throw "WSL mount failed."
     }
@@ -157,10 +180,11 @@ if (-not $BusId) {
 Write-Host ("Using BUSID: {0}" -f $BusId) -ForegroundColor Cyan
 Invoke-UsbipdSafe -Arguments @("bind", "--busid", $BusId, "--force") -IgnorePattern "already shared"
 
-$attachArgs = @("attach", "--wsl", "--busid", $BusId)
+$attachArgs = @("attach", "--wsl")
 if ($Distribution) {
-    $attachArgs += @("--distribution", $Distribution)
+    $attachArgs += $Distribution
 }
+$attachArgs += @("--busid", $BusId)
 Invoke-UsbipdSafe -Arguments $attachArgs -IgnorePattern "already attached"
 
 Start-Sleep -Seconds 2

@@ -2,35 +2,30 @@
 
 set -e
 
-SEED_ROOT_DEFAULT="/home/bitpony/rockbase-seed"
-SEED_ROOT="${1:-${SEED_ROOT_DEFAULT}}"
-CURRENT_DIR="${SEED_ROOT}/current"
-RELEASES_DIR="${SEED_ROOT}/releases"
-STAGING_DIR="${SEED_ROOT}/staging"
+SDK_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+SEED_DIR_DEFAULT="${SDK_ROOT}/seed/root-block"
+SEED_DIR="${1:-${SEED_DIR_DEFAULT}}"
 
-mkdir -p "${CURRENT_DIR}" "${RELEASES_DIR}" "${STAGING_DIR}"
+mkdir -p "${SEED_DIR}"
 
 cat <<EOF
 Rockbase seed workspace initialized:
 
-  root:     ${SEED_ROOT}
-  current:  ${CURRENT_DIR}
-  releases: ${RELEASES_DIR}
-  staging:  ${STAGING_DIR}
+  seed: ${SEED_DIR}
 
 Expected active seed path:
 
-  ${CURRENT_DIR}/root-block
+  ${SEED_DIR}
 
 Suggested next step after mounting the source SD card in WSL:
 
-  ts=\$(date +%Y%m%d-%H%M%S)
-  mkdir -p "${RELEASES_DIR}/\${ts}/root-block"
-  rsync -aH --info=progress2 /mnt/sdcard/root/block/ "${RELEASES_DIR}/\${ts}/root-block/"
-  rm -rf "${CURRENT_DIR}/root-block"
-  cp -a "${RELEASES_DIR}/\${ts}/root-block" "${CURRENT_DIR}/root-block"
+  tools/copy-rockbase-seed-from-sd.sh
+
+If the source data is not at the default X5 path, pass it explicitly:
+
+  tools/copy-rockbase-seed-from-sd.sh /mnt/sdcard/root/block
 
 One-build override example:
 
-  BLOCK_SEED_DIR="${CURRENT_DIR}/root-block" make buildroot
+  BLOCK_SEED_DIR="${SEED_DIR}" make buildroot
 EOF

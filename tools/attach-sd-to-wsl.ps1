@@ -61,18 +61,32 @@ function Get-UsbipdListText {
 function Get-AutoBusId {
     $lines = Get-UsbipdListText
     $candidates = @()
+    $fallbackCandidates = @()
 
     foreach ($line in $lines) {
-        if ($line -match '^(?<busid>\d+-\d+)\s+\S+\s+(?<device>.+?)\s{2,}(?<state>Not shared|Shared|Attached)$') {
+        if ($line -match '^(?<busid>\d+-\d+)\s+(?<vidpid>[0-9a-fA-F]{4}:[0-9a-fA-F]{4})\s+(?<device>.+?)\s{2,}(?<state>Not shared|Shared(?: \(forced\))?|Attached)$') {
             $device = $Matches["device"].Trim()
-            if ($device -match 'Mass Storage|Storage|Reader|Card|SD|大容量存储') {
-                $candidates += [PSCustomObject]@{
-                    BusId  = $Matches["busid"]
-                    Device = $device
-                    State  = $Matches["state"]
-                }
+            $candidate = [PSCustomObject]@{
+                BusId  = $Matches["busid"]
+                VidPid = $Matches["vidpid"]
+                Device = $device
+                State  = $Matches["state"]
+            }
+
+            if ($device -match 'Mass Storage|Storage|Reader|Card|SD|Flash Disk|USB DISK' -or $candidate.VidPid -match '^(05e3:0747)$') {
+                $candidates += $candidate
+                continue
+            }
+
+            if ($device -notmatch 'Bluetooth|Camera|Webcam|Audio|Display|Ethernet|Network|GbE|Controller|Keyboard|Mouse') {
+                $fallbackCandidates += $candidate
             }
         }
+    }
+
+    $candidates = @($candidates)
+    if ($candidates.Count -eq 0) {
+        $candidates = @($fallbackCandidates)
     }
 
     if ($candidates.Count -eq 1) {
@@ -80,12 +94,14 @@ function Get-AutoBusId {
     }
 
     if ($candidates.Count -eq 0) {
+        Write-Host "Current usbipd device list:" -ForegroundColor Cyan
+        $lines | ForEach-Object { Write-Host $_ }
         throw "No USB mass storage candidate found. Run with -ListOnly or pass -BusId explicitly."
     }
 
     Write-Host "Multiple USB storage candidates found:" -ForegroundColor Yellow
     $candidates | ForEach-Object {
-        Write-Host ("  {0}  {1}  [{2}]" -f $_.BusId, $_.Device, $_.State)
+        Write-Host ("  {0}  {1}  {2}  [{3}]" -f $_.BusId, $_.VidPid, $_.Device, $_.State)
     }
     throw "Please rerun with -BusId <busid>."
 }
@@ -97,8 +113,14 @@ function Invoke-UsbipdSafe {
     )
 
     $usbipd = Get-UsbipdPath
-    $output = & $usbipd @Arguments 2>&1
-    $exitCode = $LASTEXITCODE
+    $oldErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = & $usbipd @Arguments 2>&1
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $oldErrorActionPreference
+    }
 
     if ($output) {
         $output | ForEach-Object { Write-Host $_ }
@@ -133,10 +155,11 @@ Write-Host ("Using BUSID: {0}" -f $BusId) -ForegroundColor Cyan
 
 Invoke-UsbipdSafe -Arguments @("bind", "--busid", $BusId, "--force") -IgnorePattern "already shared"
 
-$attachArgs = @("attach", "--wsl", "--busid", $BusId)
+$attachArgs = @("attach", "--wsl")
 if ($Distribution) {
-    $attachArgs += @("--distribution", $Distribution)
+    $attachArgs += $Distribution
 }
+$attachArgs += @("--busid", $BusId)
 Invoke-UsbipdSafe -Arguments $attachArgs -IgnorePattern "already attached"
 
 Write-Host ""

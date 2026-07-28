@@ -116,8 +116,14 @@ textarea {
 
 .brand {
   display: flex;
+  justify-content: center;
+}
+
+.brand-stack {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 .brand-mark {
@@ -143,9 +149,11 @@ textarea {
 }
 
 .brand h1 {
-  margin: 3px 0 0;
-  font-size: 1.45rem;
+  margin: 0;
+  font-size: 1.34rem;
   line-height: 1.05;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .nav {
