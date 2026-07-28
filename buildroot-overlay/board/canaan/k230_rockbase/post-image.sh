@@ -7,6 +7,7 @@ K230_SDK_ROOT=$(dirname $(dirname ${BASE_DIR}))
 GENIMAGE_CFG_SD=$(dirname $(realpath "$0"))/genimage.cfg
 env_dir=$(dirname $(realpath "$0"))
 K230_IMAGE_OUT_DIR=${K230_IMAGE_OUT_DIR:-/mnt/d/code/pony/IoT/k230/img}
+K230_IMAGE_GZIP=${K230_IMAGE_GZIP:-0}
 
 
 
@@ -206,10 +207,15 @@ gen_image()
 					--inputpath "$(pwd)"  	--outputpath "$(pwd)"	--config "${cfg}"
 
 	rm -rf "${GENIMAGE_TMP}"
-	gzip -k -f ${image_name}
-	chmod a+rw ${image_name} ${image_name}.gz;
-
-	gz_file_add_ver ${image_name}.gz
+	chmod a+rw ${image_name}
+	if [ "${K230_IMAGE_GZIP}" = "1" ]; then
+		gzip -k -f ${image_name}
+		chmod a+rw ${image_name}.gz
+		gz_file_add_ver ${image_name}.gz
+	else
+		rm -f ${image_name}.gz
+		echo "skip gzip for ${image_name} (set K230_IMAGE_GZIP=1 to enable)"
+	fi
 }
 
 sync_image_outputs()
