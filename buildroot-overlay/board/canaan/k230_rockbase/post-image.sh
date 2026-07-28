@@ -8,6 +8,9 @@ GENIMAGE_CFG_SD=$(dirname $(realpath "$0"))/genimage.cfg
 env_dir=$(dirname $(realpath "$0"))
 K230_IMAGE_OUT_DIR=${K230_IMAGE_OUT_DIR:-/mnt/d/code/pony/IoT/k230/img}
 K230_IMAGE_GZIP=${K230_IMAGE_GZIP:-0}
+BLOCK_SEED_DIR_DEFAULT="${K230_SDK_ROOT}/seed/root-block"
+BLOCK_SEED_DIR="${BLOCK_SEED_DIR:-${ROCKBASE_BLOCK_SEED_DIR:-${BLOCK_SEED_DIR_DEFAULT}}}"
+K230_BLOCKDATA_SIZE=${K230_BLOCKDATA_SIZE:-28G}
 
 
 
@@ -57,6 +60,69 @@ gz_file_add_ver()
 	fi
 	rm -rf  ${canaan_site_name}_linux_${sdk_ver}_nncase_v${nncase_ver}.img.gz;
 	ln -s  $f ${canaan_site_name}_linux_${sdk_ver}_nncase_v${nncase_ver}.img.gz;
+}
+
+validate_leveldb_manifest()
+{
+	local db_dir="$1"
+	local label="$2"
+	local current_file
+	local manifest_file
+
+	current_file="${db_dir}/CURRENT"
+	if [ ! -f "${current_file}" ]; then
+		echo "ERROR: block seed ${label} is missing CURRENT: ${current_file}"
+		exit 1
+	fi
+
+	manifest_file=$(tr -d '\r\n' < "${current_file}")
+	if [ -z "${manifest_file}" ]; then
+		echo "ERROR: block seed ${label} CURRENT is empty: ${current_file}"
+		exit 1
+	fi
+
+	if [ ! -f "${db_dir}/${manifest_file}" ]; then
+		echo "ERROR: block seed ${label} manifest is missing: ${db_dir}/${manifest_file}"
+		exit 1
+	fi
+}
+
+validate_block_seed()
+{
+	local seed_dir="${1%/}"
+
+	if [ ! -d "${seed_dir}/blocks" ] || [ ! -d "${seed_dir}/chainstate" ]; then
+		echo "ERROR: block seed must contain blocks/ and chainstate/: ${seed_dir}"
+		exit 1
+	fi
+
+	if [ ! -d "${seed_dir}/blocks/index" ]; then
+		echo "ERROR: block seed must contain blocks/index/: ${seed_dir}"
+		exit 1
+	fi
+
+	validate_leveldb_manifest "${seed_dir}/chainstate" "chainstate"
+	validate_leveldb_manifest "${seed_dir}/blocks/index" "blocks/index"
+}
+
+gen_blockdata_ext4()
+{
+	local image="${BINARIES_DIR}/blockdata.ext4"
+	local seed_dir="${BLOCK_SEED_DIR%/}"
+	local mkfs_args=(-F -L blockdata -m 0 -O "^64bit" "${image}" "${K230_BLOCKDATA_SIZE}")
+
+	rm -f "${image}"
+
+	if [ -d "${seed_dir}" ] && [ -n "$(find -L "${seed_dir}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+		validate_block_seed "${seed_dir}"
+		echo "blockdata: generating ${image} from ${seed_dir} (${K230_BLOCKDATA_SIZE})"
+		fakeroot mkfs.ext4 -d "${seed_dir}" "${mkfs_args[@]}"
+	else
+		echo "blockdata: generating empty ${image} (${K230_BLOCKDATA_SIZE})"
+		fakeroot mkfs.ext4 "${mkfs_args[@]}"
+	fi
+
+	chmod a+rw "${image}"
 }
 
 
@@ -287,6 +353,7 @@ gen_uboot_bin
 gen_env_bin
 #gen_linux_bin;
 gen_boot_ext4
+gen_blockdata_ext4
 #gen_deb_packages_gz
 gen_image ${GENIMAGE_CFG_SD}   sysimage-sdcard.img
 sync_image_outputs

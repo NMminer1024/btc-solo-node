@@ -22,6 +22,7 @@ bootbase=${bootdev##*/}
 
 FIRST_BOOT_FLAG=/first_boot_flag
 RESIZE_FLAG=/resize_flag
+BLOCK_RESIZE_FLAG=/block_resize_flag
 DONE_FLAG=/resize_done
 
 log() {
@@ -57,6 +58,62 @@ log "root=${rootdev} bootdev=${bootdev} start=${rootstart} sectors root_size=${r
 
 # Keep legacy fw_env path generation used by this platform scripts.
 echo "${bootdev}   0x1e0000 0x10000" > /etc/fw_env.config
+
+# New Rockbase images keep Bitcoin data on partition 3. In this layout rootfs
+# must never be expanded to the card end, otherwise the blockdata partition is
+# destroyed. Instead, grow partition 3 to the card end and then resize both
+# filesystems on the next boot.
+blockdev="${bootdev}p3"
+blockbase="${bootbase}p3"
+if [ -b "${blockdev}" ] && [ -r "/sys/class/block/${blockbase}/start" ] && [ -r "/sys/class/block/${blockbase}/size" ]; then
+    blockstart=$(cat "/sys/class/block/${blockbase}/start")
+    blocksize=$(cat "/sys/class/block/${blockbase}/size")
+    maxblocksize=$((disksize - blockstart))
+    block_tail_sectors=$((maxblocksize - blocksize))
+
+    log "blockdata=${blockdev} start=${blockstart} sectors block_size=${blocksize} tail=${block_tail_sectors}"
+
+    if [ -f "${BLOCK_RESIZE_FLAG}" ]; then
+        log "Stage 2: resizing blockdata filesystem on ${blockdev}"
+        [ -x /sbin/resize2fs ] || fail "resize2fs is missing"
+
+        resize2fs "${blockdev}" || fail "resize2fs failed for ${blockdev}"
+        resize2fs "${rootdev}" || fail "resize2fs failed for ${rootdev}"
+        rm -f "${BLOCK_RESIZE_FLAG}" "${RESIZE_FLAG}" "${FIRST_BOOT_FLAG}"
+        touch "${DONE_FLAG}"
+        log "blockdata/rootfs resize done"
+        exit 0
+    fi
+
+    if [ "${block_tail_sectors}" -gt 2048 ]; then
+        log "Stage 1: recreating blockdata partition 3 on ${bootdev} from ${blockstart} to end"
+        [ -x /sbin/fdisk ] || fail "fdisk is missing"
+
+        fdisk_out=$(printf 'd\n3\nn\np\n3\n%s\n\n\nw\n' "${blockstart}" | /sbin/fdisk "${bootdev}" 2>&1)
+        fdisk_rc=$?
+        echo "${fdisk_out}"
+
+        if [ "${fdisk_rc}" -eq 0 ] || echo "${fdisk_out}" | grep -q "The partition table has been altered."; then
+            touch "${BLOCK_RESIZE_FLAG}"
+            rm -f "${FIRST_BOOT_FLAG}"
+            log "blockdata partition updated, rebooting for kernel to reload partition layout"
+            sync
+            reboot -f
+            exit 0
+        else
+            fail "fdisk failed for blockdata partition, keeping flags for retry"
+        fi
+    fi
+
+    log "blockdata partition already at card end, resizing filesystems directly"
+    [ -x /sbin/resize2fs ] || fail "resize2fs is missing"
+    resize2fs "${blockdev}" || fail "resize2fs failed for ${blockdev}"
+    resize2fs "${rootdev}" || fail "resize2fs failed for ${rootdev}"
+    rm -f "${FIRST_BOOT_FLAG}" "${RESIZE_FLAG}"
+    touch "${DONE_FLAG}"
+    log "blockdata/rootfs resize done"
+    exit 0
+fi
 
 # Stage 2: root partition already expanded, now grow ext4.
 if [ -f "${RESIZE_FLAG}" ]; then

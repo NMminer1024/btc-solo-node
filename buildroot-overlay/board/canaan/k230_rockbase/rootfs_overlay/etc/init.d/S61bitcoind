@@ -12,6 +12,10 @@ is_running() {
     pidof bitcoind >/dev/null 2>&1
 }
 
+blockdata_ready() {
+    awk -v m="${DATADIR}" '$2 == m { found = 1 } END { exit found ? 0 : 1 }' /proc/mounts
+}
+
 resize_ready() {
     [ -f "${RESIZE_DONE_FLAG}" ]
 }
@@ -43,7 +47,11 @@ case "$1" in
                 exit 0
         fi
 
-        mkdir -p "${DATADIR}"
+        if ! blockdata_ready; then
+                echo "deferred (waiting for blockdata mount)"
+                exit 0
+        fi
+
         warn=""
         if ! wait_for_sane_clock; then
                 warn=" (clock unsynced)"

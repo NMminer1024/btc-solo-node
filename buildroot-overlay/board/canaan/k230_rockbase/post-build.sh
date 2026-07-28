@@ -53,15 +53,17 @@ validate_leveldb_manifest()
 	fi
 }
 
-inject_block_seed()
+prepare_block_seed_mountpoint()
 {
 	local seed_dir="${BLOCK_SEED_DIR%/}"
 	local target_block_dir="${TARGET_DIR}/root/block"
 
-	[ -n "${seed_dir}" ] || return 0
+	rm -rf "${target_block_dir}"
+	mkdir -p "${target_block_dir}"
 
+	[ -n "${seed_dir}" ] || return 0
 	if [ ! -e "${seed_dir}" ]; then
-		echo "block seed: skip (path not found: ${seed_dir})"
+		echo "block seed: partition source skip (path not found: ${seed_dir})"
 		return 0
 	fi
 
@@ -87,23 +89,7 @@ inject_block_seed()
 
 	validate_leveldb_manifest "${seed_dir}/chainstate" "chainstate"
 	validate_leveldb_manifest "${seed_dir}/blocks/index" "blocks/index"
-
-	echo "block seed: injecting from ${seed_dir}"
-	mkdir -p "${target_block_dir}"
-	if command -v rsync >/dev/null 2>&1; then
-		rsync -aH --delete \
-			--exclude=".lock" \
-			--exclude=".cookie" \
-			--exclude="bitcoind.pid" \
-			--exclude="LOCK" \
-			"${seed_dir}/" "${target_block_dir}/"
-	else
-		rm -rf "${target_block_dir}"
-		mkdir -p "${target_block_dir}"
-		cp -a "${seed_dir}/." "${target_block_dir}/"
-	fi
-	cleanup_block_seed_runtime_files "${target_block_dir}"
-	du -sh "${target_block_dir}" 2>/dev/null || true
+	echo "block seed: validated for blockdata partition (${seed_dir})"
 }
 
 # Generate the build version file inside the target rootfs only.
@@ -189,7 +175,7 @@ EOF
 
 gen_version
 auto_boot_proc
-inject_block_seed
+prepare_block_seed_mountpoint
 [ -f "${STAGING_DIR}/lib/libasan.so.8" ] && cp "${STAGING_DIR}/lib/libasan.so.8" "${TARGET_DIR}/lib/"
 # Remove non-essential init scripts (mining-only K230)
 rm -f "${TARGET_DIR}/etc/init.d/S50telnet"
