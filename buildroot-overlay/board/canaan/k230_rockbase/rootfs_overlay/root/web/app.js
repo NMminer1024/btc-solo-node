@@ -124,7 +124,11 @@
   var refreshSecondsLeft = DASHBOARD_REFRESH_SECONDS;
   var LOG_REFRESH_SECONDS = 5;
   var LOG_TAIL_LIMIT = 300;
+  var MINERS_REFRESH_SECONDS = 60;
   var logPollTimer = null;
+  var minersPollTimer = null;
+  var minersLoading = false;
+  var minersLoaded = false;
   var activeViewName = "dashboard";
   var activeLogService = "bitcoind";
   var logRequestSeq = {
@@ -667,6 +671,190 @@
     };
   }
 
+  function stopMinersPolling() {
+    if (minersPollTimer) {
+      window.clearInterval(minersPollTimer);
+      minersPollTimer = null;
+    }
+  }
+
+  function hashrateToGhs(value) {
+    var text = String(value || "0").trim();
+    if (!text || text === "-") return 0;
+    var suffix = text.slice(-1).toUpperCase();
+    var number = parseFloat(text);
+    var units = { H: 1e-9, K: 1e-6, M: 1e-3, G: 1, T: 1e3, P: 1e6, E: 1e9 };
+    if (!Number.isFinite(number)) return 0;
+    return number * (units[suffix] || 1);
+  }
+
+  function formatCount(value) {
+    var num = Number(value);
+    if (!Number.isFinite(num)) return "--";
+    return Math.round(num).toLocaleString();
+  }
+
+  function formatShare(value) {
+    var num = Number(value);
+    if (!Number.isFinite(num)) return "--";
+    var units = [
+      { label: "T", value: 1e12 },
+      { label: "G", value: 1e9 },
+      { label: "M", value: 1e6 },
+      { label: "K", value: 1e3 }
+    ];
+    for (var i = 0; i < units.length; i += 1) {
+      if (num >= units[i].value) return (num / units[i].value).toFixed(2) + units[i].label;
+    }
+    return Math.round(num).toLocaleString();
+  }
+
+  function formatApiAge(generatedAt) {
+    var ts = Number(generatedAt);
+    if (!Number.isFinite(ts) || ts <= 0) return "cache age unknown";
+    var diff = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+    if (diff < 60) return "updated " + diff + "s ago";
+    if (diff < 3600) return "updated " + Math.floor(diff / 60) + "m ago";
+    return "updated " + Math.floor(diff / 3600) + "h ago";
+  }
+
+  function escapeHtml(value) {
+    return String(value === undefined || value === null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function renderMinerRateBars(pool) {
+    var rows = [
+      { label: "1m", value: toText(pool.hashrate1m, "--") },
+      { label: "5m", value: toText(pool.hashrate5m, "--") },
+      { label: "1h", value: toText(pool.hashrate1hr, "--") },
+      { label: "1d", value: toText(pool.hashrate1d, "--") }
+    ];
+    var max = rows.reduce(function (acc, row) {
+      return Math.max(acc, hashrateToGhs(row.value));
+    }, 0);
+    var html = rows.map(function (row) {
+      var pct = max > 0 ? Math.max(2, Math.min(100, hashrateToGhs(row.value) / max * 100)) : 0;
+      return '<div class="miners-rate-row">' +
+        '<span>' + escapeHtml(row.label) + '</span>' +
+        '<div><i style="width:' + pct.toFixed(1) + '%"></i></div>' +
+        '<strong>' + escapeHtml(row.value) + '</strong>' +
+        '</div>';
+    }).join("");
+    var el = document.getElementById("minerRateBars");
+    if (el) el.innerHTML = html;
+  }
+
+  function renderMiners(data) {
+    var payload = data || {};
+    var pool = payload.pool || {};
+    var miners = Array.isArray(payload.miners) ? payload.miners : [];
+    var users = Number(pool.users);
+    var workers = Number(pool.workers);
+    var accepted = Number(pool.accepted);
+    var rejected = Number(pool.rejected);
+    var totalShares = accepted + rejected;
+    var rejectPct = totalShares > 0 ? rejected * 100 / totalShares : 0;
+    var stale = pool.stale === true || payload.ok === false;
+
+    setText("minerUsers", Number.isFinite(users) ? formatCount(users) : formatCount(miners.length));
+    setText("minerWorkers", Number.isFinite(workers) ? formatCount(workers) : "--");
+    setText("minerHash5m", toText(pool.hashrate5m, "--"));
+    setText("minerAccepted", formatCount(accepted));
+    setText("minerRejected", formatCount(rejected));
+    setText("minerBestShare", formatShare(pool.bestshare));
+    setText("minersUpdated", formatApiAge(payload.generated_at) + " · next cache refresh " + toText(payload.next_refresh_seconds, "60") + "s");
+    setText("minersSource", toText(payload.source && payload.source.users_dir, "/root/ckpool/logs/users"));
+    setBadgeState("minersCacheBadge", stale ? "Stale Cache" : "Live Cache", stale ? "status-warm" : "status-ok");
+    setBadgeState("minerRejectRate", "Reject " + rejectPct.toFixed(2) + "%", rejectPct > 5 ? "status-warm" : "status-soft");
+    renderMinerRateBars(pool);
+
+    var list = document.getElementById("minersList");
+    if (!list) return;
+
+    if (!miners.length) {
+      list.innerHTML = '<div class="miners-empty">' + escapeHtml(payload.error || "No miners found yet. Connect a miner to the local Stratum endpoint.") + '</div>';
+      return;
+    }
+
+    miners.sort(function (a, b) {
+      var onlineDelta = (b.online ? 1 : 0) - (a.online ? 1 : 0);
+      if (onlineDelta) return onlineDelta;
+      return hashrateToGhs(b.hashrate5m) - hashrateToGhs(a.hashrate5m);
+    });
+
+    list.innerHTML = miners.map(function (miner) {
+      var workerRows = Array.isArray(miner.workers_detail) && miner.workers_detail.length ? miner.workers_detail : [];
+      var workerHtml = workerRows.length ? workerRows.map(function (worker) {
+        var statusClass = worker.online ? "is-online" : "is-offline";
+        return '<div class="miner-worker-row">' +
+          '<span class="miner-status-dot ' + statusClass + '"></span>' +
+          '<strong class="mono" title="' + escapeHtml(worker.full_name) + '">' + escapeHtml(worker.name || worker.full_name || "worker") + '</strong>' +
+          '<span>' + escapeHtml(toText(worker.hashrate5m, "--")) + ' 5m</span>' +
+          '<span>' + escapeHtml(toText(worker.hashrate1hr, "--")) + ' 1h</span>' +
+          '<span>' + escapeHtml(formatCount(worker.shares)) + ' shares</span>' +
+          '<span>' + escapeHtml(toText(worker.lastshare_ago, "-")) + '</span>' +
+          '</div>';
+      }).join("") : '<div class="miner-worker-row miner-worker-row-empty"><span>No worker detail yet</span></div>';
+
+      return '<article class="miner-card">' +
+        '<div class="miner-card-head">' +
+          '<div>' +
+          '<span class="summary-label">' + (miner.online ? "Online" : "Offline") + '</span>' +
+          '<strong class="mono miner-address">' + escapeHtml(miner.address) + '</strong>' +
+          '</div>' +
+          '<span class="status-badge ' + (miner.online ? "status-ok" : "status-soft") + '">' + (miner.online ? "Active" : "Idle") + '</span>' +
+        '</div>' +
+        '<div class="miner-card-metrics">' +
+          '<div><span>Workers</span><strong>' + escapeHtml(toText(miner.worker_detail_count || miner.workers, "--")) + '</strong></div>' +
+          '<div><span>5m</span><strong>' + escapeHtml(toText(miner.hashrate5m, "--")) + '</strong></div>' +
+          '<div><span>1h</span><strong>' + escapeHtml(toText(miner.hashrate1hr, "--")) + '</strong></div>' +
+          '<div><span>Shares</span><strong>' + escapeHtml(formatCount(miner.shares)) + '</strong></div>' +
+          '<div><span>Best</span><strong>' + escapeHtml(formatShare(miner.bestshare)) + '</strong></div>' +
+          '<div><span>Last Share</span><strong>' + escapeHtml(toText(miner.lastshare_ago, "-")) + '</strong></div>' +
+        '</div>' +
+        '<div class="miner-workers">' + workerHtml + '</div>' +
+        '</article>';
+    }).join("");
+  }
+
+  function fetchMinersData() {
+    if (minersLoading) return Promise.resolve(null);
+    minersLoading = true;
+    return window.fetch("/api/miners.cgi?_ts=" + Date.now(), { cache: "no-store" })
+      .then(function (response) {
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        return response.json();
+      })
+      .then(function (payload) {
+        renderMiners(payload);
+        minersLoaded = true;
+        return payload;
+      })
+      .catch(function () {
+        if (!minersLoaded) {
+          renderMiners({ ok: false, error: "Miners API unavailable.", pool: {}, miners: [] });
+        }
+        return null;
+      })
+      .then(function (result) {
+        minersLoading = false;
+        return result;
+      });
+  }
+
+  function startMinersPolling() {
+    stopMinersPolling();
+    fetchMinersData();
+    minersPollTimer = window.setInterval(function () {
+      if (activeViewName === "miners") fetchMinersData();
+    }, MINERS_REFRESH_SECONDS * 1000);
+  }
+
   function stopWifiPolling() {
     if (wifiPollTimer) {
       window.clearInterval(wifiPollTimer);
@@ -1074,6 +1262,8 @@
     activeViewName = view;
     if (view === "logs") startLogPolling(activeLogService || "bitcoind");
     else stopLogPolling();
+    if (view === "miners") startMinersPolling();
+    else stopMinersPolling();
     if (view === "settings") loadWifiSettings();
     else if (!wifiState.applying) stopWifiPolling();
 

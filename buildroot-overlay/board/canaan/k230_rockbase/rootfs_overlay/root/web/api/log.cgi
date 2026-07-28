@@ -4,7 +4,14 @@
 
 json_str_ml() {
   printf '"'
-  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | awk '{printf "%s\\n", $0}' | tr -d '\n' | sed 's/\\\\n$//'
+  printf '%s' "$1" \
+    | tr '\r' '\n' \
+    | tr -d '\000-\010\013\014\016-\037' \
+    | sed 's/\[[0-9;?]*[A-Za-z]//g' \
+    | sed 's/\\/\\\\/g; s/"/\\"/g' \
+    | awk '{printf "%s\\n", $0}' \
+    | tr -d '\n' \
+    | sed 's/\\\\n$//'
   printf '"'
 }
 

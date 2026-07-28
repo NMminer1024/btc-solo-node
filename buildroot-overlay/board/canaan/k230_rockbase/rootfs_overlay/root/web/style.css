@@ -968,6 +968,201 @@ textarea {
 .placeholder-chart-bars span:nth-child(6) { height: 81%; }
 .placeholder-chart-bars span:nth-child(7) { height: 58%; }
 
+.miners-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 16px;
+}
+
+.miners-list-shell {
+  margin-top: 16px;
+}
+
+.miners-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.miners-kpi {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--summary-bg);
+}
+
+.miners-kpi span,
+.miner-card-metrics span {
+  display: block;
+  color: var(--label);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.miners-kpi strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--value-strong);
+  font-size: clamp(1.35rem, 2.2vw, 2rem);
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.miners-cache-note {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.miners-rate-bars {
+  display: grid;
+  gap: 14px;
+}
+
+.miners-rate-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 74px;
+  align-items: center;
+  gap: 12px;
+}
+
+.miners-rate-row > span {
+  color: var(--label);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.miners-rate-row > div {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+
+.miners-rate-row i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--brand), var(--brand-2));
+  transition: width 360ms ease;
+}
+
+.miners-rate-row strong {
+  color: var(--value);
+  font-size: 0.92rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.miners-list {
+  display: grid;
+  gap: 12px;
+}
+
+.miner-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--summary-bg);
+  padding: 16px;
+}
+
+.miner-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.miner-address {
+  display: block;
+  margin-top: 8px;
+  color: var(--value-strong);
+  word-break: break-all;
+}
+
+.miner-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.miner-card-metrics > div {
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.miner-card-metrics strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--value);
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+.miner-workers {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.miner-worker-row {
+  display: grid;
+  grid-template-columns: 12px minmax(160px, 1.1fr) repeat(4, minmax(82px, 0.55fr));
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  overflow-x: auto;
+}
+
+.miner-worker-row strong {
+  color: var(--value);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.miner-worker-row span {
+  white-space: nowrap;
+  font-size: 0.84rem;
+}
+
+.miner-worker-row-empty {
+  display: block;
+}
+
+.miner-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.miner-status-dot.is-online {
+  background: var(--brand-2);
+  box-shadow: 0 0 0 5px rgba(193, 149, 73, 0.12);
+}
+
+.miner-status-dot.is-offline {
+  background: var(--muted);
+}
+
+.miners-empty {
+  padding: 20px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  background: var(--summary-bg);
+}
+
 @media (max-width: 1180px) {
   .site-shell {
     grid-template-columns: 1fr;
@@ -994,8 +1189,10 @@ textarea {
   .dashboard-grid,
   .secondary-grid,
   .subpage-grid,
+  .miners-grid,
   .info-grid,
-  .metric-orb-grid {
+  .metric-orb-grid,
+  .miner-card-metrics {
     grid-template-columns: 1fr;
   }
 
@@ -1034,5 +1231,17 @@ textarea {
   .section-heading {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .miners-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .miner-card-head {
+    flex-direction: column;
+  }
+
+  .miner-worker-row {
+    grid-template-columns: 12px minmax(170px, 1fr) repeat(4, minmax(90px, 0.7fr));
   }
 }

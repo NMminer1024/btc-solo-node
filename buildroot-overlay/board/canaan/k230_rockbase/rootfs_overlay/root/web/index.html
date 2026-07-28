@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NM Bitcoin Node Monitor</title>
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/style.css?v=20260728-miners-hot">
 </head>
 <body>
 <div class="site-shell">
@@ -225,34 +225,52 @@
     </section>
 
     <section class="panel-view" data-view-panel="miners">
-      <section class="subpage-hero">
-        <p>This page will summarize all LAN miners connected to this appliance, including hashrate trends, worker health, and client-level status.</p>
-      </section>
-      <section class="subpage-grid">
-        <article class="surface-card">
-          <h3>Miner Summary</h3>
-          <div class="stack-list">
-            <div class="stack-row"><span>Active Miners</span><strong>Placeholder</strong></div>
-            <div class="stack-row"><span>Total Hashrate</span><strong>Placeholder</strong></div>
-            <div class="stack-row"><span>Accepted Shares</span><strong>Placeholder</strong></div>
-            <div class="stack-row"><span>Rejected Shares</span><strong>Placeholder</strong></div>
-          </div>
-        </article>
-        <article class="surface-card">
-          <h3>Hashrate Chart</h3>
-          <div class="placeholder-chart">
-            <div class="placeholder-chart-bars">
-              <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+      <section class="miners-grid">
+        <article class="surface-card surface-card-primary miners-summary-card">
+          <div class="surface-head">
+            <div>
+              <h3>Miner Summary</h3>
             </div>
-            <p>Miner hashrate trend chart placeholder</p>
+            <span class="status-badge status-soft" id="minersCacheBadge">Loading</span>
           </div>
+          <div class="miners-kpi-grid">
+            <div class="miners-kpi"><span>Miners</span><strong id="minerUsers">--</strong></div>
+            <div class="miners-kpi"><span>Workers</span><strong id="minerWorkers">--</strong></div>
+            <div class="miners-kpi miners-kpi-wide"><span>Hashrate 5m</span><strong id="minerHash5m">--</strong></div>
+            <div class="miners-kpi"><span>Accepted</span><strong id="minerAccepted">--</strong></div>
+            <div class="miners-kpi"><span>Rejected</span><strong id="minerRejected">--</strong></div>
+            <div class="miners-kpi miners-kpi-wide"><span>Best Share</span><strong id="minerBestShare">--</strong></div>
+          </div>
+          <p class="miners-cache-note" id="minersUpdated">Waiting for ckpool cache...</p>
         </article>
-        <article class="surface-card">
-          <h3>Miner List</h3>
-          <div class="stack-list">
-            <div class="stack-row"><span>Miner 1</span><strong>Worker / GH/s / Status placeholder</strong></div>
-            <div class="stack-row"><span>Miner 2</span><strong>Worker / GH/s / Status placeholder</strong></div>
-            <div class="stack-row"><span>Miner 3</span><strong>Worker / GH/s / Status placeholder</strong></div>
+
+        <article class="surface-card miners-hash-card">
+          <div class="surface-head">
+            <div>
+              <h3>Pool Hashrate</h3>
+            </div>
+            <span class="status-badge status-soft" id="minerRejectRate">Reject --</span>
+          </div>
+          <div class="miners-rate-bars" id="minerRateBars">
+            <div class="miners-rate-row"><span>1m</span><div><i style="width:0%"></i></div><strong>--</strong></div>
+            <div class="miners-rate-row"><span>5m</span><div><i style="width:0%"></i></div><strong>--</strong></div>
+            <div class="miners-rate-row"><span>1h</span><div><i style="width:0%"></i></div><strong>--</strong></div>
+            <div class="miners-rate-row"><span>1d</span><div><i style="width:0%"></i></div><strong>--</strong></div>
+          </div>
+          <p class="miners-cache-note">Bars are normalized to the strongest visible interval. Data is served from a 60-120s randomized cache.</p>
+        </article>
+      </section>
+
+      <section class="miners-list-shell">
+        <article class="surface-card surface-card-large">
+          <div class="surface-head">
+            <div>
+              <h3>Connected Miners</h3>
+            </div>
+            <span class="summary-label" id="minersSource">/root/ckpool/logs/users</span>
+          </div>
+          <div class="miners-list" id="minersList">
+            <div class="miners-empty">Loading miners...</div>
           </div>
         </article>
       </section>
@@ -404,6 +422,6 @@
   </main>
 </div>
 
-<script src="/app.js?v=20260728-ibd-pct"></script>
+<script src="/app.js?v=20260728-miners-hot"></script>
 </body>
 </html>

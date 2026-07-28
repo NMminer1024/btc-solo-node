@@ -10,6 +10,7 @@ WAIT_PID_FILE=/var/run/ckpool-autostart.pid
 BTC_CONF=/root/bitcoind/bitcoin.conf
 BTC_DATADIR=/root/block
 RESIZE_DONE_FLAG=/resize_done
+BTC_READY_CHECK=/usr/bin/rockbase_bitcoind_ready.sh
 
 is_running() {
     pidof ckpool >/dev/null 2>&1
@@ -20,10 +21,7 @@ resize_ready() {
 }
 
 bitcoind_ready() {
-    pidof bitcoind >/dev/null 2>&1 || return 1
-
-    info=$(bitcoin-cli -conf="${BTC_CONF}" -datadir="${BTC_DATADIR}" getblockchaininfo 2>/dev/null) || return 1
-    echo "${info}" | grep -q '"initialblockdownload": *false'
+    BTC_CONF="${BTC_CONF}" BTC_DATADIR="${BTC_DATADIR}" "${BTC_READY_CHECK}" >/dev/null 2>&1
 }
 
 waiter_running() {
@@ -53,17 +51,7 @@ start_waiter() {
                 exit 0
             fi
 
-            if pidof bitcoind >/dev/null 2>&1; then
-                info=$(bitcoin-cli -conf="'"${BTC_CONF}"'" -datadir="'"${BTC_DATADIR}"'" getblockchaininfo 2>/dev/null) || {
-                    sleep 60
-                    continue
-                }
-
-                echo "${info}" | grep -q '"'"'"initialblockdownload": *false'"'"' || {
-                    sleep 60
-                    continue
-                }
-
+            if BTC_CONF="'"${BTC_CONF}"'" BTC_DATADIR="'"${BTC_DATADIR}"'" "'"${BTC_READY_CHECK}"'" >/dev/null 2>&1; then
                 mkdir -p "'"${LOGDIR}"'"
                 ckpool -c "'"${CONF}"'" > "'"${LOGFILE}"'" 2>&1 &
                 sleep 2
@@ -73,7 +61,6 @@ start_waiter() {
                     exit 0
                 fi
             fi
-
             sleep 60
         done
     '

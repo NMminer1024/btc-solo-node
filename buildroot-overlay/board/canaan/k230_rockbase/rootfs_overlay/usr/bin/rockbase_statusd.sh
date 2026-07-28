@@ -338,6 +338,10 @@ collect_bitcoin_chain() {
 
     btc_info=$(btc_cli getblockchaininfo) || return 1
     chain=$(echo "${btc_info}" | grep -o '"chain": *"[^"]*"' | cut -d'"' -f4)
+    blocks=$(echo "${btc_info}" | grep -o '"blocks": *[0-9]*' | cut -d: -f2 | xargs)
+    headers=$(echo "${btc_info}" | grep -o '"headers": *[0-9]*' | cut -d: -f2 | xargs)
+    progress=$(echo "${btc_info}" | grep -o '"verificationprogress": *[0-9.eE+-]*' | cut -d: -f2 | xargs)
+    ibd=$(echo "${btc_info}" | grep -o '"initialblockdownload": *[a-z]*' | grep -o 'true\|false')
     difficulty=$(echo "${btc_info}" | grep -o '"difficulty": *[0-9.]*' | cut -d: -f2 | xargs)
     block_disk_bytes=$(echo "${btc_info}" | grep -o '"size_on_disk": *[0-9]*' | grep -o '[0-9]*')
     if [ -n "${block_disk_bytes}" ]; then
@@ -348,12 +352,20 @@ collect_bitcoin_chain() {
     fi
     pruned=$(echo "${btc_info}" | grep -o '"pruned": *[a-z]*' | grep -o 'true\|false')
     [ -n "${chain}" ] || chain=""
+    [ -n "${blocks}" ] || blocks="-"
+    [ -n "${headers}" ] || headers="-"
+    [ -n "${progress}" ] || progress=""
+    [ -n "${ibd}" ] || ibd=""
     [ -n "${difficulty}" ] || difficulty="-"
     [ -n "${pruned}" ] || pruned=$(pruned_from_conf)
 
     {
         state_num updated_at "$(now_epoch)"
         state_str chain "${chain}"
+        state_str blocks "${blocks}"
+        state_str headers "${headers}"
+        state_str progress "${progress}"
+        state_str ibd "${ibd}"
         state_str difficulty "${difficulty}"
         state_str pruned "${pruned}"
         state_str block_disk_value "${block_disk_value}"
@@ -609,6 +621,11 @@ render_status_json() {
     fi
     if [ -z "${progress}" ] || [ "${progress}" = "-" ]; then
         progress="${log_progress}"
+    fi
+    if [ -n "${headers}" ] && [ -n "${blocks}" ] && [ "${headers}" != "-" ] && [ "${blocks}" != "-" ]; then
+        if awk -v h="${headers}" -v b="${blocks}" 'BEGIN{exit !((h + 0) < (b + 0))}'; then
+            headers="${blocks}"
+        fi
     fi
     [ -n "${best_block_date}" ] || best_block_date="-"
     [ -n "${pruned}" ] || pruned=$(pruned_from_conf)
