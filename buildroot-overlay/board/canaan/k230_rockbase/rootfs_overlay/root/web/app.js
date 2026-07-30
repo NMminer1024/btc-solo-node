@@ -129,6 +129,7 @@
   var minersPollTimer = null;
   var minersLoading = false;
   var minersLoaded = false;
+  var nodeHashrateSamples = [];
   var activeViewName = "dashboard";
   var activeLogService = "bitcoind";
   var logRequestSeq = {
@@ -727,26 +728,88 @@
       .replace(/'/g, "&#39;");
   }
 
-  function renderMinerRateBars(pool) {
-    var rows = [
-      { label: "1m", value: toText(pool.hashrate1m, "--") },
-      { label: "5m", value: toText(pool.hashrate5m, "--") },
-      { label: "1h", value: toText(pool.hashrate1hr, "--") },
-      { label: "1d", value: toText(pool.hashrate1d, "--") }
+  function renderNodeHashrateHistory(pool) {
+    var sample = {
+      ts: Number(pool.lastupdate) || Math.floor(Date.now() / 1000),
+      h1m: toText(pool.hashrate1m, "--"),
+      h5m: toText(pool.hashrate5m, "--"),
+      h15m: toText(pool.hashrate15m, "--"),
+      h1h: toText(pool.hashrate1hr, "--"),
+      h6h: toText(pool.hashrate6hr, "--"),
+      h1d: toText(pool.hashrate1d, "--"),
+      h7d: toText(pool.hashrate7d, "--")
+    };
+    if (hashrateToGhs(sample.h1m) > 0 || hashrateToGhs(sample.h5m) > 0 || hashrateToGhs(sample.h15m) > 0 || hashrateToGhs(sample.h1h) > 0 || hashrateToGhs(sample.h6h) > 0 || hashrateToGhs(sample.h1d) > 0 || hashrateToGhs(sample.h7d) > 0) {
+      var lastSample = nodeHashrateSamples[nodeHashrateSamples.length - 1];
+      if (!lastSample || lastSample.ts !== sample.ts) {
+        nodeHashrateSamples.push(sample);
+        if (nodeHashrateSamples.length > 180) nodeHashrateSamples.shift();
+      } else {
+        nodeHashrateSamples[nodeHashrateSamples.length - 1] = sample;
+      }
+      sample = nodeHashrateSamples[nodeHashrateSamples.length - 1];
+    }
+
+    var series = [
+      { key: "h1m", label: "1m", color: "#d08d44" },
+      { key: "h5m", label: "5m", color: "var(--brand)" },
+      { key: "h15m", label: "15m", color: "#4f8fb8" },
+      { key: "h1h", label: "1h", color: "var(--brand-2)" },
+      { key: "h6h", label: "6h", color: "#7fa16c" },
+      { key: "h1d", label: "1d", color: "#c66f4f" },
+      { key: "h7d", label: "7d", color: "#8b6fb6" }
     ];
-    var max = rows.reduce(function (acc, row) {
-      return Math.max(acc, hashrateToGhs(row.value));
+    var max = nodeHashrateSamples.reduce(function (acc, row) {
+      return series.reduce(function (inner, item) {
+        return Math.max(inner, hashrateToGhs(row[item.key]));
+      }, acc);
     }, 0);
-    var html = rows.map(function (row) {
-      var pct = max > 0 ? Math.max(2, Math.min(100, hashrateToGhs(row.value) / max * 100)) : 0;
-      return '<div class="miners-rate-row">' +
-        '<span>' + escapeHtml(row.label) + '</span>' +
-        '<div><i style="width:' + pct.toFixed(1) + '%"></i></div>' +
-        '<strong>' + escapeHtml(row.value) + '</strong>' +
-        '</div>';
+    var chart = document.getElementById("minerHistoryChart");
+    var legend = document.getElementById("minerHistoryLegend");
+    var badge = document.getElementById("minerHistoryBadge");
+
+    if (badge) setBadgeState("minerHistoryBadge", nodeHashrateSamples.length > 1 ? "Live History" : "Collecting", nodeHashrateSamples.length > 1 ? "status-ok" : "status-soft");
+    if (legend) {
+      legend.innerHTML = series.map(function (item) {
+        return '<span><i style="background:' + item.color + '"></i>' + escapeHtml(item.label) + '<strong>' + escapeHtml(sample[item.key]) + '</strong></span>';
+      }).join("");
+    }
+    if (!chart) return;
+    if (max <= 0 || nodeHashrateSamples.length < 2) {
+      chart.innerHTML = '<div class="miners-empty">Waiting for hashrate history. This chart uses time on the X-axis and hashrate on the Y-axis.</div>';
+      return;
+    }
+
+    var width = 520;
+    var height = 180;
+    var left = 22;
+    var right = 22;
+    var top = 22;
+    var bottom = 34;
+    var span = Math.max(1, nodeHashrateSamples.length - 1);
+    var labels = nodeHashrateSamples.map(function (row, index) {
+      if (index !== 0 && index !== nodeHashrateSamples.length - 1 && index % Math.max(1, Math.floor(nodeHashrateSamples.length / 3)) !== 0) return "";
+      var x = left + (width - left - right) * index / span;
+      var date = new Date(row.ts * 1000);
+      var text = date.getHours().toString().padStart(2, "0") + ":" + date.getMinutes().toString().padStart(2, "0");
+      return '<text x="' + x.toFixed(1) + '" y="' + (height - 9) + '" text-anchor="middle">' + escapeHtml(text) + '</text>';
     }).join("");
-    var el = document.getElementById("minerRateBars");
-    if (el) el.innerHTML = html;
+    var lines = series.map(function (item) {
+      var points = nodeHashrateSamples.map(function (row, index) {
+        var x = left + (width - left - right) * index / span;
+        var value = hashrateToGhs(row[item.key]);
+        var y = height - bottom - (value / max) * (height - top - bottom);
+        return x.toFixed(1) + "," + y.toFixed(1);
+      }).filter(Boolean).join(" ");
+      if (!points) return "";
+      return '<polyline class="miners-history-line" style="stroke:' + item.color + '" points="' + points + '"></polyline>';
+    }).join("");
+
+    chart.innerHTML = '<svg class="miners-history-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Node hashrate windows">' +
+      '<path class="miners-history-grid" d="M' + left + ' ' + top + 'H' + (width - right) + 'M' + left + ' ' + ((height - bottom + top) / 2).toFixed(1) + 'H' + (width - right) + 'M' + left + ' ' + (height - bottom) + 'H' + (width - right) + '"></path>' +
+      lines +
+      labels +
+      '</svg>';
   }
 
   function renderMiners(data) {
@@ -755,23 +818,16 @@
     var miners = Array.isArray(payload.miners) ? payload.miners : [];
     var users = Number(pool.users);
     var workers = Number(pool.workers);
-    var accepted = Number(pool.accepted);
-    var rejected = Number(pool.rejected);
-    var totalShares = accepted + rejected;
-    var rejectPct = totalShares > 0 ? rejected * 100 / totalShares : 0;
     var stale = pool.stale === true || payload.ok === false;
 
     setText("minerUsers", Number.isFinite(users) ? formatCount(users) : formatCount(miners.length));
     setText("minerWorkers", Number.isFinite(workers) ? formatCount(workers) : "--");
     setText("minerHash5m", toText(pool.hashrate5m, "--"));
-    setText("minerAccepted", formatCount(accepted));
-    setText("minerRejected", formatCount(rejected));
     setText("minerBestShare", formatShare(pool.bestshare));
     setText("minersUpdated", formatApiAge(payload.generated_at) + " · next cache refresh " + toText(payload.next_refresh_seconds, "60") + "s");
     setText("minersSource", toText(payload.source && payload.source.users_dir, "/root/ckpool/logs/users"));
     setBadgeState("minersCacheBadge", stale ? "Stale Cache" : "Live Cache", stale ? "status-warm" : "status-ok");
-    setBadgeState("minerRejectRate", "Reject " + rejectPct.toFixed(2) + "%", rejectPct > 5 ? "status-warm" : "status-soft");
-    renderMinerRateBars(pool);
+    renderNodeHashrateHistory(pool);
 
     var list = document.getElementById("minersList");
     if (!list) return;
@@ -801,24 +857,24 @@
           '</div>';
       }).join("") : '<div class="miner-worker-row miner-worker-row-empty"><span>No worker detail yet</span></div>';
 
-      return '<article class="miner-card">' +
-        '<div class="miner-card-head">' +
-          '<div>' +
-          '<span class="summary-label">' + (miner.online ? "Online" : "Offline") + '</span>' +
-          '<strong class="mono miner-address">' + escapeHtml(miner.address) + '</strong>' +
+      return '<details class="miner-card">' +
+        '<summary class="miner-card-summary">' +
+          '<div class="miner-card-head">' +
+            '<div>' +
+            '<span class="summary-label">' + (miner.online ? "Online" : "Offline") + '</span>' +
+            '<strong class="mono miner-address">' + escapeHtml(miner.address) + '</strong>' +
+            '</div>' +
+            '<span class="status-badge ' + (miner.online ? "status-ok" : "status-soft") + '">' + (miner.online ? "Active" : "Idle") + '</span>' +
           '</div>' +
-          '<span class="status-badge ' + (miner.online ? "status-ok" : "status-soft") + '">' + (miner.online ? "Active" : "Idle") + '</span>' +
-        '</div>' +
-        '<div class="miner-card-metrics">' +
-          '<div><span>Workers</span><strong>' + escapeHtml(toText(miner.worker_detail_count || miner.workers, "--")) + '</strong></div>' +
-          '<div><span>5m</span><strong>' + escapeHtml(toText(miner.hashrate5m, "--")) + '</strong></div>' +
-          '<div><span>1h</span><strong>' + escapeHtml(toText(miner.hashrate1hr, "--")) + '</strong></div>' +
-          '<div><span>Shares</span><strong>' + escapeHtml(formatCount(miner.shares)) + '</strong></div>' +
-          '<div><span>Best</span><strong>' + escapeHtml(formatShare(miner.bestshare)) + '</strong></div>' +
-          '<div><span>Last Share</span><strong>' + escapeHtml(toText(miner.lastshare_ago, "-")) + '</strong></div>' +
-        '</div>' +
+          '<div class="miner-card-metrics">' +
+            '<div><span>Workers</span><strong>' + escapeHtml(toText(miner.worker_detail_count || miner.workers, "--")) + '</strong></div>' +
+            '<div><span>Hashrate 5m</span><strong>' + escapeHtml(toText(miner.hashrate5m, "--")) + '</strong></div>' +
+            '<div><span>Best Share</span><strong>' + escapeHtml(formatShare(miner.bestshare)) + '</strong></div>' +
+            '<div><span>Last Share</span><strong>' + escapeHtml(toText(miner.lastshare_ago, "-")) + '</strong></div>' +
+          '</div>' +
+        '</summary>' +
         '<div class="miner-workers">' + workerHtml + '</div>' +
-        '</article>';
+        '</details>';
     }).join("");
   }
 

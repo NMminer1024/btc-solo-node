@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NM Bitcoin Node Monitor</title>
-<link rel="stylesheet" href="/style.css?v=20260728-miners-hot">
+<link rel="stylesheet" href="/style.css?v=20260730-miners-native">
 </head>
 <body>
 <div class="site-shell">
@@ -225,39 +225,34 @@
     </section>
 
     <section class="panel-view" data-view-panel="miners">
-      <section class="miners-grid">
-        <article class="surface-card surface-card-primary miners-summary-card">
+      <section class="miners-top-stack">
+        <article class="surface-card surface-card-primary miners-node-summary">
           <div class="surface-head">
             <div>
-              <h3>Miner Summary</h3>
+              <h3>Node Summary</h3>
             </div>
             <span class="status-badge status-soft" id="minersCacheBadge">Loading</span>
           </div>
-          <div class="miners-kpi-grid">
+          <div class="miners-kpi-grid miners-kpi-grid-compact">
             <div class="miners-kpi"><span>Miners</span><strong id="minerUsers">--</strong></div>
             <div class="miners-kpi"><span>Workers</span><strong id="minerWorkers">--</strong></div>
-            <div class="miners-kpi miners-kpi-wide"><span>Hashrate 5m</span><strong id="minerHash5m">--</strong></div>
-            <div class="miners-kpi"><span>Accepted</span><strong id="minerAccepted">--</strong></div>
-            <div class="miners-kpi"><span>Rejected</span><strong id="minerRejected">--</strong></div>
-            <div class="miners-kpi miners-kpi-wide"><span>Best Share</span><strong id="minerBestShare">--</strong></div>
+            <div class="miners-kpi"><span>Hashrate 5m</span><strong id="minerHash5m">--</strong></div>
+            <div class="miners-kpi"><span>Best Share</span><strong id="minerBestShare">--</strong></div>
           </div>
           <p class="miners-cache-note" id="minersUpdated">Waiting for ckpool cache...</p>
         </article>
 
-        <article class="surface-card miners-hash-card">
+        <article class="surface-card miners-history-card">
           <div class="surface-head">
             <div>
-              <h3>Pool Hashrate</h3>
+              <h3>Node Hashrate History</h3>
             </div>
-            <span class="status-badge status-soft" id="minerRejectRate">Reject --</span>
+            <span class="status-badge status-soft" id="minerHistoryBadge">Waiting</span>
           </div>
-          <div class="miners-rate-bars" id="minerRateBars">
-            <div class="miners-rate-row"><span>1m</span><div><i style="width:0%"></i></div><strong>--</strong></div>
-            <div class="miners-rate-row"><span>5m</span><div><i style="width:0%"></i></div><strong>--</strong></div>
-            <div class="miners-rate-row"><span>1h</span><div><i style="width:0%"></i></div><strong>--</strong></div>
-            <div class="miners-rate-row"><span>1d</span><div><i style="width:0%"></i></div><strong>--</strong></div>
+          <div class="miners-history-plot" id="minerHistoryChart">
+            <div class="miners-empty">Waiting for hashrate data...</div>
           </div>
-          <p class="miners-cache-note">Bars are normalized to the strongest visible interval. Data is served from a 60-120s randomized cache.</p>
+          <div class="miners-history-legend" id="minerHistoryLegend"></div>
         </article>
       </section>
 
@@ -422,6 +417,6 @@
   </main>
 </div>
 
-<script src="/app.js?v=20260730-disk-split"></script>
+<script src="/app.js?v=20260730-miners-native"></script>
 </body>
 </html>
