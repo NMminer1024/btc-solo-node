@@ -12,7 +12,7 @@
       swapUsage: "--",
       cpuModel: "--",
       temperature: "--",
-      blockData: "--",
+      rootfsUsage: "--",
       uptime: "--"
     },
     bitcoin: {
@@ -592,7 +592,7 @@
         swapUsage: joinParts([system.swap_used_display, system.swap_total_display && "/ " + system.swap_total_display], mock.system.swapUsage).replace(" · / ", " / "),
         cpuModel: toText(system.cpu_model, mock.system.cpuModel),
         temperature: toText(system.temp, mock.system.temperature),
-        blockData: system.block_disk_found ? joinParts([system.block_disk_value, system.block_disk_path], mock.system.blockData).replace(" · /", " /") : "Not detected",
+        rootfsUsage: toText(system.rootfs_size_info, mock.system.rootfsUsage),
         uptime: toText(system.uptime, mock.system.uptime)
       },
       bitcoin: {
@@ -1199,7 +1199,7 @@
 
     setText("sysCpu", data.system.cpuModel);
     setText("sysTemp", data.system.temperature);
-    setText("sysBlock", data.system.blockData);
+    setText("sysBlock", data.system.rootfsUsage);
     setText("sysRun", data.system.uptime);
 
     setBadgeState("ntpBadge", data.network.ntpBadge, data.network.ntpClass);

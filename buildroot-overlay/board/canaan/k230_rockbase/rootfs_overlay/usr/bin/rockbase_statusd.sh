@@ -289,17 +289,28 @@ collect_system() {
     swap_used_display=$(compact_size_mb "${swap_used}")
     swap_total_display=$(compact_size_mb "${swap_total}")
 
-    disk_used_display=$(df -h / 2>/dev/null | awk 'NR==2{print $3}')
-    disk_total_display=$(df -h / 2>/dev/null | awk 'NR==2{print $2}')
-    [ -n "${disk_used_display}" ] || disk_used_display="-"
-    [ -n "${disk_total_display}" ] || disk_total_display="-"
-    disk_size_info="${disk_used_display} / ${disk_total_display}"
-    disk_pct=$(df -h / 2>/dev/null | awk 'NR==2{gsub("%","",$5);print $5}')
-    [ -n "${disk_pct}" ] || disk_pct=0
-
     block_disk_found=true
     block_disk_path="${DATADIR}"
     [ -d "${DATADIR}" ] || block_disk_found=false
+
+    rootfs_used_display=$(df -h / 2>/dev/null | awk 'NR==2{print $3}')
+    rootfs_total_display=$(df -h / 2>/dev/null | awk 'NR==2{print $2}')
+    [ -n "${rootfs_used_display}" ] || rootfs_used_display="-"
+    [ -n "${rootfs_total_display}" ] || rootfs_total_display="-"
+    rootfs_size_info="${rootfs_used_display} / ${rootfs_total_display}"
+    rootfs_pct=$(df -h / 2>/dev/null | awk 'NR==2{gsub("%","",$5);print $5}')
+    [ -n "${rootfs_pct}" ] || rootfs_pct=0
+
+    disk_used_display=$(df -h "${DATADIR}" 2>/dev/null | awk 'NR==2{print $3}')
+    disk_total_display=$(df -h "${DATADIR}" 2>/dev/null | awk 'NR==2{print $2}')
+    disk_pct=$(df -h "${DATADIR}" 2>/dev/null | awk 'NR==2{gsub("%","",$5);print $5}')
+    if [ -z "${disk_used_display}" ] || [ -z "${disk_total_display}" ]; then
+        disk_used_display="${rootfs_used_display}"
+        disk_total_display="${rootfs_total_display}"
+        disk_pct="${rootfs_pct}"
+    fi
+    disk_size_info="${disk_used_display} / ${disk_total_display}"
+    [ -n "${disk_pct}" ] || disk_pct=0
 
     temp="N/A"
     for t in /sys/class/thermal/thermal_zone*/temp /sys/class/hwmon/hwmon*/temp1_input; do
@@ -347,6 +358,8 @@ collect_system() {
         state_str swap_total_display "${swap_total_display}"
         state_num disk_pct "${disk_pct}"
         state_str disk_size_info "${disk_size_info}"
+        state_num rootfs_pct "${rootfs_pct}"
+        state_str rootfs_size_info "${rootfs_size_info}"
         state_raw block_disk_found "${block_disk_found}"
         state_str block_disk_path "${block_disk_path}"
     } | write_state_file "${SYSTEM_STATE}"
@@ -575,6 +588,8 @@ render_status_json() {
     mem_total_display="-"
     disk_pct=0
     disk_size_info="-"
+    rootfs_pct=0
+    rootfs_size_info="-"
     swap_pct=0
     swap_used_display="-"
     swap_total_display="-"
@@ -882,6 +897,8 @@ render_status_json() {
     printf '    "mem_total_display": %s,\n' "$(json_str "${mem_total_display}")"
     printf '    "disk_pct": %s,\n' "$(json_num "${disk_pct}")"
     printf '    "disk_size_info": %s,\n' "$(json_str "${disk_size_info}")"
+    printf '    "rootfs_pct": %s,\n' "$(json_num "${rootfs_pct}")"
+    printf '    "rootfs_size_info": %s,\n' "$(json_str "${rootfs_size_info}")"
     printf '    "swap_pct": %s,\n' "$(json_num "${swap_pct}")"
     printf '    "swap_used_display": %s,\n' "$(json_str "${swap_used_display}")"
     printf '    "swap_total_display": %s,\n' "$(json_str "${swap_total_display}")"
