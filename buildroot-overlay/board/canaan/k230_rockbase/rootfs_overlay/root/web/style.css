@@ -1050,7 +1050,7 @@ textarea {
 .miners-history-line {
   fill: none;
   stroke: var(--brand);
-  stroke-width: 2;
+  stroke-width: 1;
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0.95;
