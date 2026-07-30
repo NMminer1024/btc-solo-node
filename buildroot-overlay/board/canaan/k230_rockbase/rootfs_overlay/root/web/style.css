@@ -1025,7 +1025,8 @@ textarea {
 }
 
 .miners-history-plot {
-  min-height: 220px;
+  position: relative;
+  min-height: 330px;
   border-radius: var(--radius-md);
   border: 1px solid var(--line);
   background:
@@ -1037,7 +1038,7 @@ textarea {
 .miners-history-svg {
   display: block;
   width: 100%;
-  height: 220px;
+  height: 330px;
 }
 
 .miners-history-grid {
@@ -1049,11 +1050,75 @@ textarea {
 .miners-history-line {
   fill: none;
   stroke: var(--brand);
-  stroke-width: 3;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0.95;
   filter: drop-shadow(0 5px 12px rgba(37, 55, 73, 0.16));
+}
+
+.miners-history-hover-line {
+  stroke: var(--value);
+  stroke-width: 1;
+  stroke-dasharray: 4 5;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.miners-history-hitbox {
+  fill: transparent;
+}
+
+.miners-history-tooltip {
+  position: absolute;
+  z-index: 5;
+  width: 166px;
+  padding: 10px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--value);
+  box-shadow: var(--shadow-soft);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 120ms ease;
+}
+
+.miners-history-tooltip b {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--value-strong);
+  font-size: 0.82rem;
+}
+
+.miners-history-tooltip div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 5px;
+  font-size: 0.78rem;
+}
+
+.miners-history-tooltip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--label);
+  font-weight: 800;
+}
+
+.miners-history-tooltip i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.miners-history-tooltip strong {
+  color: var(--value);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .miners-history-svg text {
@@ -1063,39 +1128,51 @@ textarea {
   letter-spacing: 0.04em;
 }
 
+.miners-history-y-label {
+  fill: var(--muted);
+}
+
 .miners-history-legend {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(86px, 1fr));
-  gap: 10px;
-  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
   overflow-x: auto;
 }
 
-.miners-history-legend span {
+.miners-history-toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 90px;
+  gap: 6px;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--summary-bg);
   color: var(--label);
   font-size: 0.78rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  cursor: pointer;
 }
 
-.miners-history-legend i {
+.miners-history-toggle.is-muted {
+  opacity: 0.38;
+}
+
+.miners-history-toggle i {
   width: 9px;
   height: 9px;
   border-radius: 50%;
   background: var(--brand-2);
+  flex: 0 0 auto;
 }
 
-.miners-history-legend strong {
+.miners-history-toggle:hover {
+  border-color: var(--line-strong);
   color: var(--value);
-  font-size: 0.9rem;
-  letter-spacing: 0;
-  text-transform: none;
-  white-space: nowrap;
 }
 
 .miners-list {

@@ -1,0 +1,49 @@
+#!/bin/sh
+#
+# S64miners-history - Rockbase ckpool miners history daemon
+#
+
+DAEMON=/usr/bin/rockbase_miners_historyd.sh
+PIDFILE=/var/run/rockbase-miners-history.pid
+
+start_service() {
+    start-stop-daemon -S -b -m -q -p "${PIDFILE}" -x "${DAEMON}" -- daemon
+}
+
+stop_service() {
+    if [ -f "${PIDFILE}" ]; then
+        start-stop-daemon -K -q -p "${PIDFILE}" || true
+    fi
+    pids=$(ps | awk '/rockbase_miners_historyd\.sh daemon/ && !/awk/ {print $1}')
+    [ -n "${pids}" ] && kill ${pids} >/dev/null 2>&1 || true
+    rm -f "${PIDFILE}"
+}
+
+case "$1" in
+    start)
+        printf "Starting rockbase miners history: "
+        stop_service
+        if start_service; then
+            echo "OK"
+        else
+            echo "FAIL"
+            exit 1
+        fi
+        ;;
+    stop)
+        printf "Stopping rockbase miners history: "
+        stop_service
+        echo "OK"
+        ;;
+    restart|reload)
+        "$0" stop
+        sleep 1
+        "$0" start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac
+
+exit 0

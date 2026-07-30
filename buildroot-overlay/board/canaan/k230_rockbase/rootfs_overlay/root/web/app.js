@@ -129,7 +129,15 @@
   var minersPollTimer = null;
   var minersLoading = false;
   var minersLoaded = false;
-  var nodeHashrateSamples = [];
+  var nodeHashrateVisible = {
+    h1m: true,
+    h5m: true,
+    h15m: true,
+    h1h: true,
+    h6h: true,
+    h1d: true,
+    h7d: true
+  };
   var activeViewName = "dashboard";
   var activeLogService = "bitcoind";
   var logRequestSeq = {
@@ -719,6 +727,69 @@
     return "updated " + Math.floor(diff / 3600) + "h ago";
   }
 
+  function formatHashrateAxis(value) {
+    var num = Number(value);
+    if (!Number.isFinite(num) || num <= 0) return "0";
+    var units = [
+      { label: "EH", value: 1e9 },
+      { label: "PH", value: 1e6 },
+      { label: "TH", value: 1e3 },
+      { label: "GH", value: 1 }
+    ];
+    for (var i = 0; i < units.length; i += 1) {
+      if (num >= units[i].value) {
+        var scaled = num / units[i].value;
+        return (scaled >= 100 ? scaled.toFixed(0) : scaled >= 10 ? scaled.toFixed(1) : scaled.toFixed(2)) + units[i].label;
+      }
+    }
+    return num.toFixed(1) + "GH";
+  }
+
+  function formatChartTime(ts) {
+    var date = new Date(Number(ts) * 1000);
+    if (Number.isNaN(date.getTime())) return "--";
+    return (date.getMonth() + 1) + "/" + date.getDate() + " " +
+      date.getHours().toString().padStart(2, "0") + ":" +
+      date.getMinutes().toString().padStart(2, "0");
+  }
+
+  function bindMinersHistoryTooltip(chart, points, series, dims) {
+    var tooltip = chart.querySelector(".miners-history-tooltip");
+    var hoverLine = chart.querySelector(".miners-history-hover-line");
+    if (!tooltip || !hoverLine || !points.length) return;
+    var rectLeft = dims.left;
+    var rectRight = dims.width - dims.right;
+    var plotWidth = Math.max(1, rectRight - rectLeft);
+    var span = Math.max(1, points.length - 1);
+
+    chart.onmousemove = function (event) {
+      var rect = chart.getBoundingClientRect();
+      var ratio = Math.max(0, Math.min(1, (event.clientX - rect.left - rectLeft) / plotWidth));
+      var index = Math.max(0, Math.min(points.length - 1, Math.round(ratio * span)));
+      var point = points[index];
+      var x = rectLeft + plotWidth * index / span;
+      var activeSeries = series.filter(function (item) {
+        return nodeHashrateVisible[item.key] !== false;
+      });
+      var rows = activeSeries.map(function (item) {
+        return '<div><span><i style="background:' + item.color + '"></i>' + escapeHtml(item.label) + '</span><strong>' +
+          escapeHtml(toText(point[item.key], "--")) + '</strong></div>';
+      }).join("");
+      tooltip.innerHTML = '<b>' + escapeHtml(formatChartTime(point.ts)) + '</b>' + rows;
+      tooltip.style.opacity = "1";
+      tooltip.style.left = Math.min(rect.width - 178, Math.max(8, x + 12)) + "px";
+      tooltip.style.top = Math.max(8, event.clientY - rect.top - 18) + "px";
+      hoverLine.setAttribute("x1", x.toFixed(1));
+      hoverLine.setAttribute("x2", x.toFixed(1));
+      hoverLine.style.opacity = "1";
+    };
+
+    chart.onmouseleave = function () {
+      tooltip.style.opacity = "0";
+      hoverLine.style.opacity = "0";
+    };
+  }
+
   function escapeHtml(value) {
     return String(value === undefined || value === null ? "" : value)
       .replace(/&/g, "&amp;")
@@ -728,8 +799,8 @@
       .replace(/'/g, "&#39;");
   }
 
-  function renderNodeHashrateHistory(pool) {
-    var sample = {
+  function renderNodeHashrateHistory(pool, history) {
+    var liveSample = {
       ts: Number(pool.lastupdate) || Math.floor(Date.now() / 1000),
       h1m: toText(pool.hashrate1m, "--"),
       h5m: toText(pool.hashrate5m, "--"),
@@ -739,16 +810,7 @@
       h1d: toText(pool.hashrate1d, "--"),
       h7d: toText(pool.hashrate7d, "--")
     };
-    if (hashrateToGhs(sample.h1m) > 0 || hashrateToGhs(sample.h5m) > 0 || hashrateToGhs(sample.h15m) > 0 || hashrateToGhs(sample.h1h) > 0 || hashrateToGhs(sample.h6h) > 0 || hashrateToGhs(sample.h1d) > 0 || hashrateToGhs(sample.h7d) > 0) {
-      var lastSample = nodeHashrateSamples[nodeHashrateSamples.length - 1];
-      if (!lastSample || lastSample.ts !== sample.ts) {
-        nodeHashrateSamples.push(sample);
-        if (nodeHashrateSamples.length > 180) nodeHashrateSamples.shift();
-      } else {
-        nodeHashrateSamples[nodeHashrateSamples.length - 1] = sample;
-      }
-      sample = nodeHashrateSamples[nodeHashrateSamples.length - 1];
-    }
+    var points = history && Array.isArray(history.points) ? history.points : [];
 
     var series = [
       { key: "h1m", label: "1m", color: "#d08d44" },
@@ -759,8 +821,11 @@
       { key: "h1d", label: "1d", color: "#c66f4f" },
       { key: "h7d", label: "7d", color: "#8b6fb6" }
     ];
-    var max = nodeHashrateSamples.reduce(function (acc, row) {
-      return series.reduce(function (inner, item) {
+    var visibleSeries = series.filter(function (item) {
+      return nodeHashrateVisible[item.key] !== false;
+    });
+    var max = points.reduce(function (acc, row) {
+      return visibleSeries.reduce(function (inner, item) {
         return Math.max(inner, hashrateToGhs(row[item.key]));
       }, acc);
     }, 0);
@@ -768,51 +833,74 @@
     var legend = document.getElementById("minerHistoryLegend");
     var badge = document.getElementById("minerHistoryBadge");
 
-    if (badge) setBadgeState("minerHistoryBadge", nodeHashrateSamples.length > 1 ? "Live History" : "Collecting", nodeHashrateSamples.length > 1 ? "status-ok" : "status-soft");
+    if (badge) setBadgeState("minerHistoryBadge", points.length > 1 ? "Cached History" : "Collecting", points.length > 1 ? "status-ok" : "status-soft");
     if (legend) {
       legend.innerHTML = series.map(function (item) {
-        return '<span><i style="background:' + item.color + '"></i>' + escapeHtml(item.label) + '<strong>' + escapeHtml(sample[item.key]) + '</strong></span>';
+        var active = nodeHashrateVisible[item.key] !== false;
+        return '<button class="miners-history-toggle ' + (active ? "is-active" : "is-muted") + '" type="button" data-series="' + item.key + '">' +
+          '<i style="background:' + item.color + '"></i>' + escapeHtml(item.label) +
+          '</button>';
       }).join("");
+      legend.onclick = function (event) {
+        var button = event.target.closest("[data-series]");
+        if (!button) return;
+        var key = button.getAttribute("data-series");
+        nodeHashrateVisible[key] = nodeHashrateVisible[key] === false;
+        renderNodeHashrateHistory(pool, history);
+      };
     }
     if (!chart) return;
-    if (max <= 0 || nodeHashrateSamples.length < 2) {
+    if (max <= 0 || points.length < 2 || !visibleSeries.length) {
       chart.innerHTML = "";
       return;
     }
 
     var width = Math.max(520, Math.round(chart.clientWidth || 0));
-    var height = 220;
-    var left = 34;
+    var height = 330;
+    var left = 70;
     var right = 18;
-    var top = 22;
-    var bottom = 34;
-    var span = Math.max(1, nodeHashrateSamples.length - 1);
-    var labels = nodeHashrateSamples.map(function (row, index) {
-      if (index !== 0 && index !== nodeHashrateSamples.length - 1 && index % Math.max(1, Math.floor(nodeHashrateSamples.length / 3)) !== 0) return "";
+    var top = 24;
+    var bottom = 46;
+    var span = Math.max(1, points.length - 1);
+    var yTicks = [0, 0.25, 0.5, 0.75, 1].map(function (ratio) {
+      var y = height - bottom - ratio * (height - top - bottom);
+      var value = max * ratio;
+      return '<path class="miners-history-grid" d="M' + left + ' ' + y.toFixed(1) + 'H' + (width - right) + '"></path>' +
+        '<text class="miners-history-y-label" x="' + (left - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' + escapeHtml(formatHashrateAxis(value)) + '</text>';
+    }).join("");
+    var labels = points.map(function (row, index) {
+      if (index !== 0 && index !== points.length - 1 && index % Math.max(1, Math.floor(points.length / 3)) !== 0) return "";
       var x = left + (width - left - right) * index / span;
-      var date = new Date(row.ts * 1000);
-      var text = date.getHours().toString().padStart(2, "0") + ":" + date.getMinutes().toString().padStart(2, "0");
+      var text = formatChartTime(row.ts);
       return '<text x="' + x.toFixed(1) + '" y="' + (height - 9) + '" text-anchor="middle">' + escapeHtml(text) + '</text>';
     }).join("");
-    var lines = series.map(function (item) {
-      var points = nodeHashrateSamples.map(function (row, index) {
+    var lines = visibleSeries.map(function (item) {
+      var linePoints = points.map(function (row, index) {
         var x = left + (width - left - right) * index / span;
         var value = hashrateToGhs(row[item.key]);
         var y = height - bottom - (value / max) * (height - top - bottom);
         return x.toFixed(1) + "," + y.toFixed(1);
       }).filter(Boolean).join(" ");
-      if (!points) return "";
-      return '<polyline class="miners-history-line" style="stroke:' + item.color + '" points="' + points + '"></polyline>';
+      if (!linePoints) return "";
+      return '<polyline class="miners-history-line" style="stroke:' + item.color + '" points="' + linePoints + '"></polyline>';
     }).join("");
 
     chart.innerHTML = '<svg class="miners-history-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Node hashrate windows">' +
-      '<path class="miners-history-grid" d="M' + left + ' ' + top + 'H' + (width - right) + 'M' + left + ' ' + ((height - bottom + top) / 2).toFixed(1) + 'H' + (width - right) + 'M' + left + ' ' + (height - bottom) + 'H' + (width - right) + '"></path>' +
+      yTicks +
       lines +
+      '<line class="miners-history-hover-line" x1="' + left + '" x2="' + left + '" y1="' + top + '" y2="' + (height - bottom) + '"></line>' +
+      '<rect class="miners-history-hitbox" x="' + left + '" y="' + top + '" width="' + (width - left - right) + '" height="' + (height - top - bottom) + '"></rect>' +
       labels +
-      '</svg>';
+      '</svg>' +
+      '<div class="miners-history-tooltip" aria-hidden="true"></div>';
+    bindMinersHistoryTooltip(chart, points, series, {
+      width: width,
+      left: left,
+      right: right
+    });
   }
 
-  function renderMiners(data) {
+  function renderMiners(data, history) {
     var payload = data || {};
     var pool = payload.pool || {};
     var miners = Array.isArray(payload.miners) ? payload.miners : [];
@@ -827,7 +915,7 @@
     setText("minersUpdated", formatApiAge(payload.generated_at) + " · next cache refresh " + toText(payload.next_refresh_seconds, "60") + "s");
     setText("minersSource", toText(payload.source && payload.source.users_dir, "/root/ckpool/logs/users"));
     setBadgeState("minersCacheBadge", stale ? "Stale Cache" : "Live Cache", stale ? "status-warm" : "status-ok");
-    renderNodeHashrateHistory(pool);
+    renderNodeHashrateHistory(pool, history);
 
     var list = document.getElementById("minersList");
     if (!list) return;
@@ -881,19 +969,28 @@
   function fetchMinersData() {
     if (minersLoading) return Promise.resolve(null);
     minersLoading = true;
-    return window.fetch("/api/miners.cgi?_ts=" + Date.now(), { cache: "no-store" })
-      .then(function (response) {
+    return Promise.all([
+      window.fetch("/api/miners.cgi?_ts=" + Date.now(), { cache: "no-store" }).then(function (response) {
         if (!response.ok) throw new Error("HTTP " + response.status);
         return response.json();
+      }),
+      window.fetch("/api/miners-history.cgi?_ts=" + Date.now(), { cache: "no-store" }).then(function (response) {
+        if (!response.ok) return null;
+        return response.json();
+      }).catch(function () {
+        return null;
       })
-      .then(function (payload) {
-        renderMiners(payload);
+    ])
+      .then(function (results) {
+        var payload = results[0];
+        var history = results[1];
+        renderMiners(payload, history);
         minersLoaded = true;
         return payload;
       })
       .catch(function () {
         if (!minersLoaded) {
-          renderMiners({ ok: false, error: "Miners API unavailable.", pool: {}, miners: [] });
+          renderMiners({ ok: false, error: "Miners API unavailable.", pool: {}, miners: [] }, null);
         }
         return null;
       })
