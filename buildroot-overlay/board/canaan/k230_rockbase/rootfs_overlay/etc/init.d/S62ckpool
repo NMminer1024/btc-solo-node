@@ -46,7 +46,7 @@ stop_waiter() {
 start_waiter() {
     start-stop-daemon -S -b -m -q -p "${WAIT_PID_FILE}" -x /bin/sh -- -c '
         while :; do
-            if ps | grep -v grep | grep -q ckpool; then
+            if pidof ckpool >/dev/null 2>&1; then
                 rm -f "'"${WAIT_PID_FILE}"'"
                 exit 0
             fi
@@ -56,7 +56,7 @@ start_waiter() {
                 ckpool -c "'"${CONF}"'" > "'"${LOGFILE}"'" 2>&1 &
                 sleep 2
 
-                if ps | grep -v grep | grep -q ckpool; then
+                if pidof ckpool >/dev/null 2>&1; then
                     rm -f "'"${WAIT_PID_FILE}"'"
                     exit 0
                 fi

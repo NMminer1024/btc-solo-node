@@ -18,6 +18,8 @@ BTC_RPC_TIMEOUT=60
 CONN_RPC_TIMEOUT=2
 SYSTEM_INTERVAL=15
 BITCOIN_CHAIN_INTERVAL=600
+BITCOIN_CHAIN_IBD_INTERVAL=60
+BITCOIN_CHAIN_RETRY_INTERVAL=20
 BITCOIN_CONN_INTERVAL=45
 BITCOIN_LOG_INTERVAL=20
 STRATUM_INTERVAL=30
@@ -144,6 +146,24 @@ height_progress_pct() {
       headers = h + 0
       if (headers <= 0 || blocks < 0) { print ""; exit }
       pct = blocks / headers * 100
+      if (pct < 0) pct = 0
+      if (pct > 100) pct = 100
+      printf "%.6f", pct
+    }'
+}
+
+verification_progress_pct() {
+    awk -v p="$1" 'BEGIN {
+      pct = (p + 0) * 100
+      if (pct < 0) pct = 0
+      if (pct > 100) pct = 100
+      printf "%.6f", pct
+    }'
+}
+
+ring_progress_pct() {
+    awk -v p="$1" 'BEGIN {
+      pct = p + 0
       if (pct < 0) pct = 0
       if (pct > 100) pct = 100
       printf "%.6f", pct
@@ -634,8 +654,8 @@ render_status_json() {
     progress_pct="0.000"
     progress_ring="0.000"
     if [ -n "${progress}" ]; then
-        progress_pct=$(awk -v p="${progress}" 'BEGIN{printf "%.3g", (p + 0) * 100}')
-        progress_ring=$(awk -v p="${progress_pct}" 'BEGIN{p=p+0;if(p<0)p=0;if(p>100)p=100;printf "%.3f",p}')
+        progress_pct=$(verification_progress_pct "${progress}")
+        progress_ring=$(ring_progress_pct "${progress_pct}")
     fi
 
     if [ -z "${ibd}" ] && [ -n "${progress}" ]; then
@@ -788,6 +808,16 @@ render_status_json() {
         progress_ring="${height_based_progress}"
     fi
 
+    if [ "${btc_running}" != "0" ] && [ "${header_gap}" -gt 0 ] 2>/dev/null && [ -n "${height_based_progress}" ]; then
+        ibd_stage_key="sync_blocks"
+        ibd_stage_label="Synchronizing blocks"
+        ibd_stage_height=$(fmt_int "${blocks}")
+        ibd_stage_pct=""
+        ibd_stage_detail="headers $(fmt_int "${headers}")"
+        progress_pct="${height_based_progress}"
+        progress_ring="${height_based_progress}"
+    fi
+
     headers_fmt=$(fmt_int "${headers}")
     blocks_fmt=$(fmt_int "${blocks}")
     difficulty_display=$(compact_metric "${difficulty}")
@@ -807,7 +837,7 @@ render_status_json() {
         sync_key=btc_not_running
         sync_class=err
         sync_detail="bitcoind not running"
-    elif [ "${ibd}" = "true" ]; then
+    elif [ "${ibd}" = "true" ] || [ "${ibd_stage_key}" = "sync_blocks" ]; then
         sync_key="${ibd_stage_key}"
         sync_class=warn
         sync_detail="${ibd_stage_label}"
@@ -922,6 +952,25 @@ render_final_cache() {
     mv "${tmp}" "${FINAL_CACHE}"
 }
 
+next_bitcoin_chain_interval() {
+    [ -r "${BITCOIN_CHAIN_STATE}" ] || {
+        echo "${BITCOIN_CHAIN_INTERVAL}"
+        return
+    }
+
+    blocks=""
+    headers=""
+    ibd=""
+    # shellcheck disable=SC1090
+    . "${BITCOIN_CHAIN_STATE}" 2>/dev/null || true
+
+    if [ "${ibd}" = "true" ] || { [ "${blocks}" -lt "${headers}" ] 2>/dev/null; }; then
+        echo "${BITCOIN_CHAIN_IBD_INTERVAL}"
+    else
+        echo "${BITCOIN_CHAIN_INTERVAL}"
+    fi
+}
+
 refresh_initial() {
     collect_system >/dev/null 2>&1 || true
     render_final_cache >/dev/null 2>&1 || true
@@ -1003,9 +1052,12 @@ daemon_loop() {
             continue
         fi
         if [ "${now}" -ge "${next_bitcoin_chain}" ]; then
-            collect_bitcoin_chain >/dev/null 2>&1 || true
+            if collect_bitcoin_chain >/dev/null 2>&1; then
+                next_bitcoin_chain=$((now + $(next_bitcoin_chain_interval)))
+            else
+                next_bitcoin_chain=$((now + BITCOIN_CHAIN_RETRY_INTERVAL))
+            fi
             render_final_cache >/dev/null 2>&1 || true
-            next_bitcoin_chain=$((now + BITCOIN_CHAIN_INTERVAL))
             sleep 1
             continue
         fi
