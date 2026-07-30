@@ -71,14 +71,15 @@ write_sample() {
   mkdir -p "$DATA_DIR" "$CACHE_DIR" || return 1
 
   now=$(date +%s)
+  cache_ok=$(sed -n 's/.*"ok"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' "$MINERS_CACHE" 2>/dev/null | head -n1)
+  [ "$cache_ok" = "false" ] && return 0
+
   ts=$(json_cache_num lastupdate)
-  [ -n "$ts" ] || ts=$(json_cache_num generated_at)
+  if [ -z "$ts" ] || [ "$ts" = "0" ]; then
+    ts=$(json_cache_num generated_at)
+  fi
   [ -n "$ts" ] || ts=$now
   case "$ts" in ''|*[!0-9]*) ts=$now ;; esac
-
-  raw_file=$(raw_file_today)
-  last_ts=$(tail -n 1 "$raw_file" 2>/dev/null | sed -n 's/.*"ts":[[:space:]]*\([0-9][0-9]*\).*/\1/p')
-  [ "$last_ts" = "$ts" ] && return 0
 
   h1m=$(json_cache_str hashrate1m)
   h5m=$(json_cache_str hashrate5m)
@@ -87,6 +88,14 @@ write_sample() {
   h6h=$(json_cache_str hashrate6hr)
   h1d=$(json_cache_str hashrate1d)
   h7d=$(json_cache_str hashrate7d)
+  if [ -z "$h1m$h5m$h15m$h1h$h6h$h1d$h7d" ]; then
+    return 0
+  fi
+
+  raw_file=$(raw_file_today)
+  last_ts=$(tail -n 1 "$raw_file" 2>/dev/null | sed -n 's/.*"ts":[[:space:]]*\([0-9][0-9]*\).*/\1/p')
+  [ "$last_ts" = "$ts" ] && return 0
+
   users=$(json_cache_num users)
   workers=$(json_cache_num workers)
   bestshare=$(json_cache_num bestshare)
