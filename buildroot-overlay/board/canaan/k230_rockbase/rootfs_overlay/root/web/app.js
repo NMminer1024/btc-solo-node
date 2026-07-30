@@ -776,14 +776,14 @@
     }
     if (!chart) return;
     if (max <= 0 || nodeHashrateSamples.length < 2) {
-      chart.innerHTML = '<div class="miners-empty">Waiting for hashrate history. This chart uses time on the X-axis and hashrate on the Y-axis.</div>';
+      chart.innerHTML = "";
       return;
     }
 
-    var width = 520;
-    var height = 180;
-    var left = 22;
-    var right = 22;
+    var width = Math.max(520, Math.round(chart.clientWidth || 0));
+    var height = 220;
+    var left = 34;
+    var right = 18;
     var top = 22;
     var bottom = 34;
     var span = Math.max(1, nodeHashrateSamples.length - 1);
