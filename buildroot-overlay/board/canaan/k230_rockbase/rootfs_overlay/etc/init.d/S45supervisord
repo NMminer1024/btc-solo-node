@@ -1,0 +1,70 @@
+#!/bin/sh
+#
+# S45supervisord - Rockbase lightweight service supervisor
+#
+
+DAEMON=/usr/bin/rockbase_supervisord.sh
+PIDFILE=/var/run/rockbase-supervisord.pid
+
+find_pids() {
+    ps | awk '/rockbase_supervisord\.sh daemon/ && !/awk/ {print $1}'
+}
+
+start_service() {
+    if [ -n "$(find_pids)" ]; then
+        return 0
+    fi
+
+    "${DAEMON}" daemon >/dev/null 2>&1 &
+    sleep 1
+    [ -n "$(find_pids)" ]
+}
+
+stop_service() {
+    if [ -f "${PIDFILE}" ]; then
+        pid=$(cat "${PIDFILE}" 2>/dev/null)
+        [ -n "${pid}" ] && kill "${pid}" >/dev/null 2>&1 || true
+    fi
+
+    pids=$(find_pids)
+    [ -n "${pids}" ] && kill ${pids} >/dev/null 2>&1 || true
+
+    timeout=5
+    while [ -n "$(find_pids)" ] && [ "${timeout}" -gt 0 ]; do
+        sleep 1
+        timeout=$((timeout - 1))
+    done
+
+    pids=$(find_pids)
+    [ -n "${pids}" ] && kill -9 ${pids} >/dev/null 2>&1 || true
+    rm -f "${PIDFILE}"
+}
+
+case "$1" in
+    start)
+        printf "Starting rockbase supervisor: "
+        stop_service
+        if start_service; then
+            echo "OK"
+        else
+            echo "FAIL"
+            exit 1
+        fi
+        ;;
+    stop)
+        printf "Stopping rockbase supervisor: "
+        stop_service
+        echo "OK"
+        ;;
+    restart|reload)
+        "$0" stop
+        sleep 1
+        "$0" start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac
+
+exit 0

@@ -20,6 +20,10 @@ is_running() {
         kill -0 "${pid}" 2>/dev/null
 }
 
+find_running_pid() {
+        ps | awk '/rockbase_ledd\.sh run/ && !/awk/ {print $1; exit}'
+}
+
 write_pidfile() {
         echo "$1" > "${PIDFILE}"
 }
@@ -322,6 +326,12 @@ start_daemon() {
                 return 0
         fi
 
+        orphan_pid=$(find_running_pid 2>/dev/null)
+        if [ -n "${orphan_pid}" ] && kill -0 "${orphan_pid}" 2>/dev/null; then
+                write_pidfile "${orphan_pid}"
+                return 0
+        fi
+
         "$0" run >/dev/null 2>&1 &
         daemon_pid=$!
         write_pidfile "${daemon_pid}"
@@ -331,6 +341,8 @@ start_daemon() {
 
 stop_daemon() {
         if ! is_running; then
+                pids=$(ps | awk '/rockbase_ledd\.sh run/ && !/awk/ {print $1}')
+                [ -n "${pids}" ] && kill ${pids} >/dev/null 2>&1 || true
                 clear_pidfile
                 "${RGB_LED}" color off >/dev/null 2>&1 || true
                 return 0
@@ -350,6 +362,8 @@ stop_daemon() {
         fi
 
         clear_pidfile
+        pids=$(ps | awk '/rockbase_ledd\.sh run/ && !/awk/ {print $1}')
+        [ -n "${pids}" ] && kill ${pids} >/dev/null 2>&1 || true
         "${RGB_LED}" color off >/dev/null 2>&1 || true
         return 0
 }
