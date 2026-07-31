@@ -124,6 +124,7 @@
   var refreshSecondsLeft = DASHBOARD_REFRESH_SECONDS;
   var LOG_REFRESH_SECONDS = 5;
   var LOG_TAIL_LIMIT = 300;
+  var LOG_MAX_CHARS = 262144;
   var MINERS_REFRESH_SECONDS = 60;
   var logPollTimer = null;
   var minersPollTimer = null;
@@ -192,6 +193,12 @@
     if (activeLogService === service) setText("logSummary", text);
   }
 
+  function trimLogText(text) {
+    var value = typeof text === "string" ? text : "";
+    if (value.length <= LOG_MAX_CHARS) return value;
+    return value.slice(value.length - LOG_MAX_CHARS);
+  }
+
   function renderLogView(service) {
     var state = getLogState(service);
     if (activeViewName !== "logs" || activeLogService !== service) return;
@@ -211,9 +218,9 @@
     var summary = initial ? "Tail 300 lines · live cursor" : "Polling live updates every 5s";
 
     if (reset || initial || !state.loaded) {
-      state.text = incoming;
+      state.text = trimLogText(incoming);
     } else if (incoming) {
-      state.text += incoming;
+      state.text = trimLogText(state.text + incoming);
     }
 
     state.cursor = toNumber(payload && payload.cursor, state.cursor);
@@ -221,7 +228,7 @@
     state.path = toText(payload && payload.path, state.path);
     state.label = (payload && payload.service === "stratum") ? "Stratum log" : "Bitcoind log";
     state.loading = false;
-    setLogSummary(service, reset ? "Log rotated or truncated · reloaded tail" : summary);
+    setLogSummary(service, reset || (payload && payload.truncated) ? "Log rotated or truncated · reloaded tail" : summary);
     renderLogView(service);
   }
 

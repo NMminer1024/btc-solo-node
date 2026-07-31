@@ -29,6 +29,8 @@ get_qs_value() {
 service=$(get_qs_value service)
 cursor=$(get_qs_value cursor)
 limit=$(get_qs_value limit)
+max_initial_bytes=1048576
+max_delta_bytes=65536
 
 case "$service" in
   stratum)
@@ -51,6 +53,7 @@ ok="true"
 text=""
 size=0
 mtime="0"
+truncated="false"
 
 if [ -z "$cursor" ]; then
   initial_request="true"
@@ -64,10 +67,17 @@ if [ -r "$log_path" ]; then
 
   if [ "$cursor" -le 0 ] 2>/dev/null || [ "$cursor" -gt "$size" ] 2>/dev/null; then
     [ "$cursor" -gt "$size" ] 2>/dev/null && reset="true"
-    text=$(tail -n "$limit" "$log_path" 2>/dev/null)
+    [ "$size" -gt "$max_initial_bytes" ] 2>/dev/null && truncated="true"
+    text=$(tail -c "$max_initial_bytes" "$log_path" 2>/dev/null | tr '\r' '\n' | tail -n "$limit" 2>/dev/null)
     cursor="$size"
   elif [ "$cursor" -lt "$size" ] 2>/dev/null; then
-    text=$(tail -c +$((cursor + 1)) "$log_path" 2>/dev/null)
+    delta=$((size - cursor))
+    if [ "$delta" -gt "$max_delta_bytes" ] 2>/dev/null; then
+      truncated="true"
+      text=$(tail -c "$max_delta_bytes" "$log_path" 2>/dev/null | tr '\r' '\n' | tail -n "$limit" 2>/dev/null)
+    else
+      text=$(tail -c +$((cursor + 1)) "$log_path" 2>/dev/null | tr '\r' '\n' | tail -n "$limit" 2>/dev/null)
+    fi
     cursor="$size"
   fi
 else
@@ -83,6 +93,7 @@ printf '  "service": %s,\n' "$(json_str "$log_service")"
 printf '  "path": %s,\n' "$(json_str "$log_path")"
 printf '  "initial": %s,\n' "$initial_request"
 printf '  "reset": %s,\n' "$reset"
+printf '  "truncated": %s,\n' "$truncated"
 printf '  "cursor": %s,\n' "$cursor"
 printf '  "size": %s,\n' "$size"
 printf '  "mtime": %s,\n' "$mtime"

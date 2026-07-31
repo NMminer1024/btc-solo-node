@@ -1,0 +1,8 @@
+config BR2_PACKAGE_ROCKBASE_LCDUI
+	bool "rockbase_lcdui"
+	select BR2_PACKAGE_DISPLAY
+	select BR2_PACKAGE_LVGL
+	help
+	  Rockbase onboard LCD UI for the Solo BTC Node appliance.
+	  The UI uses LVGL with the K230 display library and renders in
+	  an 800x480 landscape coordinate system.

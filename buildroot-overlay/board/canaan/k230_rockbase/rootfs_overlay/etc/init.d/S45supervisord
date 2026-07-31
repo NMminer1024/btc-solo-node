@@ -7,7 +7,13 @@ DAEMON=/usr/bin/rockbase_supervisord.sh
 PIDFILE=/var/run/rockbase-supervisord.pid
 
 find_pids() {
-    ps | awk '/rockbase_supervisord\.sh daemon/ && !/awk/ {print $1}'
+    for proc_dir in /proc/[0-9]*; do
+        [ -r "${proc_dir}/cmdline" ] || continue
+        ppid=$(awk '/^PPid:/ {print $2}' "${proc_dir}/status" 2>/dev/null)
+        [ "${ppid}" = "1" ] || continue
+        cmdline=$(tr '\000' ' ' 2>/dev/null < "${proc_dir}/cmdline")
+        case " ${cmdline}" in *" ${DAEMON} daemon "*) echo "${proc_dir##*/}" ;; esac
+    done
 }
 
 start_service() {
@@ -16,8 +22,7 @@ start_service() {
     fi
 
     "${DAEMON}" daemon >/dev/null 2>&1 &
-    sleep 1
-    [ -n "$(find_pids)" ]
+    return 0
 }
 
 stop_service() {
@@ -29,11 +34,7 @@ stop_service() {
     pids=$(find_pids)
     [ -n "${pids}" ] && kill ${pids} >/dev/null 2>&1 || true
 
-    timeout=5
-    while [ -n "$(find_pids)" ] && [ "${timeout}" -gt 0 ]; do
-        sleep 1
-        timeout=$((timeout - 1))
-    done
+    sleep 1
 
     pids=$(find_pids)
     [ -n "${pids}" ] && kill -9 ${pids} >/dev/null 2>&1 || true

@@ -493,7 +493,7 @@ collect_stratum() {
         *) stratum_key=pool ;;
     esac
 
-    if ps | grep -v grep | grep -q ckpool; then
+    if pidof ckpool >/dev/null 2>&1; then
         ckpool_running=1
     fi
     if [ "${ckpool_running}" = "1" ]; then
@@ -1018,7 +1018,8 @@ daemon_loop() {
         mkdir "${LOCK_DIR}" 2>/dev/null || exit 1
     fi
     echo $$ > "${LOCK_DIR}/pid"
-    trap 'rm -rf "${LOCK_DIR}" 2>/dev/null; exit 0' INT TERM EXIT
+    echo $$ > "${PIDFILE}"
+    trap 'rm -rf "${LOCK_DIR}" 2>/dev/null; rm -f "${PIDFILE}"; exit 0' INT TERM EXIT
 
     refresh_initial
 

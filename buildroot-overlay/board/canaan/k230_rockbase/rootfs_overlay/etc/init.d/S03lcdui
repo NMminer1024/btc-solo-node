@@ -1,0 +1,71 @@
+#!/bin/sh
+#
+# S03lcdui - Rockbase onboard LCD UI
+#
+
+DAEMON=/usr/bin/rockbase-lcdui
+PIDFILE=/var/run/rockbase-lcdui.pid
+LOGFILE=/root/log/lcdui.log
+
+is_running() {
+	[ -f "${PIDFILE}" ] || return 1
+	pid=$(cat "${PIDFILE}" 2>/dev/null)
+	[ -n "${pid}" ] || return 1
+	kill -0 "${pid}" 2>/dev/null
+}
+
+start_service() {
+	[ -x "${DAEMON}" ] || return 0
+	if is_running; then
+		return 0
+	fi
+
+	mkdir -p "$(dirname "${LOGFILE}")"
+	"${DAEMON}" >>"${LOGFILE}" 2>&1 &
+	echo $! > "${PIDFILE}"
+}
+
+stop_service() {
+	if is_running; then
+		pid=$(cat "${PIDFILE}" 2>/dev/null)
+		kill "${pid}" >/dev/null 2>&1 || true
+		sleep 1
+		kill -9 "${pid}" >/dev/null 2>&1 || true
+	fi
+	rm -f "${PIDFILE}"
+}
+
+case "$1" in
+	start)
+		printf "Starting rockbase lcdui: "
+		if start_service; then
+			echo "OK"
+		else
+			echo "FAIL"
+			exit 1
+		fi
+		;;
+	stop)
+		printf "Stopping rockbase lcdui: "
+		stop_service
+		echo "OK"
+		;;
+	restart|reload)
+		"$0" stop
+		sleep 1
+		"$0" start
+		;;
+	status)
+		if is_running; then
+			echo "running (pid $(cat "${PIDFILE}"))"
+		else
+			echo "stopped"
+		fi
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart|status}"
+		exit 1
+		;;
+esac
+
+exit 0

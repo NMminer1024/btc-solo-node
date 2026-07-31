@@ -8,6 +8,7 @@ STATE_DIR=${ROCKBASE_SUPERVISOR_STATE:-/run/rockbase-supervisor}
 PID_FILE=${PID_FILE:-/var/run/rockbase-supervisord.pid}
 INTERVAL=${ROCKBASE_SUPERVISOR_INTERVAL:-60}
 RESTART_COOLDOWN=${ROCKBASE_SUPERVISOR_RESTART_COOLDOWN:-120}
+STARTUP_GRACE=${ROCKBASE_SUPERVISOR_STARTUP_GRACE:-180}
 LOG_MAX_KB=${ROCKBASE_SUPERVISOR_LOG_MAX_KB:-512}
 LOG_ROTATIONS=${ROCKBASE_SUPERVISOR_LOG_ROTATIONS:-5}
 
@@ -20,6 +21,10 @@ ledd|rockbase_ledd.sh run|/etc/init.d/S95ledd
 
 now_epoch() {
     date +%s 2>/dev/null || echo 0
+}
+
+uptime_seconds() {
+    awk -F. '{print $1}' /proc/uptime 2>/dev/null || echo 0
 }
 
 log_msg() {
@@ -88,6 +93,12 @@ check_service() {
 }
 
 check_all() {
+    uptime=$(uptime_seconds)
+    case "$uptime" in ''|*[!0-9]*) uptime=0 ;; esac
+    if [ "$uptime" -lt "$STARTUP_GRACE" ]; then
+        return 0
+    fi
+
     printf '%s\n' "$SERVICES" | while IFS='|' read -r name pattern init_script; do
         [ -n "$name" ] || continue
         check_service "$name" "$pattern" "$init_script"
@@ -107,7 +118,7 @@ take_pidfile() {
 case "$1" in
     daemon)
         take_pidfile
-        log_msg "supervisor started interval=${INTERVAL}s cooldown=${RESTART_COOLDOWN}s"
+        log_msg "supervisor started interval=${INTERVAL}s cooldown=${RESTART_COOLDOWN}s startup_grace=${STARTUP_GRACE}s"
         while true; do
             check_all
             sleep "$INTERVAL"
