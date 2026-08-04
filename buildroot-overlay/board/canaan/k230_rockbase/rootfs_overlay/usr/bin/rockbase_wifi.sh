@@ -46,6 +46,7 @@ wifi_load_state() {
 
 wifi_load_config() {
   WIFI_CONFIG_LOADED=0
+  WIFI_CONFIG_SOURCE="default"
   WIFI_SSID=""
   WIFI_PASS=""
   WIFI_HIDDEN="0"
@@ -53,6 +54,7 @@ wifi_load_config() {
   if [ -f "$WIFI_CONFIG_FILE" ]; then
     . "$WIFI_CONFIG_FILE"
     WIFI_CONFIG_LOADED=1
+    WIFI_CONFIG_SOURCE="$WIFI_CONFIG_FILE"
   fi
 
   if [ "$WIFI_CONFIG_LOADED" = "0" ]; then
@@ -265,6 +267,7 @@ wifi_start_service() {
   iwconfig "$WLAN_DEV" power off 2>/dev/null || true
 
   wifi_write_wpa_conf || return 1
+  printf '[rockbase_wifi] trying SSID "%s" on %s (source=%s)\n' "$WIFI_SSID" "$WLAN_DEV" "$WIFI_CONFIG_SOURCE"
 
   killall wpa_supplicant 2>/dev/null || true
   sleep 1
@@ -277,7 +280,13 @@ wifi_start_service() {
   fi
 
   wifi_current_status
-  [ "$WIFI_CONNECTED_STATE" = "COMPLETED" ] || [ "$WIFI_CONNECTED_IP" != "-" ]
+  if [ "$WIFI_CONNECTED_STATE" = "COMPLETED" ] || [ "$WIFI_CONNECTED_IP" != "-" ]; then
+    printf '[rockbase_wifi] connected SSID "%s", IP %s\n' "$WIFI_CONNECTED_SSID" "$WIFI_CONNECTED_IP"
+    return 0
+  fi
+
+  printf '[rockbase_wifi] connect failed: state=%s ssid="%s" ip=%s\n' "$WIFI_CONNECTED_STATE" "$WIFI_CONNECTED_SSID" "$WIFI_CONNECTED_IP"
+  return 1
 }
 
 wifi_stop_service() {
