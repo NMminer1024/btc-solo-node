@@ -185,6 +185,28 @@ inherits runtime hardware description from CanMV v3.
 +		line-name = "usb-host-pwr";
 +	};
 +};
+--- /dev/null
++++ b/arch/riscv/boot/dts/canaan/k230-rockbase-2g-lcd.dts
+@@ -0,0 +1,19 @@
++// SPDX-License-Identifier: GPL-2.0 OR MIT
++/*
++ * RockBase K230 2G Linux DTS.
++ *
++ * Keep the Rockbase product identity, but use 01Studio LCD/SDIO wiring
++ * for the 2G hardware variant and expose the full 2G DDR range to Linux.
++ */
++
++#include "k230-canmv-01studio-lcd.dts"
++
++/ {
++	model = "RockBase K230 2G on 01Studio hardware";
++	compatible = "rockbase,k230-rockbase-01studio-2g", "canaan,canmv-k230", "canaan,kendryte-k230";
++
++	ddr: memory@0 {
++		device_type = "memory";
++		reg = <0x0 0x0 0x0 0x80000000>;
++	};
++};
 
 --- /dev/null
 +++ b/arch/riscv/boot/dts/canaan/k230-rockbase-lcd.dts

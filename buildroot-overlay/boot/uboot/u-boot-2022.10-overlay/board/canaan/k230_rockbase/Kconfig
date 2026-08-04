@@ -38,4 +38,10 @@ choice
         help
             "Rockbase LPDDR4 1600 training data without ODT"
 endchoice
+
+config ROCKBASE_01STUDIO_2G_HW
+    bool "Rockbase 2G image on 01Studio hardware"
+    help
+        Use the 01Studio SDIO boot path and Wi-Fi reset path while keeping
+        the Rockbase image profile and product stack.
 endif

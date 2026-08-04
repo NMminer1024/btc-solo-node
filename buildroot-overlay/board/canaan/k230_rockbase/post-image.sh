@@ -287,13 +287,24 @@ sync_image_outputs()
 	local build_stamp
 	local export_dir
 	local exported_image
+	local CONF=$(basename ${BASE_DIR})
+	local image_prefix="sysimage-sdcard-rockbase-1g"
 	# 从 release_version 中提取首个 YYYYMMDD-HHMMSS 时间戳，保证每次导出落到新目录
 	build_stamp=$(grep -m1 ^sdk: "${TARGET_DIR}/etc/version/release_version" | grep -oE [0-9]{8}-[0-9]{6} | head -n1)
 	[ -z "$build_stamp" ] && build_stamp=$(date +%Y%m%d-%H%M%S)-$$
-	export_dir="${K230_IMAGE_OUT_DIR}/sysimage-sdcard-${build_stamp}"
+	if [ "${CONF}" = "k230_rockbase_2g_defconfig" ]; then
+		image_prefix="sysimage-sdcard-rockbase-2g"
+	fi
+	export_dir="${K230_IMAGE_OUT_DIR}/${image_prefix}-${build_stamp}"
 	exported_image="${export_dir}/sysimage-sdcard.img"
-	mkdir -p "${export_dir}"
-	cp --sparse=never -f "${BINARIES_DIR}/sysimage-sdcard.img" "${exported_image}"
+	mkdir -p "${export_dir}" || {
+		echo "ERROR: failed to create image export directory: ${export_dir}" >&2
+		exit 1
+	}
+	cp --sparse=never -f "${BINARIES_DIR}/sysimage-sdcard.img" "${exported_image}" || {
+		echo "ERROR: failed to export flash image to: ${exported_image}" >&2
+		exit 1
+	}
 	echo "exported flash image to ${exported_image}"
 
 	if [ "${K230_KEEP_WSL_IMAGES:-0}" != "1" ]; then

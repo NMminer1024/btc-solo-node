@@ -1,0 +1,21 @@
+/*
+ * Rockbase product image for 01Studio 2G hardware.
+ *
+ * Keep this profile under the Rockbase target, but use the 01Studio SDIO/MMC
+ * wiring so SPL reads the SD card from the controller that exists on this
+ * board. Do not use the Rockbase full DTS here: it maps MMC1 to TF card,
+ * while this hardware uses MMC1 pins for Wi-Fi.
+ */
+#include "k230_canmv_01studio.dts"
+
+/ {
+	model = "kendryte k230 rockbase 2g on 01studio hardware";
+	compatible = "kendryte,k230_rockbase_01studio_2g", "kendryte,k230_canmv_01studio";
+
+	memory@0 {
+		device_type = "memory";
+		reg = <
+				0x0 0 0x0 0x80000000
+			  >;
+	};
+};

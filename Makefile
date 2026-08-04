@@ -44,7 +44,10 @@ copy-img:
 	ver_file="$(BRW_BUILD_DIR)/target/etc/version/release_version"; \
 	build_stamp=$$(grep -m1 '^sdk:' "$$ver_file" 2>/dev/null | grep -oE '[0-9]{8}-[0-9]{6}' | head -n1); \
 	[ -n "$$build_stamp" ] || build_stamp=$$(date +%Y%m%d-%H%M%S); \
-	export_dir="$(IMG_OUTPUT_DIR)/sysimage-sdcard-$$build_stamp"; \
+		image_prefix="sysimage-sdcard"; \
+		if [ "$(CONF)" = "k230_rockbase_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-1g"; fi; \
+		if [ "$(CONF)" = "k230_rockbase_2g_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-2g"; fi; \
+		export_dir="$(IMG_OUTPUT_DIR)/$$image_prefix-$$build_stamp"; \
 	if [ -z "$$img" ]; then \
 		echo "错误: 未找到镜像文件，请先执行 make CONF=$(CONF) 编译"; \
 		exit 1; \
@@ -116,7 +119,8 @@ list-def list_def:
 	@echo "	BPI-CanMV-K230D-Zero_ilp32_defconfig  --plct use,new 32 board"
 	@echo "	k230_evb_defconfig                    --k230 evb board"
 	@echo "	k230_canmv_gt6700_defconfig           --gt6700 board"
-	@echo "	k230_rockbase_defconfig                --rockbase board"
+		@echo "	k230_rockbase_defconfig                --rockbase board"
+		@echo "	k230_rockbase_2g_defconfig             --rockbase 2G RAM board"
 	@echo "	k230_canmv_01studio_emmc_defconfig    --01studio emmc board"
 	@echo ""
 
