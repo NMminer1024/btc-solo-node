@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fcntl.h>
 #include <sys/time.h>
 #include <unistd.h>
 
@@ -16,9 +17,8 @@ namespace {
 
 constexpr uint32_t kUiWidth = 800;
 constexpr uint32_t kUiHeight = 480;
-constexpr const char* kLogoPath = "/usr/share/rockbase-lcdui/boot-logo-800x480.png";
-constexpr const char* kLogoLvPath = "A:/usr/share/rockbase-lcdui/boot-logo-800x480.png";
-
+constexpr const char* kBootLogoPath = "A:/usr/share/rockbase-lcdui/boot-logo-800x480.png";
+constexpr const char* kDashboardPath = "A:/usr/share/rockbase-lcdui/bitcoin_dashboard_800x480.png";
 volatile sig_atomic_t g_stop = 0;
 display* g_display = nullptr;
 display_plane* g_plane = nullptr;
@@ -102,7 +102,11 @@ bool init_display() {
         return false;
     }
 
-    std::memset(g_buffer->map, 0, g_buffer->size);
+    auto* pixels = static_cast<uint32_t*>(g_buffer->map);
+    const uint32_t pixel_count = g_buffer->size / sizeof(uint32_t);
+    for (uint32_t i = 0; i < pixel_count; ++i) {
+        pixels[i] = 0xff000000;
+    }
     std::printf("rockbase-lcdui: panel=%ux%u buffer=%ux%u stride=%u size=%u fourcc=ARGB8888 rotation=software-ccw\n",
                 g_display->width, g_display->height, g_buffer->width, g_buffer->height,
                 g_buffer->stride, g_buffer->size);
@@ -139,14 +143,6 @@ void build_placeholder_ui() {
     lv_obj_set_style_bg_color(screen, lv_color_hex(0x10161d), 0);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
 
-    if (access(kLogoPath, R_OK) == 0) {
-        lv_obj_t* logo = lv_image_create(screen);
-        lv_image_set_src(logo, kLogoLvPath);
-        lv_obj_center(logo);
-        std::printf("rockbase-lcdui: loaded boot logo %s\n", kLogoPath);
-        return;
-    }
-
     lv_obj_t* card = lv_obj_create(screen);
     lv_obj_set_size(card, 744, 392);
     lv_obj_set_pos(card, 28, 44);
@@ -161,7 +157,7 @@ void build_placeholder_ui() {
     add_label(card, "Solo BTC Node", 30, 78, &lv_font_montserrat_32, lv_color_hex(0xf2dfb3));
     add_label(card, "LCD UI framework ready", 32, 148, &lv_font_montserrat_22, lv_color_hex(0xb9c2c6));
     add_label(card, "Canvas: 800 x 480 landscape", 32, 198, &lv_font_montserrat_18, lv_color_hex(0x7f8b90));
-    add_label(card, kLogoPath, 32, 236, &lv_font_montserrat_16, lv_color_hex(0x7f8b90));
+    add_label(card, "Linux-side boot logo rendering disabled", 32, 236, &lv_font_montserrat_16, lv_color_hex(0x7f8b90));
 
     lv_obj_t* bar = lv_obj_create(card);
     lv_obj_set_size(bar, 620, 8);
@@ -169,6 +165,32 @@ void build_placeholder_ui() {
     lv_obj_set_style_radius(bar, 4, 0);
     lv_obj_set_style_bg_color(bar, lv_color_hex(0xc9963e), 0);
     lv_obj_set_style_border_width(bar, 0, 0);
+}
+
+void warm_file_cache(const char* path) {
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        return;
+    }
+
+    char buf[16384];
+    while (read(fd, buf, sizeof(buf)) > 0) {
+    }
+    close(fd);
+}
+
+void build_dashboard_transition(lv_display_t* disp) {
+    lv_obj_t* screen = lv_screen_active();
+    lv_obj_remove_style_all(screen);
+    lv_obj_set_style_bg_color(screen, lv_color_hex(0x05080c), 0);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
+
+    lv_obj_t* dashboard = lv_image_create(screen);
+    lv_image_set_src(dashboard, kDashboardPath);
+    lv_obj_set_pos(dashboard, 0, 0);
+    lv_obj_set_style_opa(dashboard, LV_OPA_COVER, 0);
+
+    lv_refr_now(disp);
 }
 
 }  // namespace
@@ -204,10 +226,17 @@ int main() {
     }
     lv_display_set_buffers(disp, draw_buf, nullptr, draw_buf_size, LV_DISPLAY_RENDER_MODE_FULL);
 
-    build_placeholder_ui();
+    if (access("/usr/share/rockbase-lcdui/bitcoin_dashboard_800x480.png", R_OK) == 0 &&
+        access("/usr/share/rockbase-lcdui/boot-logo-800x480.png", R_OK) == 0) {
+        warm_file_cache("/usr/share/rockbase-lcdui/boot-logo-800x480.png");
+        warm_file_cache("/usr/share/rockbase-lcdui/bitcoin_dashboard_800x480.png");
+        build_dashboard_transition(disp);
+    } else {
+        build_placeholder_ui();
+    }
     lv_refr_now(disp);
 
-    std::printf("rockbase-lcdui: running 800x480 landscape, logo=%s\n", kLogoPath);
+    std::printf("rockbase-lcdui: running 800x480 landscape dashboard\n");
     std::fflush(stdout);
 
     while (!g_stop) {

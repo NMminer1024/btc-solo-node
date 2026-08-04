@@ -192,12 +192,15 @@ bool sysctl_pwr_set_power(sysctl_pwr_domain_e powerdomain, bool enable)
     return sysctl_pwr_set_pwr_reg(pwr_ctl_reg, pwr_sta_reg, enable);
 }
 #define BACKGROUND_BLACK_COLOR                            (0x808000)
-#define BACKGROUND_PINK_COLOR                             (0xffffff)
+#ifndef CONFIG_K230_ROCKBASE_LOGO_BG_COLOR
+#define CONFIG_K230_ROCKBASE_LOGO_BG_COLOR                BACKGROUND_BLACK_COLOR
+#endif
+#define BACKGROUND_LOGO_COLOR                             CONFIG_K230_ROCKBASE_LOGO_BG_COLOR
 unsigned long k230_display_logo_get_pic_mem_addr(void)
 {
     return env_get_bootm_size(); //预留1M 给logo；
 }
-int _k230_display_logo_load_pic()
+int _k230_display_logo_load_pic(void)
 {
     char cmd[128];
     unsigned long add = k230_display_logo_get_pic_mem_addr();
@@ -219,7 +222,7 @@ int k230_display_logo(void)
 #ifdef CONFIG_K230_BARE_DISP_LOGO_DF
     info = (k_connector_info){
         0,
-        BACKGROUND_PINK_COLOR,
+        BACKGROUND_LOGO_COLOR,
         10,
         23,
         1,
@@ -234,7 +237,7 @@ int k230_display_logo(void)
 #elif defined(CONFIG_K230_BARE_DISP_LOGO_ILI9881)
     info = (k_connector_info){
         0,
-        BACKGROUND_PINK_COLOR,
+        BACKGROUND_LOGO_COLOR,
         10,
         7,
         1,
@@ -249,7 +252,7 @@ int k230_display_logo(void)
 #else
     info = (k_connector_info){
         0,
-        BACKGROUND_PINK_COLOR,
+        BACKGROUND_LOGO_COLOR,
         10,
         14,
         1,

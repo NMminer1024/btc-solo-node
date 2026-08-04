@@ -5,14 +5,13 @@
 
 case "$1" in
 start)
-	[ -x /usr/bin/vo_init ] || exit 0
-	/usr/bin/vo_init >/dev/null 2>&1 || true
+	# U-Boot owns the boot logo. Do not clear or reinitialize the panel here.
+	exit 0
 	;;
 stop)
 	;;
 restart|reload)
-	[ -x /usr/bin/vo_init ] || exit 0
-	/usr/bin/vo_init >/dev/null 2>&1 || true
+	exit 0
 	;;
 *)
 	echo "Usage: $0 {start|stop|restart}"

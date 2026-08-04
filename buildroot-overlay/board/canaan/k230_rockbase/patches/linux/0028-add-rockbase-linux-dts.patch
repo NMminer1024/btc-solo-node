@@ -187,7 +187,7 @@ inherits runtime hardware description from CanMV v3.
 +};
 --- /dev/null
 +++ b/arch/riscv/boot/dts/canaan/k230-rockbase-2g-lcd.dts
-@@ -0,0 +1,19 @@
+@@ -0,0 +1,23 @@
 +// SPDX-License-Identifier: GPL-2.0 OR MIT
 +/*
 + * RockBase K230 2G Linux DTS.
@@ -207,10 +207,19 @@ inherits runtime hardware description from CanMV v3.
 +		reg = <0x0 0x0 0x0 0x80000000>;
 +	};
 +};
++
++&vo {
++	background = <0x808000>;
++};
++
++&lcd {
++	/delete-property/ dsi_reset-gpios;
++	/delete-property/ backlight_gpio-gpios;
++};
 
 --- /dev/null
 +++ b/arch/riscv/boot/dts/canaan/k230-rockbase-lcd.dts
-@@ -0,0 +1,145 @@
+@@ -0,0 +1,148 @@
 +// SPDX-License-Identifier: GPL-2.0 OR MIT
 +/*
 + * Copyright (C) 2024 Yangyu Chen <cyy@cyyself.name>
@@ -324,8 +333,16 @@ inherits runtime hardware description from CanMV v3.
 +
 +
 +&lcd {
-+	dsi_reset-gpios = <&gpio0_ports 22 GPIO_ACTIVE_HIGH>;
-+	backlight_gpio-gpios = <&gpio0_ports 25 GPIO_ACTIVE_HIGH>;
++	/*
++	 * U-Boot initializes the panel and backlight. Do not let Linux reset
++	 * the display during DRM probe, otherwise the boot logo blanks before
++	 * user-space draws the dashboard.
++	 */
++	/delete-property/ dsi_reset-gpios;
++	/delete-property/ backlight_gpio-gpios;
++};
++&vo {
++	background = <0x808000>;
 +};
 +&mmc_sd0 {
 +	status = "okay";

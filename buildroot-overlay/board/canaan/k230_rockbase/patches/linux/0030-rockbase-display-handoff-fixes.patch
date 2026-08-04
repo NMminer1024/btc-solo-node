@@ -1,0 +1,31 @@
+From: RockBase SDK <dev@rockbase.local>
+Subject: [PATCH] drm: canaan: fix Rockbase display handoff edges
+
+Use the board-provided VO background instead of hard-coded white, and
+apply the upstream vertical-edge fix so the active area covers the full
+panel without exposing a one-pixel background strip.
+
+---
+ drivers/gpu/drm/canaan/canaan_vo.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+--- a/drivers/gpu/drm/canaan/canaan_vo.c
++++ b/drivers/gpu/drm/canaan/canaan_vo.c
+@@ -632,7 +632,7 @@ static void canaan_vo_set_timing(struct
+ 
+ 	// set yzone
+ 	reg = 0;
+-	reg = (vbp + 1) + (((vact + (vbp + 1)) - 1) << 16);
++	reg = vbp + (((vact + vbp) - 1) << 16);
+ 	canaan_vo_write(vo, VO_DISP_YZONE_CTL, reg);
+ 
+ 	// set total size
+@@ -660,7 +660,7 @@ void canaan_vo_enable_crtc(struct canaan
+ 	canaan_vo_set_timing(vo, adjusted_mode);
+ 	// set background
+ 	canaan_vo_write(vo, VO_DISP_BACKGROUND,
+-			0xffffff); // enalbe remap  0x77f8437
++			vo->background); // enalbe remap  0x77f8437
+ 	// enable vo
+ 	canaan_vo_write(vo, VO_REG_LOAD_CTL, 0x11);
+ }

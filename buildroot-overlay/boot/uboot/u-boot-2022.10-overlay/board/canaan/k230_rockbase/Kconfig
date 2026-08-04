@@ -44,4 +44,34 @@ config ROCKBASE_01STUDIO_2G_HW
     help
         Use the 01Studio SDIO boot path and Wi-Fi reset path while keeping
         the Rockbase image profile and product stack.
+
+config K230_ROCKBASE_1G_LCD_RESET_GPIO
+    int "Rockbase 1G LCD reset GPIO"
+    default 24
+    depends on !ROCKBASE_01STUDIO_2G_HW
+
+config K230_ROCKBASE_1G_LCD_BACKLIGHT_GPIO
+    int "Rockbase 1G LCD backlight GPIO"
+    default 25
+    depends on !ROCKBASE_01STUDIO_2G_HW
+
+config K230_ROCKBASE_2G_LCD_RESET_GPIO
+    int "Rockbase 2G LCD reset GPIO"
+    default 24
+    depends on ROCKBASE_01STUDIO_2G_HW
+
+config K230_ROCKBASE_2G_LCD_BACKLIGHT_GPIO
+    int "Rockbase 2G LCD backlight GPIO"
+    default 25
+    depends on ROCKBASE_01STUDIO_2G_HW
+
+config K230_ROCKBASE_LCD_BACKLIGHT_FADE_MS
+    int "Rockbase LCD backlight fade time in milliseconds"
+    default 1000
+
+config K230_ROCKBASE_LOGO_BG_COLOR
+    hex "Rockbase U-Boot logo background color"
+    default 0x808000
+    help
+        K230 VO background color in YUV-packed format. 0x808000 is black.
 endif
