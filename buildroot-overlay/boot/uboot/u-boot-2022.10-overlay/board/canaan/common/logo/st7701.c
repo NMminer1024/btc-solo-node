@@ -33,10 +33,6 @@
 #define ROCKBASE_LCD_BACKLIGHT_GPIO CONFIG_K230_ROCKBASE_1G_LCD_BACKLIGHT_GPIO
 #endif
 
-#ifndef CONFIG_K230_ROCKBASE_LCD_BACKLIGHT_FADE_MS
-#define CONFIG_K230_ROCKBASE_LCD_BACKLIGHT_FADE_MS 1000
-#endif
-
 static void rockbase_lcd_gpio_set(int pin, char value)
 {
     k230_gpio('o', pin, &value);
@@ -46,34 +42,6 @@ static void rockbase_lcd_gpio_set(int pin, char value)
 static void rockbase_lcd_backlight_set(char value)
 {
     rockbase_lcd_gpio_set(ROCKBASE_LCD_BACKLIGHT_GPIO, value);
-}
-
-static void rockbase_lcd_backlight_fade_in(void)
-{
-    const int steps = 20;
-    const int period_us = 1000;
-    const int step_ms = CONFIG_K230_ROCKBASE_LCD_BACKLIGHT_FADE_MS / steps;
-    int step;
-
-    for (step = 0; step <= steps; ++step) {
-        int cycles = (step_ms * 1000) / period_us;
-        int on_us = (period_us * step) / steps;
-        int off_us = period_us - on_us;
-        int cycle;
-
-        for (cycle = 0; cycle < cycles; ++cycle) {
-            if (on_us > 0) {
-                rockbase_lcd_backlight_set(1);
-                udelay(on_us);
-            }
-            if (off_us > 0) {
-                rockbase_lcd_backlight_set(0);
-                udelay(off_us);
-            }
-        }
-    }
-
-    rockbase_lcd_backlight_set(1);
 }
 
 static void st7701_hardware_init(void)
@@ -874,9 +842,8 @@ int st7701_init(k_connector_info *info)
 
     ret |= st7701_vo_resolution_init(&info->resolution, info->bg_color, info->intr_line);
 
-	// kd_vo_set_layer(info, 320, 240, 0 , 0 , K_ROTATION_90, 0x13000000);
-	vo_layer1_test(info);
-	rockbase_lcd_backlight_fade_in();
+	/* Linux owns boot artwork and backlight fade-in. Keep U-Boot dark. */
+	rockbase_lcd_backlight_set(0);
 
     return ret;
 }

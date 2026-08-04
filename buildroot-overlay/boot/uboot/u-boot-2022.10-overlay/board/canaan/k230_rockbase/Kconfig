@@ -65,12 +65,8 @@ config K230_ROCKBASE_2G_LCD_BACKLIGHT_GPIO
     default 25
     depends on ROCKBASE_01STUDIO_2G_HW
 
-config K230_ROCKBASE_LCD_BACKLIGHT_FADE_MS
-    int "Rockbase LCD backlight fade time in milliseconds"
-    default 1000
-
-config K230_ROCKBASE_LOGO_BG_COLOR
-    hex "Rockbase U-Boot logo background color"
+config K230_ROCKBASE_DISPLAY_BG_COLOR
+    hex "Rockbase U-Boot display background color"
     default 0x808000
     help
         K230 VO background color in YUV-packed format. 0x808000 is black.

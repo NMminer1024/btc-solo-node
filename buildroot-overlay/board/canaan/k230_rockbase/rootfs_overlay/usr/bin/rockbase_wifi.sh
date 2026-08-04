@@ -6,6 +6,8 @@ WIFI_WPA_CONF=${WIFI_WPA_CONF:-/tmp/rockbase-wpa_supplicant.conf}
 WIFI_STATE_FILE=${WIFI_STATE_FILE:-/tmp/rockbase-wifi-state.conf}
 WIFI_SCAN_CACHE=${WIFI_SCAN_CACHE:-/tmp/rockbase-wifi-scan.cache}
 WIFI_SCAN_CACHE_TTL=${WIFI_SCAN_CACHE_TTL:-15}
+WIFI_ASSOC_TIMEOUT=${WIFI_ASSOC_TIMEOUT:-25}
+WIFI_DHCP_TRIES=${WIFI_DHCP_TRIES:-12}
 
 wifi_shell_quote() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
@@ -272,11 +274,18 @@ wifi_start_service() {
   killall wpa_supplicant 2>/dev/null || true
   sleep 1
   wpa_supplicant -D nl80211 -i "$WLAN_DEV" -c "$WIFI_WPA_CONF" -B >/dev/null 2>&1 || return 1
-  sleep 2
+
+  i=0
+  while [ "$i" -lt "$WIFI_ASSOC_TIMEOUT" ]; do
+    wifi_current_status
+    [ "$WIFI_CONNECTED_STATE" = "COMPLETED" ] && break
+    sleep 1
+    i=$((i + 1))
+  done
 
   if command -v udhcpc >/dev/null 2>&1; then
     killall udhcpc 2>/dev/null || true
-    udhcpc -i "$WLAN_DEV" -q -n -t 8 >/dev/null 2>&1 || true
+    udhcpc -i "$WLAN_DEV" -q -n -t "$WIFI_DHCP_TRIES" >/dev/null 2>&1 || true
   fi
 
   wifi_current_status
@@ -285,7 +294,8 @@ wifi_start_service() {
     return 0
   fi
 
-  printf '[rockbase_wifi] connect failed: state=%s ssid="%s" ip=%s\n' "$WIFI_CONNECTED_STATE" "$WIFI_CONNECTED_SSID" "$WIFI_CONNECTED_IP"
+  printf '[rockbase_wifi] connect failed: state=%s ssid="%s" ip=%s assoc_timeout=%ss dhcp_tries=%s\n' \
+    "$WIFI_CONNECTED_STATE" "$WIFI_CONNECTED_SSID" "$WIFI_CONNECTED_IP" "$WIFI_ASSOC_TIMEOUT" "$WIFI_DHCP_TRIES"
   return 1
 }
 

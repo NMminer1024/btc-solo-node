@@ -4,8 +4,6 @@
 #include <sysctl.h>
 #include "linux/delay.h"
 #include "display_logo.h"
-#include "image.h"
-#include "cpu_func.h"
 typedef struct
 {
     volatile uint32_t cpu0_pwr_tim;         /* 0x00 */
@@ -192,27 +190,12 @@ bool sysctl_pwr_set_power(sysctl_pwr_domain_e powerdomain, bool enable)
     return sysctl_pwr_set_pwr_reg(pwr_ctl_reg, pwr_sta_reg, enable);
 }
 #define BACKGROUND_BLACK_COLOR                            (0x808000)
-#ifndef CONFIG_K230_ROCKBASE_LOGO_BG_COLOR
-#define CONFIG_K230_ROCKBASE_LOGO_BG_COLOR                BACKGROUND_BLACK_COLOR
+#ifndef CONFIG_K230_ROCKBASE_DISPLAY_BG_COLOR
+#define CONFIG_K230_ROCKBASE_DISPLAY_BG_COLOR             BACKGROUND_BLACK_COLOR
 #endif
-#define BACKGROUND_LOGO_COLOR                             CONFIG_K230_ROCKBASE_LOGO_BG_COLOR
+#define BACKGROUND_DISPLAY_COLOR                          CONFIG_K230_ROCKBASE_DISPLAY_BG_COLOR
 unsigned long k230_display_logo_get_pic_mem_addr(void)
 {
-    return env_get_bootm_size(); //预留1M 给logo；
-}
-int _k230_display_logo_load_pic(void)
-{
-    char cmd[128];
-    unsigned long add = k230_display_logo_get_pic_mem_addr();
-    unsigned long size = 0x100000;
-
-    sprintf(cmd, "ext4load mmc ${mmc_boot_dev_num}:1 0x1000000 /logo.yuv ");
-    printf("cmd=%s\n", cmd);
-    run_command(cmd, 0);
-
-    size = env_get_ulong("filesize", 16,0x100000);
-    memcpy((void*)add, (void*)0x1000000, size);
-    flush_cache(add, ROUND(size, CONFIG_SYS_CACHELINE_SIZE));//
     return 0;
 }
 int k230_display_logo(void)
@@ -222,7 +205,7 @@ int k230_display_logo(void)
 #ifdef CONFIG_K230_BARE_DISP_LOGO_DF
     info = (k_connector_info){
         0,
-        BACKGROUND_LOGO_COLOR,
+        BACKGROUND_DISPLAY_COLOR,
         10,
         23,
         1,
@@ -237,7 +220,7 @@ int k230_display_logo(void)
 #elif defined(CONFIG_K230_BARE_DISP_LOGO_ILI9881)
     info = (k_connector_info){
         0,
-        BACKGROUND_LOGO_COLOR,
+        BACKGROUND_DISPLAY_COLOR,
         10,
         7,
         1,
@@ -252,7 +235,7 @@ int k230_display_logo(void)
 #else
     info = (k_connector_info){
         0,
-        BACKGROUND_LOGO_COLOR,
+        BACKGROUND_DISPLAY_COLOR,
         10,
         14,
         1,
@@ -263,8 +246,6 @@ int k230_display_logo(void)
         { 39600, 475200, 600, 480, 20, 20, 80, 1100, 800, 10, 70, 220 },
     };
 #endif
-
-    _k230_display_logo_load_pic();
 
     sysctl_pwr_set_power(SYSCTL_PD_DISP, true);
     st7701_init(&info);
@@ -286,8 +267,8 @@ static int do_k230_logo(struct cmd_tbl *cmdtp, int flag, int argc, char *const a
 
 U_BOOT_CMD(
 	k230_logo, CONFIG_SYS_MAXARGS, 0, do_k230_logo,
-	"k230 logo",
-	"k230 logo"
+	"k230 display init",
+	"k230 display init"
 );
 
 /*

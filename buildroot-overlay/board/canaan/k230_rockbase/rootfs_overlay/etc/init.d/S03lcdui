@@ -23,6 +23,12 @@ start_service() {
 	mkdir -p "$(dirname "${LOGFILE}")"
 	"${DAEMON}" >>"${LOGFILE}" 2>&1 &
 	echo $! > "${PIDFILE}"
+	sleep 1
+	if ! is_running; then
+		echo "rockbase-lcdui exited during startup" >>"${LOGFILE}"
+		tail -n 20 "${LOGFILE}" 2>/dev/null
+		return 1
+	fi
 }
 
 stop_service() {
