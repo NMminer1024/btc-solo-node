@@ -8,6 +8,8 @@ WIFI_SCAN_CACHE=${WIFI_SCAN_CACHE:-/tmp/rockbase-wifi-scan.cache}
 WIFI_SCAN_CACHE_TTL=${WIFI_SCAN_CACHE_TTL:-15}
 WIFI_ASSOC_TIMEOUT=${WIFI_ASSOC_TIMEOUT:-25}
 WIFI_DHCP_TRIES=${WIFI_DHCP_TRIES:-12}
+WIFI_LATE_WATCH_TIMEOUT=${WIFI_LATE_WATCH_TIMEOUT:-90}
+WIFI_DHCP_LOG=${WIFI_DHCP_LOG:-/tmp/rockbase-wifi-udhcpc.log}
 
 wifi_shell_quote() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
@@ -19,6 +21,12 @@ wifi_json_escape() {
 
 wifi_json_str() {
   printf '"%s"' "$(wifi_json_escape "$1")"
+}
+
+wifi_console_log() {
+  line="[rockbase_wifi] $*"
+  printf '%s\n' "$line" >>/tmp/rockbase-wifi.log 2>/dev/null || true
+  printf '%s\n' "$line" >/dev/console 2>/dev/null || printf '%s\n' "$line"
 }
 
 wifi_write_state() {
@@ -121,7 +129,12 @@ wifi_current_status() {
     [ -n "$value" ] && WIFI_CONNECTED_SSID="$value"
   fi
 
-  [ -n "$WIFI_CONNECTED_IP" ] || WIFI_CONNECTED_IP=$(wifi_detect_ip)
+  if [ "$WIFI_CONNECTED_IP" = "-" ]; then
+    WIFI_CONNECTED_IP=$(wifi_detect_ip)
+  fi
+  if [ "$WIFI_CONNECTED_STATE" = "disconnected" ] && [ "$WIFI_CONNECTED_SSID" != "-" ] && [ "$WIFI_CONNECTED_IP" != "-" ]; then
+    WIFI_CONNECTED_STATE="COMPLETED"
+  fi
 }
 
 wifi_scan_cache_valid() {
@@ -245,7 +258,12 @@ wifi_write_wpa_conf() {
   mkdir -p "$(dirname "$WIFI_WPA_CONF")" 2>/dev/null || true
 
   if [ -n "$WIFI_PASS" ]; then
-    wpa_passphrase "$WIFI_SSID" "$WIFI_PASS" 2>/dev/null | sed 's/#psk.*/scan_ssid=1/g' >"$WIFI_WPA_CONF" || return 1
+    {
+      echo "ctrl_interface=/var/run/wpa_supplicant"
+      echo "ap_scan=1"
+      echo
+      wpa_passphrase "$WIFI_SSID" "$WIFI_PASS" 2>/dev/null | sed 's/#psk.*/scan_ssid=1/g'
+    } >"$WIFI_WPA_CONF" || return 1
   else
     cat >"$WIFI_WPA_CONF" <<EOF
 ctrl_interface=/var/run/wpa_supplicant
@@ -260,6 +278,46 @@ EOF
   fi
 
   chmod 600 "$WIFI_WPA_CONF" 2>/dev/null || true
+}
+
+wifi_run_dhcp() {
+  command -v udhcpc >/dev/null 2>&1 || return 0
+  killall udhcpc 2>/dev/null || true
+  udhcpc -i "$WLAN_DEV" -q -n -t "$WIFI_DHCP_TRIES" >"$WIFI_DHCP_LOG" 2>&1
+}
+
+wifi_start_late_watcher() {
+  expected_ssid=$1
+  (
+    elapsed=0
+    last_state=""
+    wifi_console_log "connect pending: watching SSID \"$expected_ssid\" on $WLAN_DEV for ${WIFI_LATE_WATCH_TIMEOUT}s"
+
+    while [ "$elapsed" -lt "$WIFI_LATE_WATCH_TIMEOUT" ]; do
+      sleep 2
+      elapsed=$((elapsed + 2))
+      wifi_current_status
+
+      if [ "$WIFI_CONNECTED_STATE" != "$last_state" ]; then
+        wifi_console_log "late state=${WIFI_CONNECTED_STATE} ssid=\"${WIFI_CONNECTED_SSID}\" ip=${WIFI_CONNECTED_IP} elapsed=${elapsed}s"
+        last_state="$WIFI_CONNECTED_STATE"
+      fi
+
+      if [ "$WIFI_CONNECTED_STATE" = "COMPLETED" ] && [ "$WIFI_CONNECTED_IP" = "-" ]; then
+        wifi_console_log "late associated SSID \"${WIFI_CONNECTED_SSID}\", retrying DHCP"
+        wifi_run_dhcp || true
+        wifi_current_status
+      fi
+
+      if [ "$WIFI_CONNECTED_STATE" = "COMPLETED" ] || [ "$WIFI_CONNECTED_IP" != "-" ]; then
+        wifi_console_log "late connected SSID \"${WIFI_CONNECTED_SSID}\", IP ${WIFI_CONNECTED_IP}, elapsed=${elapsed}s"
+        exit 0
+      fi
+    done
+
+    wifi_current_status
+    wifi_console_log "late connect timeout: state=${WIFI_CONNECTED_STATE} ssid=\"${WIFI_CONNECTED_SSID}\" ip=${WIFI_CONNECTED_IP} elapsed=${WIFI_LATE_WATCH_TIMEOUT}s"
+  ) >/dev/null 2>&1 &
 }
 
 wifi_start_service() {
@@ -283,10 +341,7 @@ wifi_start_service() {
     i=$((i + 1))
   done
 
-  if command -v udhcpc >/dev/null 2>&1; then
-    killall udhcpc 2>/dev/null || true
-    udhcpc -i "$WLAN_DEV" -q -n -t "$WIFI_DHCP_TRIES" >/dev/null 2>&1 || true
-  fi
+  wifi_run_dhcp || true
 
   wifi_current_status
   if [ "$WIFI_CONNECTED_STATE" = "COMPLETED" ] || [ "$WIFI_CONNECTED_IP" != "-" ]; then
@@ -294,9 +349,11 @@ wifi_start_service() {
     return 0
   fi
 
-  printf '[rockbase_wifi] connect failed: state=%s ssid="%s" ip=%s assoc_timeout=%ss dhcp_tries=%s\n' \
-    "$WIFI_CONNECTED_STATE" "$WIFI_CONNECTED_SSID" "$WIFI_CONNECTED_IP" "$WIFI_ASSOC_TIMEOUT" "$WIFI_DHCP_TRIES"
-  return 1
+  printf '[rockbase_wifi] connect pending: state=%s ssid="%s" ip=%s assoc_timeout=%ss dhcp_tries=%s late_watch=%ss\n' \
+    "$WIFI_CONNECTED_STATE" "$WIFI_CONNECTED_SSID" "$WIFI_CONNECTED_IP" \
+    "$WIFI_ASSOC_TIMEOUT" "$WIFI_DHCP_TRIES" "$WIFI_LATE_WATCH_TIMEOUT"
+  wifi_start_late_watcher "$WIFI_SSID"
+  return 2
 }
 
 wifi_stop_service() {

@@ -26,6 +26,7 @@ constexpr uint32_t kFramePixels = kUiWidth * kUiHeight;
 constexpr const char* kBacklightGpioChip = "/dev/gpiochip0";
 constexpr uint32_t kBacklightGpioLine = 25;
 constexpr uint32_t kBacklightFadeMs = 1000;
+constexpr uint32_t kBootLogoHoldMs = 3000;
 constexpr uint32_t kDashboardFadeMs = 500;
 constexpr const char* kBootLogoRawPath = "/usr/share/rockbase-lcdui/boot-logo-800x480.argb";
 constexpr const char* kDashboardRawPath = "/usr/share/rockbase-lcdui/bitcoin_dashboard_800x480.argb";
@@ -360,7 +361,7 @@ int main() {
         if (backlight_ready) {
             fade_backlight_in();
         }
-        usleep(120000);
+        usleep(kBootLogoHoldMs * 1000U);
         transition_to_dashboard(boot_logo, dashboard);
         paint_logical_frame(dashboard);
         commit_display_buffer();

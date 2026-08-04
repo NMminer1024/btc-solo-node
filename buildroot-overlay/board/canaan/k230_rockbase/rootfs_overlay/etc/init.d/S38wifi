@@ -9,8 +9,12 @@ LIB=/usr/bin/rockbase_wifi.sh
 case "$1" in
   start)
         printf "Starting WiFi: "
-        if wifi_start_service; then
+        wifi_start_service
+        rc=$?
+        if [ "$rc" = "0" ]; then
                 echo "OK"
+        elif [ "$rc" = "2" ]; then
+                echo "deferred"
         else
                 echo "FAIL"
                 exit 1
