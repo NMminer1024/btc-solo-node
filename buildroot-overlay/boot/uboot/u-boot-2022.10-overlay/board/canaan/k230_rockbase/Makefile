@@ -34,13 +34,13 @@ obj-$(CONFIG_ROCKBASE_V3_LPDDR4_2667) += gen_canmvv3_lpddr4_2667.o
 obj-$(CONFIG_ROCKBASE_V3_LPDDR4_3200) += gen_canmvv3_lpddr4_3200.o
 obj-$(CONFIG_ROCKBASE_LPDDR4_1600_WITHOUT_ODT) += gen_lpddr4_init_32_swap_1600_without_odt.o
 
-$(obj)/gen_canmvv3_lpddr4_2667.c: $(src)/../k230_canmv_01studio/lpddr4_init_32_swap_2667.c    $(srctree)/arch/riscv/cpu/k230/ddr.sh
+$(obj)/gen_canmvv3_lpddr4_2667.c: $(src)/lpddr4_init_32_swap_2667.c    $(srctree)/arch/riscv/cpu/k230/ddr.sh
 	($(srctree)/arch/riscv/cpu/k230/ddr.sh $< $@ 0x50000 0x53fff 0x54000 0x5433d  || exit 1)
 
-$(obj)/gen_canmvv3_lpddr4_3200.c: $(src)/../k230_canmv_01studio/lpddr4_init_32_swap_3200.c  $(srctree)/arch/riscv/cpu/k230/ddr_2d.sh
+$(obj)/gen_canmvv3_lpddr4_3200.c: $(src)/lpddr4_init_32_swap_3200.c  $(srctree)/arch/riscv/cpu/k230/ddr_2d.sh
 	($(srctree)/arch/riscv/cpu/k230/ddr_2d.sh $< $@ 0x50000 0x53fff 0x54000 0x5433d  0x542bd || exit 1)
 
-$(obj)/gen_lpddr4_init_32_swap_1600_without_odt.c: $(src)/../k230_canmv_01studio/lpddr4_init_32_swap_1600_without_odt.c    $(srctree)/arch/riscv/cpu/k230/ddr.sh
+$(obj)/gen_lpddr4_init_32_swap_1600_without_odt.c: $(src)/lpddr4_init_32_swap_1600_without_odt.c    $(srctree)/arch/riscv/cpu/k230/ddr.sh
 	($(srctree)/arch/riscv/cpu/k230/ddr.sh $< $@ 0x50000 0x53fff 0x54000 0x5433d  || exit 1)
 
 

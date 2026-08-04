@@ -79,9 +79,6 @@ get_image_last_name() {
         k230_evb_defconfig)
             canaan_site_name="EVB-K230"
             ;;
-        k230_canmv_01studio_defconfig)
-            canaan_site_name="CanMV-K230_01studio"
-            ;;
         *)
             canaan_site_name="${CONF%%_defconfig}"
             ;;

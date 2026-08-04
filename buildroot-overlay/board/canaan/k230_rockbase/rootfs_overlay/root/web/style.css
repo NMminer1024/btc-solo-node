@@ -1237,22 +1237,53 @@ textarea {
 }
 
 .miner-workers {
-  display: grid;
-  gap: 8px;
+  display: block;
   padding: 0 16px 16px;
+  overflow-x: auto;
+}
+
+.miner-worker-head,
+.miner-worker-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.35fr) repeat(4, minmax(78px, 0.6fr)) repeat(2, minmax(102px, 0.8fr)) minmax(102px, 0.8fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 940px;
+}
+
+.miner-worker-head {
+  padding: 0 12px 8px;
+  color: var(--muted);
+}
+
+.miner-worker-sort {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.miner-worker-sort:hover,
+.miner-worker-sort.is-active {
+  color: var(--brand);
 }
 
 .miner-worker-row {
-  display: grid;
-  grid-template-columns: 12px minmax(160px, 1.1fr) repeat(4, minmax(82px, 0.55fr));
-  align-items: center;
-  gap: 10px;
   padding: 10px 12px;
+  margin-bottom: 8px;
   border-radius: 14px;
   background: var(--panel);
   border: 1px solid var(--line);
   color: var(--muted);
-  overflow-x: auto;
 }
 
 .miner-worker-row strong {
@@ -1261,13 +1292,23 @@ textarea {
   text-overflow: ellipsis;
 }
 
+.miner-worker-name {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .miner-worker-row span {
   white-space: nowrap;
   font-size: 0.84rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .miner-worker-row-empty {
   display: block;
+  min-width: 0;
 }
 
 .miner-status-dot {

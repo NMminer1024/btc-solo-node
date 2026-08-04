@@ -34,8 +34,6 @@ gz_file_add_ver()
 		canaan_site_name="CanMV-K230_V1P0_P1";
 	elif [ "${CONF}" = "k230_evb_defconfig" ] ; then
 		canaan_site_name="EVB-K230";
-	elif [ "${CONF}" = "k230_canmv_01studio_defconfig" ] ; then
-		canaan_site_name="CanMV-K230_01studio";
 	elif [ "${CONF}" = "k230_canmv_lckfb_defconfig" ] ; then
 		canaan_site_name="CanMV-K230_LCKFB";
 	elif [ "${CONF}" = "k230_rockbase_defconfig" ] ; then
@@ -288,13 +286,24 @@ sync_image_outputs()
 {
 	local build_stamp
 	local export_dir
+	local exported_image
 	# 从 release_version 中提取首个 YYYYMMDD-HHMMSS 时间戳，保证每次导出落到新目录
 	build_stamp=$(grep -m1 ^sdk: "${TARGET_DIR}/etc/version/release_version" | grep -oE [0-9]{8}-[0-9]{6} | head -n1)
 	[ -z "$build_stamp" ] && build_stamp=$(date +%Y%m%d-%H%M%S)-$$
 	export_dir="${K230_IMAGE_OUT_DIR}/sysimage-sdcard-${build_stamp}"
+	exported_image="${export_dir}/sysimage-sdcard.img"
 	mkdir -p "${export_dir}"
-	cp --sparse=never -f "${BINARIES_DIR}/sysimage-sdcard.img" "${export_dir}/"
-	echo "exported flash image to ${export_dir}/sysimage-sdcard.img"
+	cp --sparse=never -f "${BINARIES_DIR}/sysimage-sdcard.img" "${exported_image}"
+	echo "exported flash image to ${exported_image}"
+
+	if [ "${K230_KEEP_WSL_IMAGES:-0}" != "1" ]; then
+		rm -f "${BINARIES_DIR}/sysimage-sdcard.img" "${BINARIES_DIR}/sysimage-sdcard.img.gz"
+		rm -f "${BINARIES_DIR}/rootfs.tar" "${BINARIES_DIR}"/rootfs.tar.*
+		if [ "${K230_KEEP_WSL_BLOCKDATA_IMAGE:-0}" != "1" ]; then
+			rm -f "${BINARIES_DIR}/blockdata.ext4"
+		fi
+		echo "removed WSL-side flash image from ${BINARIES_DIR}"
+	fi
 }
 
 gen_env_bin()
@@ -307,9 +316,6 @@ gen_env_bin()
 	cd  "${BINARIES_DIR}/";
 	local default_env_file=${env_dir}/default.env;
 
-	# if [ ${DTB} == "k230-canmv-01studio.dtb" ]; then
-	# 	default_env_file=${env_dir}/01studio.env;
-	# fi
 	# if [ ${DTB} == "k230-canmv.dtb" ]; then
 	# 	default_env_file=${env_dir}/k230_canmv.env;
 	# fi
