@@ -2,7 +2,8 @@
 
 DAEMON=/usr/bin/rockbase_serial_healthd.sh
 PIDFILE=/var/run/rockbase-serial-healthd.pid
-INTERVAL=${ROCKBASE_SERIAL_HEALTH_INTERVAL:-5}
+INTERVAL=${ROCKBASE_SERIAL_HEALTH_INTERVAL:-1}
+export TZ="${TZ:-CST-8}"
 
 is_running() {
     [ -f "${PIDFILE}" ] || return 1
@@ -22,6 +23,7 @@ start_service() {
     [ -w /proc/sys/kernel/hung_task_warnings ] && echo -1 >/proc/sys/kernel/hung_task_warnings
     [ -w /proc/sys/kernel/panic_on_oops ] && echo 1 >/proc/sys/kernel/panic_on_oops
     [ -w /proc/sys/kernel/panic ] && echo 10 >/proc/sys/kernel/panic
+    [ -w /proc/sys/kernel/sysrq ] && echo 1 >/proc/sys/kernel/sysrq
 
     "${DAEMON}" "${INTERVAL}" >/dev/null 2>&1 &
     echo $! > "${PIDFILE}"

@@ -2,6 +2,7 @@
 
 INTERVAL="${1:-10}"
 CONSOLE=/dev/console
+export TZ="${TZ:-CST-8}"
 
 log_console() {
     printf '[health] %s %s\n' "$(date '+%F %T')" "$*" >"${CONSOLE}" 2>/dev/null
@@ -97,6 +98,42 @@ tasks_line() {
     printf 'tasks=R%s/S%s/D%s/Z%s d_first=%s' "${r}" "${s}" "${d}" "${z}" "${dlist:--}"
 }
 
+watched_threads_line() {
+    out=""
+    count=0
+    for f in /proc/[0-9]*/stat; do
+        [ -r "${f}" ] || continue
+        pid="${f#/proc/}"
+        pid="${pid%/stat}"
+        comm="$(cat "/proc/${pid}/comm" 2>/dev/null)" || continue
+        case "${comm}" in
+            bitcoind|ckpool|rockbase-lcdui|RTW_*|jbd2/*|kworker*|flush-*)
+                ;;
+            *)
+                continue
+                ;;
+        esac
+
+        line="$(cat "${f}" 2>/dev/null)" || continue
+        rest="${line#*) }"
+        state="${rest%% *}"
+        wchan="$(cat "/proc/${pid}/wchan" 2>/dev/null)"
+        [ -n "${wchan}" ] || wchan="-"
+
+        if [ "${state}" = "D" ] || [ "${comm}" = "RTW_XMIT_THREAD" ] || [ "${comm}" = "bitcoind" ] || [ "${comm}" = "rockbase-lcdui" ]; then
+            item="${pid}:${comm}:${state}:${wchan}"
+            if [ -z "${out}" ]; then
+                out="${item}"
+            else
+                out="${out},${item}"
+            fi
+            count=$((count + 1))
+            [ "${count}" -ge 8 ] && break
+        fi
+    done
+    printf 'watch=%s' "${out:--}"
+}
+
 procs_line() {
     printf 'procs='
     for name in bitcoind ckpool rockbase-lcdui; do
@@ -112,6 +149,61 @@ net_line() {
     ipaddr="$(ip -4 addr show wlan0 2>/dev/null | awk '/inet / { print $2; exit }')"
     oper="$(cat /sys/class/net/wlan0/operstate 2>/dev/null)"
     printf 'wlan0=%s ip=%s' "${oper:-unknown}" "${ipaddr:--}"
+}
+
+read_irq_groups() {
+    awk '
+        {
+            line = tolower($0)
+            sum = 0
+            for (i = 2; i <= NF; i++) {
+                if ($i ~ /^[0-9]+$/) {
+                    sum += $i
+                }
+            }
+            if (line ~ /mmc|sdhci|sdio/) mmc += sum
+            if (line ~ /8189|rtl|rtw|wifi|wlan/) wifi += sum
+            if (line ~ /gpio/) gpio += sum
+            if (line ~ /i2c/) i2c += sum
+        }
+        END { printf "mmc %d\nwifi %d\ngpio %d\ni2c %d\n", mmc, wifi, gpio, i2c }' /proc/interrupts 2>/dev/null
+}
+
+read_softirqs() {
+    awk '
+        /^(NET_RX|NET_TX|BLOCK|TIMER|SCHED|RCU):/ {
+            name = $1
+            sub(":", "", name)
+            sum = 0
+            for (i = 2; i <= NF; i++) {
+                if ($i ~ /^[0-9]+$/) {
+                    sum += $i
+                }
+            }
+            printf "%s %d\n", name, sum
+        }' /proc/softirqs 2>/dev/null
+}
+
+metric_value() {
+    key="$1"
+    snapshot="$2"
+    printf '%s\n' "${snapshot}" | awk -v k="${key}" '$1 == k { print $2; found=1; exit } END { if (!found) print 0 }'
+}
+
+delta_metric_line() {
+    label="$1"
+    keys="$2"
+    prev="$3"
+    curr="$4"
+
+    printf '%s' "${label}"
+    for key in ${keys}; do
+        old="$(metric_value "${key}" "${prev}")"
+        new="$(metric_value "${key}" "${curr}")"
+        delta=$((new - old))
+        [ "${delta}" -lt 0 ] && delta=0
+        printf ' %s=+%s' "${key}" "${delta}"
+    done
 }
 
 root_dev="$(sed -n 's/.*root=\/dev\/\([^ ]*\).*/\1/p' /proc/cmdline)"
@@ -137,8 +229,10 @@ prev_block_r="${1:-0}"
 prev_block_w="${2:-0}"
 prev_block_io="${3:-0}"
 prev_block_wio="${4:-0}"
+prev_irq="$(read_irq_groups)"
+prev_softirq="$(read_softirqs)"
 
-log_console "start interval=${INTERVAL}s root=${root_dev} disk=${disk_dev} block=${block_dev}"
+log_console "start interval=${INTERVAL}s root=${root_dev} disk=${disk_dev} block=${block_dev} sysrq=$(cat /proc/sys/kernel/sysrq 2>/dev/null)"
 
 while :; do
     sleep "${INTERVAL}"
@@ -168,4 +262,11 @@ while :; do
     up="$(cut -d' ' -f1 /proc/uptime | cut -d. -f1)"
     log_console "uptime=${up}s load=${load} $(mem_line) $(vm_line) $(tasks_line) $(procs_line) $(net_line)"
     log_console "io ${disk_stats} | ${root_stats} | ${block_stats}"
+
+    curr_irq="$(read_irq_groups)"
+    curr_softirq="$(read_softirqs)"
+    log_console "$(delta_metric_line irq 'mmc wifi gpio i2c' "${prev_irq}" "${curr_irq}") $(delta_metric_line softirq 'NET_RX NET_TX BLOCK TIMER SCHED RCU' "${prev_softirq}" "${curr_softirq}")"
+    log_console "$(watched_threads_line)"
+    prev_irq="${curr_irq}"
+    prev_softirq="${curr_softirq}"
 done
