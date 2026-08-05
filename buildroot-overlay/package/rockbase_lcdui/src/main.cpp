@@ -62,7 +62,8 @@ struct TouchInput {
 struct TileRuntime {
     lv_obj_t* tileview = nullptr;
     lv_obj_t* active_label = nullptr;
-    lv_obj_t* clock_label = nullptr;
+    lv_obj_t* clock_time_label = nullptr;
+    lv_obj_t* clock_date_label = nullptr;
     lv_obj_t* bitcoin_ip_label = nullptr;
     lv_obj_t* bitcoin_sync = nullptr;
     lv_obj_t* bitcoin_progress = nullptr;
@@ -536,12 +537,12 @@ std::string ntp_label(const std::string& key) {
     return "NTP Unsynced";
 }
 
-std::string current_time_text() {
+std::string current_time_text(const char* fmt) {
     char buf[32];
     const time_t now = time(nullptr);
     tm local {};
     localtime_r(&now, &local);
-    std::strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &local);
+    std::strftime(buf, sizeof(buf), fmt, &local);
     return buf;
 }
 
@@ -911,15 +912,22 @@ void build_bitcoin_tile(lv_obj_t* tv) {
     const lv_color_t accent = lv_color_hex(spec.accent);
     lv_obj_t* tile = create_tile_base(tv, 0, spec);
 
-    g_tiles.clock_label = add_label(tile, "--", 538, 86, &lv_font_montserrat_16, lv_color_hex(0xf4efe2));
+    g_tiles.clock_time_label = add_label(tile, "--:--:--", 538, 26, &lv_font_montserrat_36, lv_color_hex(0xf4efe2));
+    lv_obj_set_width(g_tiles.clock_time_label, 220);
+    lv_obj_set_style_text_align(g_tiles.clock_time_label, LV_TEXT_ALIGN_LEFT, 0);
+    g_tiles.clock_date_label = add_label(tile, "----/--/--", 540, 72, &lv_font_montserrat_16, lv_color_hex(0x9aa6ac));
+    lv_obj_set_width(g_tiles.clock_date_label, 180);
+    lv_obj_set_style_text_align(g_tiles.clock_date_label, LV_TEXT_ALIGN_LEFT, 0);
     g_tiles.bitcoin_ip_label = add_label(tile, "IP --", 538, 112, &lv_font_montserrat_16, lv_color_hex(0xb7c2c8));
+    lv_obj_set_width(g_tiles.bitcoin_ip_label, 220);
+    lv_label_set_long_mode(g_tiles.bitcoin_ip_label, LV_LABEL_LONG_MODE_DOTS);
     g_tiles.bitcoin_sync = create_card(tile, 42, 142, 210, 102, "Sync", "--", accent);
-    g_tiles.bitcoin_progress = create_card(tile, 294, 142, 210, 102, "Progress", "--", accent);
-    g_tiles.bitcoin_height = create_card(tile, 546, 142, 210, 102, "Blocks / Headers", "--", accent);
-    g_tiles.bitcoin_peers = create_card(tile, 42, 276, 154, 100, "Peers", "--", accent);
-    g_tiles.bitcoin_difficulty = create_card(tile, 218, 276, 210, 100, "Difficulty", "--", accent);
-    g_tiles.bitcoin_rss = create_card(tile, 450, 276, 130, 100, "RSS", "--", accent);
-    g_tiles.bitcoin_block_date = create_card(tile, 602, 276, 154, 100, "Best Block", "--", accent);
+    g_tiles.bitcoin_progress = create_card(tile, 294, 142, 180, 102, "Progress", "--", accent);
+    g_tiles.bitcoin_height = create_card(tile, 516, 142, 240, 102, "Blocks / Headers", "--", accent);
+    g_tiles.bitcoin_peers = create_card(tile, 42, 276, 104, 100, "Peers", "--", accent);
+    g_tiles.bitcoin_difficulty = create_card(tile, 164, 276, 106, 100, "Difficulty", "--", accent);
+    g_tiles.bitcoin_rss = create_card(tile, 288, 276, 130, 100, "RSS", "--", accent);
+    g_tiles.bitcoin_block_date = create_card(tile, 436, 276, 320, 100, "Block Time", "--", accent);
 }
 
 void build_stratum_tile(lv_obj_t* tv) {
@@ -976,7 +984,8 @@ void tile_event_cb(lv_event_t* e) {
 }
 
 void refresh_clock_cb(lv_timer_t*) {
-    set_label(g_tiles.clock_label, current_time_text());
+    set_label(g_tiles.clock_time_label, current_time_text("%H:%M:%S"));
+    set_label(g_tiles.clock_date_label, current_time_text("%Y-%m-%d"));
 }
 
 void refresh_status_cb(lv_timer_t*) {
@@ -1044,7 +1053,7 @@ void build_tile_stage(lv_obj_t* screen) {
     build_system_tile(tv);
     build_network_tile(tv);
 
-    g_tiles.active_label = add_label(screen, "Bitcoind  1/4", 636, 36, &lv_font_montserrat_16, lv_color_hex(0xe9d6a6));
+    g_tiles.active_label = add_label(screen, "Bitcoind  1/4", 636, 438, &lv_font_montserrat_16, lv_color_hex(0xe9d6a6));
     lv_tileview_set_tile_by_index(tv, 0, 0, LV_ANIM_OFF);
     refresh_clock_cb(nullptr);
     refresh_status_cb(nullptr);
