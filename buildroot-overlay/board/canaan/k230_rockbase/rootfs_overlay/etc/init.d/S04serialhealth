@@ -19,8 +19,10 @@ start_service() {
     fi
 
     echo 8 4 1 7 >/proc/sys/kernel/printk 2>/dev/null || true
-    [ -w /proc/sys/kernel/hung_task_timeout_secs ] && echo 60 >/proc/sys/kernel/hung_task_timeout_secs
+    [ -w /proc/sys/kernel/hung_task_timeout_secs ] && echo 30 >/proc/sys/kernel/hung_task_timeout_secs
     [ -w /proc/sys/kernel/hung_task_warnings ] && echo -1 >/proc/sys/kernel/hung_task_warnings
+    [ -w /proc/sys/kernel/hung_task_all_cpu_backtrace ] && echo 1 >/proc/sys/kernel/hung_task_all_cpu_backtrace
+    [ -w /proc/sys/kernel/softlockup_all_cpu_backtrace ] && echo 1 >/proc/sys/kernel/softlockup_all_cpu_backtrace
     [ -w /proc/sys/kernel/panic_on_oops ] && echo 1 >/proc/sys/kernel/panic_on_oops
     [ -w /proc/sys/kernel/panic ] && echo 10 >/proc/sys/kernel/panic
     [ -w /proc/sys/kernel/sysrq ] && echo 1 >/proc/sys/kernel/sysrq

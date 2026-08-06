@@ -59,6 +59,22 @@ inherits runtime hardware description from CanMV v3.
 +		reg = <0x0 0x0 0x0 0x40000000>;
 +	};
 +
++	reserved-memory {
++		#address-cells = <2>;
++		#size-cells = <2>;
++		ranges;
++
++		ramoops@3fc00000 {
++			compatible = "ramoops";
++			reg = <0x0 0x3fc00000 0x0 0x400000>;
++			no-map;
++			record-size = <0x10000>;
++			console-size = <0x80000>;
++			pmsg-size = <0x10000>;
++			max-reason = <2>;
++		};
++	};
++
 +	sound {
 +		status                      = "okay";
 +		compatible                  = "canaan,k230-audio-inno";
@@ -187,7 +203,7 @@ inherits runtime hardware description from CanMV v3.
 +};
 --- /dev/null
 +++ b/arch/riscv/boot/dts/canaan/k230-rockbase-2g-lcd.dts
-@@ -0,0 +1,23 @@
+@@ -0,0 +1,44 @@
 +// SPDX-License-Identifier: GPL-2.0 OR MIT
 +/*
 + * RockBase K230 2G Linux DTS.
@@ -206,6 +222,22 @@ inherits runtime hardware description from CanMV v3.
 +		device_type = "memory";
 +		reg = <0x0 0x0 0x0 0x80000000>;
 +	};
++
++	reserved-memory {
++		#address-cells = <2>;
++		#size-cells = <2>;
++		ranges;
++
++		ramoops@7fc00000 {
++			compatible = "ramoops";
++			reg = <0x0 0x7fc00000 0x0 0x400000>;
++			no-map;
++			record-size = <0x10000>;
++			console-size = <0x80000>;
++			pmsg-size = <0x10000>;
++			max-reason = <2>;
++		};
++	};
 +};
 +
 +&vo {
@@ -216,10 +248,9 @@ inherits runtime hardware description from CanMV v3.
 +	/delete-property/ dsi_reset-gpios;
 +	/delete-property/ backlight_gpio-gpios;
 +};
-
 --- /dev/null
 +++ b/arch/riscv/boot/dts/canaan/k230-rockbase-lcd.dts
-@@ -0,0 +1,148 @@
+@@ -0,0 +1,199 @@
 +// SPDX-License-Identifier: GPL-2.0 OR MIT
 +/*
 + * Copyright (C) 2024 Yangyu Chen <cyy@cyyself.name>
@@ -227,6 +258,7 @@ inherits runtime hardware description from CanMV v3.
 +
 +#include "k230.dtsi"
 +#include "display-st7701-480x800.dtsi"
++#include <dt-bindings/gpio/gpio.h>
 +#include <dt-bindings/leds/common.h>
 +
 +/ {
@@ -272,6 +304,22 @@ inherits runtime hardware description from CanMV v3.
 +		reg = <0x0 0x0 0x0 0x40000000>;
 +	};
 +
++	reserved-memory {
++		#address-cells = <2>;
++		#size-cells = <2>;
++		ranges;
++
++		ramoops@3fc00000 {
++			compatible = "ramoops";
++			reg = <0x0 0x3fc00000 0x0 0x400000>;
++			no-map;
++			record-size = <0x10000>;
++			console-size = <0x80000>;
++			pmsg-size = <0x10000>;
++			max-reason = <2>;
++		};
++	};
++
 +	sound {
 +		status                      = "okay";
 +		compatible                  = "canaan,k230-audio-inno";
@@ -303,6 +351,10 @@ inherits runtime hardware description from CanMV v3.
 +
 +&i2c3 {
 +	status = "okay";
++	clock-frequency = <100000>;
++	pinctrl-names = "default";
++	pinctrl-0 = <&touch_i2c3_pins>;
++
 +	touchscreen@38 {
 +		compatible = "edt,edt-ft5306";
 +		reg = <0x38>;
@@ -311,6 +363,47 @@ inherits runtime hardware description from CanMV v3.
 +		interrupts = <23 IRQ_TYPE_EDGE_FALLING>;
 +		touchscreen-size-x = <480>;
 +		touchscreen-size-y = <800>;
++	};
++};
++
++&iomux {
++	touch_i2c3_pins: touch_i2c3_pins {
++		i2c3_alt_scl {
++			pins = K230_IO36;
++			function = K230_IO36_GPIO36;
++			bias-pull-up;
++			input-enable;
++			output-enable;
++			drive-strength = <7>;
++			input-schmitt;
++		};
++		i2c3_alt_sda {
++			pins = K230_IO37;
++			function = K230_IO37_GPIO37;
++			bias-pull-up;
++			input-enable;
++			output-enable;
++			drive-strength = <7>;
++			input-schmitt;
++		};
++		i2c3_scl {
++			pins = K230_IO44;
++			function = K230_IO44_I2C3_SCL;
++			bias-pull-up;
++			input-enable;
++			output-enable;
++			drive-strength = <8>;
++			input-schmitt;
++		};
++		i2c3_sda {
++			pins = K230_IO45;
++			function = K230_IO45_I2C3_SDA;
++			bias-pull-up;
++			input-enable;
++			output-enable;
++			drive-strength = <8>;
++			input-schmitt;
++		};
 +	};
 +};
 +
