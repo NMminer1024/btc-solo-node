@@ -14,17 +14,20 @@
 #include <string>
 #include <sys/ioctl.h>
 #include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
 #include <vector>
 
 #include <thead.h>
 
 #include "lvgl/lvgl.h"
+#include "lvgl/draw/lv_snapshot.h"
 
 namespace {
 
 constexpr uint32_t kUiWidth = 800;
 constexpr uint32_t kUiHeight = 480;
+constexpr uint32_t kPageSwitchThresholdPx = kUiWidth / 10U;
 constexpr uint32_t kFramePixels = kUiWidth * kUiHeight;
 constexpr uint32_t kTileCount = 4;
 constexpr const char* kBacklightGpioChip = "/dev/gpiochip0";
@@ -32,6 +35,13 @@ constexpr uint32_t kBacklightGpioLine = 25;
 constexpr uint32_t kBacklightFadeMs = 1000;
 constexpr uint32_t kBootLogoHoldMs = 3000;
 constexpr uint32_t kDashboardFadeMs = 500;
+constexpr uint32_t kTouchReadPeriodMs = 1;
+constexpr uint32_t kTileAnimMs = 75;
+constexpr uint32_t kMaxLvSleepUs = 2000;
+constexpr uint32_t kMinLvSleepUs = 500;
+constexpr uint32_t kReleaseRedrawBoostMs = 220;
+constexpr uint32_t kDisplayRefrPeriodMs = 10;
+constexpr uint32_t kPresentIntervalMs = 20;
 constexpr const char* kBootLogoRawPath = "/usr/share/rockbase-lcdui/boot-logo-800x480.argb";
 constexpr const char* kDashboardRawPath = "/usr/share/rockbase-lcdui/bitcoin_dashboard_800x480.argb";
 constexpr const char* kStatusCachePath = "/tmp/status-api.json";
@@ -39,6 +49,9 @@ volatile sig_atomic_t g_stop = 0;
 display* g_display = nullptr;
 display_plane* g_plane = nullptr;
 display_buffer* g_buffer = nullptr;
+display_buffer* g_display_buffers[3] {};
+uint32_t g_render_buffer_index = 0;
+uint32_t g_last_present_ms = 0;
 int g_backlight_fd = -1;
 void* g_lv_draw_buf = nullptr;
 
@@ -61,12 +74,15 @@ struct TouchInput {
 
 struct TileRuntime {
     lv_obj_t* tileview = nullptr;
-    lv_obj_t* active_label = nullptr;
+    lv_obj_t* page[kTileCount] {};
+    lv_draw_buf_t* page_snapshot[kTileCount] {};
+    lv_obj_t* page_image[kTileCount] {};
     lv_obj_t* clock_time_label = nullptr;
     lv_obj_t* clock_date_label = nullptr;
     lv_obj_t* bitcoin_ip_label = nullptr;
     lv_obj_t* bitcoin_sync = nullptr;
     lv_obj_t* bitcoin_progress = nullptr;
+    lv_obj_t* bitcoin_height_title = nullptr;
     lv_obj_t* bitcoin_height = nullptr;
     lv_obj_t* bitcoin_peers = nullptr;
     lv_obj_t* bitcoin_difficulty = nullptr;
@@ -104,6 +120,11 @@ struct DashboardData {
     std::string progress_ring = "-";
     std::string blocks_fmt = "-";
     std::string headers_fmt = "-";
+    std::string ibd_stage_key = "-";
+    std::string ibd_stage_label = "-";
+    std::string ibd_stage_detail = "-";
+    std::string ibd_stage_height = "-";
+    std::string ibd_stage_pct = "";
     std::string best_block_date = "-";
     std::string btc_context = "-";
     std::string connections = "-";
@@ -143,11 +164,26 @@ TouchInput g_touch;
 TileRuntime g_tiles;
 RawImage g_boot_logo;
 RawImage g_dashboard_bg;
+bool g_tile_snap_pending = false;
+static uint32_t* g_tile_cache[kTileCount] = {};  // pre-rendered physical frames per tile
+bool g_scroll_blend_active = false;
+uint32_t g_active_page = 0;
+uint32_t g_swipe_start_page = 0;
+uint32_t g_release_page = 0;
+int32_t g_swipe_start_x = 0;
+int32_t g_swipe_current_x = 0;
+uint32_t g_force_redraw_until_ms = 0;
+bool g_page_cache_dirty[kTileCount] {};
+uint32_t g_last_page_cache_refresh_ms = 0;
+uint32_t g_fps_window_start_ms = 0;
+uint32_t g_fps_frame_count = 0;
+
+void set_active_page(uint32_t page);
 
 uint32_t tick_ms() {
-    timeval tv {};
-    gettimeofday(&tv, nullptr);
-    return static_cast<uint32_t>(tv.tv_sec * 1000ULL + tv.tv_usec / 1000ULL);
+    timespec ts {};
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<uint32_t>(ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL);
 }
 
 void handle_signal(int) {
@@ -228,13 +264,217 @@ void fade_backlight_in() {
 void run_lv_for(uint32_t ms) {
     const uint32_t end = tick_ms() + ms;
     while (!g_stop && static_cast<int32_t>(end - tick_ms()) > 0) {
-        lv_timer_handler();
-        usleep(5000);
+        const uint32_t now_ms = tick_ms();
+        const bool interacting = g_touch.down || g_tile_snap_pending ||
+                                 static_cast<int32_t>(g_force_redraw_until_ms - now_ms) > 0;
+        if (g_tiles.tileview != nullptr && interacting) {
+            lv_obj_invalidate(g_tiles.tileview);
+        }
+
+        uint32_t next_ms = lv_timer_handler();
+        if (g_tile_snap_pending && g_tiles.tileview != nullptr) {
+            lv_tileview_set_tile_by_index(g_tiles.tileview, static_cast<uint8_t>(g_release_page), 0, LV_ANIM_ON);
+            g_tile_snap_pending = false;
+        }
+        if (interacting) {
+            next_ms = 0;
+        }
+        uint32_t sleep_us = next_ms * 1000U;
+        if (sleep_us < kMinLvSleepUs) {
+            sleep_us = kMinLvSleepUs;
+        }
+        if (sleep_us > kMaxLvSleepUs) {
+            sleep_us = kMaxLvSleepUs;
+        }
+        usleep(sleep_us);
     }
+}
+
+void draw_cached_indicator(uint32_t* dst, uint32_t stride_px) {
+    constexpr int32_t kDotSize = 10;
+    constexpr int32_t kDotStartX = 359;
+    constexpr int32_t kDotStepX = 24;
+    constexpr int32_t kDotY = 438;
+    constexpr int32_t kDotRadiusSquared = 25;
+
+    for (uint32_t index = 0; index < kTileCount; ++index) {
+        const uint32_t color = index == g_active_page ? 0xfff0b44c : 0xff60707a;
+        const int32_t dot_x = kDotStartX + static_cast<int32_t>(index) * kDotStepX;
+        for (int32_t y = 0; y < kDotSize; ++y) {
+            for (int32_t x = 0; x < kDotSize; ++x) {
+                const int32_t dx = x - kDotSize / 2;
+                const int32_t dy = y - kDotSize / 2;
+                if (dx * dx + dy * dy >= kDotRadiusSquared) {
+                    continue;
+                }
+                const uint32_t physical_x = kUiHeight - 1U - static_cast<uint32_t>(kDotY + y);
+                const uint32_t physical_y = static_cast<uint32_t>(dot_x + x);
+                dst[physical_y * stride_px + physical_x] = color;
+            }
+        }
+    }
+}
+
+bool blend_tile_caches(int32_t scroll_x) {
+    if (g_buffer == nullptr) return false;
+    if (scroll_x < 0) scroll_x = 0;
+    const int32_t a = scroll_x / static_cast<int32_t>(kUiWidth);
+    const int32_t off = scroll_x % static_cast<int32_t>(kUiWidth);
+    if (off == 0 || a + 1 >= static_cast<int32_t>(kTileCount)) return false;
+    if (g_tile_cache[a] == nullptr || g_tile_cache[a + 1] == nullptr) return false;
+    auto* dst = static_cast<uint32_t*>(g_buffer->map);
+    const uint32_t row_px = kUiHeight;  // physical pixels per row = 480
+    const uint32_t n_a = static_cast<uint32_t>(kUiWidth - off);
+    std::memcpy(dst,
+                g_tile_cache[a] + static_cast<uint32_t>(off) * row_px,
+                n_a * row_px * sizeof(uint32_t));
+    std::memcpy(dst + n_a * row_px,
+                g_tile_cache[a + 1],
+                static_cast<uint32_t>(off) * row_px * sizeof(uint32_t));
+    draw_cached_indicator(dst, g_buffer->stride / sizeof(uint32_t));
+    return true;
+}
+
+bool build_tile_cache_from_snapshot(uint32_t index) {
+    if (index >= kTileCount || g_tiles.page_snapshot[index] == nullptr || g_buffer == nullptr) {
+        return false;
+    }
+
+    lv_draw_buf_t* snapshot = g_tiles.page_snapshot[index];
+    if (snapshot->header.w != kUiWidth || snapshot->header.h != kUiHeight ||
+        snapshot->header.stride < kUiWidth * sizeof(uint32_t)) {
+        return false;
+    }
+
+    std::free(g_tile_cache[index]);
+    g_tile_cache[index] = static_cast<uint32_t*>(std::malloc(kUiHeight * kUiWidth * sizeof(uint32_t)));
+    if (g_tile_cache[index] == nullptr) {
+        return false;
+    }
+
+    const auto* src = reinterpret_cast<const uint32_t*>(snapshot->data);
+    auto* dst = g_tile_cache[index];
+    const uint32_t src_stride_px = snapshot->header.stride / sizeof(uint32_t);
+    constexpr uint32_t kRotateBlock = 16;
+    for (uint32_t sy0 = 0; sy0 < kUiHeight; sy0 += kRotateBlock) {
+        const uint32_t sy_end = sy0 + kRotateBlock < kUiHeight ? sy0 + kRotateBlock : kUiHeight;
+        for (uint32_t sx0 = 0; sx0 < kUiWidth; sx0 += kRotateBlock) {
+            const uint32_t sx_end = sx0 + kRotateBlock < kUiWidth ? sx0 + kRotateBlock : kUiWidth;
+            for (uint32_t sy = sy0; sy < sy_end; ++sy) {
+                const uint32_t* src_row = src + sy * src_stride_px + sx0;
+                for (uint32_t sx = sx0; sx < sx_end; ++sx) {
+                    dst[sx * kUiHeight + (kUiHeight - 1U - sy)] = *src_row++;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+void build_tile_caches_from_snapshots() {
+    for (uint32_t index = 0; index < kTileCount; ++index) {
+        if (!build_tile_cache_from_snapshot(index)) {
+            std::fprintf(stderr, "rockbase-lcdui: cache build failed for page %u\n", index);
+        }
+    }
+}
+
+bool refresh_page_cache(uint32_t index) {
+    if (index >= kTileCount || g_tiles.page[index] == nullptr ||
+        g_tiles.page_image[index] == nullptr || g_tiles.page_snapshot[index] == nullptr) {
+        return false;
+    }
+
+    lv_obj_t* page = g_tiles.page[index];
+    lv_obj_t* image = g_tiles.page_image[index];
+    const uint32_t child_count = lv_obj_get_child_count(page);
+    lv_obj_add_flag(image, LV_OBJ_FLAG_HIDDEN);
+    for (uint32_t child_index = 0; child_index < child_count; ++child_index) {
+        lv_obj_t* child = lv_obj_get_child(page, child_index);
+        if (child != image) {
+            lv_obj_clear_flag(child, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
+    lv_draw_buf_t* snapshot = lv_snapshot_take(page, LV_COLOR_FORMAT_ARGB8888);
+    for (uint32_t child_index = 0; child_index < child_count; ++child_index) {
+        lv_obj_t* child = lv_obj_get_child(page, child_index);
+        if (child != image) {
+            lv_obj_add_flag(child, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
+    if (snapshot == nullptr) {
+        lv_obj_clear_flag(image, LV_OBJ_FLAG_HIDDEN);
+        return false;
+    }
+
+    lv_draw_buf_t* old_snapshot = g_tiles.page_snapshot[index];
+    g_tiles.page_snapshot[index] = snapshot;
+    lv_image_set_src(image, snapshot);
+    lv_obj_clear_flag(image, LV_OBJ_FLAG_HIDDEN);
+    lv_draw_buf_destroy(old_snapshot);
+    if (!build_tile_cache_from_snapshot(index)) {
+        return false;
+    }
+
+    if (index == g_active_page) {
+        lv_obj_invalidate(page);
+    }
+    return true;
+}
+
+void refresh_one_dirty_page_if_idle() {
+    const uint32_t now_ms = tick_ms();
+    if (g_touch.down || g_tile_snap_pending ||
+        static_cast<int32_t>(g_force_redraw_until_ms - now_ms) > 0 ||
+        now_ms - g_last_page_cache_refresh_ms < 150U) {
+        return;
+    }
+
+    uint32_t page = g_active_page;
+    if (!g_page_cache_dirty[page]) {
+        for (uint32_t index = 0; index < kTileCount; ++index) {
+            if (g_page_cache_dirty[index]) {
+                page = index;
+                break;
+            }
+        }
+    }
+    if (!g_page_cache_dirty[page]) {
+        return;
+    }
+
+    if (refresh_page_cache(page)) {
+        g_page_cache_dirty[page] = false;
+        g_last_page_cache_refresh_ms = now_ms;
+    }
+}
+
+int present_display_buffer() {
+    const uint32_t now_ms = tick_ms();
+    if (g_last_present_ms != 0 && now_ms - g_last_present_ms < kPresentIntervalMs) {
+        return 0;
+    }
+
+    thead_csi_dcache_clean_invalid_range(g_buffer->map, g_buffer->size);
+    if (display_commit_buffer_noblock(g_buffer, 0, 0) != 0) {
+        return -1;
+    }
+
+    g_last_present_ms = now_ms;
+    g_render_buffer_index = (g_render_buffer_index + 1U) % 3U;
+    g_buffer = g_display_buffers[g_render_buffer_index];
+    return 0;
 }
 
 void flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
     if (g_buffer == nullptr || g_buffer->map == nullptr || area == nullptr || px_map == nullptr) {
+        lv_display_flush_ready(disp);
+        return;
+    }
+
+    if (g_scroll_blend_active) {
         lv_display_flush_ready(disp);
         return;
     }
@@ -244,41 +484,112 @@ void flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
     auto* dst = static_cast<uint32_t*>(g_buffer->map);
     const uint32_t dst_stride_px = g_buffer->stride / sizeof(uint32_t);
 
-    for (int32_t sy = area->y1; sy <= area->y2; ++sy) {
-        if (sy < 0 || sy >= static_cast<int32_t>(kUiHeight)) {
-            continue;
+    const bool full_screen = area->x1 == 0 && area->y1 == 0 &&
+                             area->x2 == static_cast<int32_t>(kUiWidth - 1U) &&
+                             area->y2 == static_cast<int32_t>(kUiHeight - 1U);
+    const uint32_t t_rotate_start = tick_ms();
+    if (full_screen && g_buffer->width == kUiHeight && g_buffer->height == kUiWidth) {
+        constexpr uint32_t kRotateBlock = 16;
+        for (uint32_t sy0 = 0; sy0 < kUiHeight; sy0 += kRotateBlock) {
+            const uint32_t sy_end = sy0 + kRotateBlock < kUiHeight ? sy0 + kRotateBlock : kUiHeight;
+            for (uint32_t sx0 = 0; sx0 < kUiWidth; sx0 += kRotateBlock) {
+                const uint32_t sx_end = sx0 + kRotateBlock < kUiWidth ? sx0 + kRotateBlock : kUiWidth;
+                for (uint32_t sy = sy0; sy < sy_end; ++sy) {
+                    const uint32_t* src_row = src + sy * kUiWidth + sx0;
+                    for (uint32_t sx = sx0; sx < sx_end; ++sx) {
+                        dst[sx * dst_stride_px + (kUiHeight - 1U - sy)] = *src_row++;
+                    }
+                }
+            }
         }
-        for (int32_t sx = area->x1; sx <= area->x2; ++sx) {
-            if (sx < 0 || sx >= static_cast<int32_t>(kUiWidth)) {
+    }
+    else {
+        for (int32_t sy = area->y1; sy <= area->y2; ++sy) {
+            if (sy < 0 || sy >= static_cast<int32_t>(kUiHeight)) {
                 continue;
             }
+            for (int32_t sx = area->x1; sx <= area->x2; ++sx) {
+                if (sx < 0 || sx >= static_cast<int32_t>(kUiWidth)) {
+                    continue;
+                }
 
-            const uint32_t src_x = static_cast<uint32_t>(sx - area->x1);
-            const uint32_t src_y = static_cast<uint32_t>(sy - area->y1);
-            const uint32_t pixel = src[src_y * area_w + src_x];
+                const uint32_t src_x = static_cast<uint32_t>(sx - area->x1);
+                const uint32_t src_y = static_cast<uint32_t>(sy - area->y1);
+                const uint32_t pixel = src[src_y * area_w + src_x];
 
-            /* 800x480 logical landscape -> 480x800 physical portrait. */
-            const uint32_t dx = kUiHeight - 1U - static_cast<uint32_t>(sy);
-            const uint32_t dy = static_cast<uint32_t>(sx);
-            if (dx < g_buffer->width && dy < g_buffer->height) {
-                dst[dy * dst_stride_px + dx] = pixel;
+                /* 800x480 logical landscape -> 480x800 physical portrait. */
+                const uint32_t dx = kUiHeight - 1U - static_cast<uint32_t>(sy);
+                const uint32_t dy = static_cast<uint32_t>(sx);
+                if (dx < g_buffer->width && dy < g_buffer->height) {
+                    dst[dy * dst_stride_px + dx] = pixel;
+                }
+            }
+        }
+    }
+    const uint32_t t_rotate_end = tick_ms();
+    draw_cached_indicator(dst, dst_stride_px);
+
+    const uint32_t t_cache_start = tick_ms();
+    const uint32_t t_commit_start = tick_ms();
+    if (present_display_buffer() != 0) {
+        std::fprintf(stderr, "rockbase-lcdui: display commit failed\n");
+    }
+    const uint32_t t_commit_end = tick_ms();
+
+    static uint32_t flush_log_n = 0;
+    static uint32_t last_flush_end = 0;
+    const uint32_t between_ms = last_flush_end ? (t_cache_start - last_flush_end) : 0;
+    last_flush_end = t_commit_end;
+    const uint32_t cache_ms = t_commit_start - t_cache_start;
+    const uint32_t commit_ms = t_commit_end - t_commit_start;
+    const uint32_t rotate_ms = t_rotate_end - t_rotate_start;
+    if (flush_log_n < 8 || rotate_ms > 10 || cache_ms > 3 || commit_ms > 18 || between_ms > 80) {
+        ++flush_log_n;
+        std::printf("rockbase-lcdui: flush between=%u rotate=%u cache=%u commit=%u\n",
+                    between_ms, rotate_ms, cache_ms, commit_ms);
+        std::fflush(stdout);
+    }
+
+    // Lazily populate tile cache when the display is at an aligned tile position
+    if (g_tiles.tileview != nullptr) {
+        const int32_t sx = lv_obj_get_scroll_x(g_tiles.tileview);
+        if (sx >= 0 && sx % static_cast<int32_t>(kUiWidth) == 0) {
+            const uint32_t idx = static_cast<uint32_t>(sx) / kUiWidth;
+            if (idx < kTileCount) {
+                if (g_tile_cache[idx] == nullptr) {
+                    g_tile_cache[idx] = static_cast<uint32_t*>(
+                        std::malloc(kUiHeight * kUiWidth * sizeof(uint32_t)));
+                    if (g_tile_cache[idx] != nullptr) {
+                        std::memcpy(g_tile_cache[idx], g_buffer->map,
+                                    kUiHeight * kUiWidth * sizeof(uint32_t));
+                    }
+                }
             }
         }
     }
 
-    thead_csi_dcache_clean_invalid_range(g_buffer->map, g_buffer->size);
-    display_wait_vsync(g_display);
-    if (display_update_buffer(g_buffer, 0, 0) != 0 || display_commit(g_display) != 0) {
-        std::fprintf(stderr, "rockbase-lcdui: display commit failed\n");
+    const uint32_t now_ms = tick_ms();
+    if (g_fps_window_start_ms == 0) {
+        g_fps_window_start_ms = now_ms;
+    }
+    ++g_fps_frame_count;
+    const uint32_t elapsed = now_ms - g_fps_window_start_ms;
+    if (elapsed >= 1000U) {
+        const uint32_t fps = (g_fps_frame_count * 1000U) / elapsed;
+        const bool in_interaction = g_touch.down || g_tile_snap_pending ||
+                                    static_cast<int32_t>(g_force_redraw_until_ms - now_ms) > 0;
+        std::printf("rockbase-lcdui: fps=%u window_ms=%u interaction=%u\n",
+                    fps, elapsed, in_interaction ? 1U : 0U);
+        std::fflush(stdout);
+        g_fps_window_start_ms = now_ms;
+        g_fps_frame_count = 0;
     }
 
     lv_display_flush_ready(disp);
 }
 
 bool commit_display_buffer() {
-    thead_csi_dcache_clean_invalid_range(g_buffer->map, g_buffer->size);
-    display_wait_vsync(g_display);
-    if (display_update_buffer(g_buffer, 0, 0) != 0 || display_commit(g_display) != 0) {
+    if (present_display_buffer() != 0) {
         std::fprintf(stderr, "rockbase-lcdui: display commit failed\n");
         return false;
     }
@@ -562,6 +873,11 @@ bool load_dashboard_data(DashboardData& data) {
     data.progress_ring = json_value(bitcoin, "progress_ring");
     data.blocks_fmt = json_value(bitcoin, "blocks_fmt");
     data.headers_fmt = json_value(bitcoin, "headers_fmt");
+    data.ibd_stage_key = json_value(bitcoin, "ibd_stage_key");
+    data.ibd_stage_label = json_value(bitcoin, "ibd_stage_label");
+    data.ibd_stage_detail = json_value(bitcoin, "ibd_stage_detail");
+    data.ibd_stage_height = json_value(bitcoin, "ibd_stage_height");
+    data.ibd_stage_pct = json_value(bitcoin, "ibd_stage_pct");
     data.best_block_date = json_value(bitcoin, "best_block_date");
     data.btc_context = json_value(bitcoin, "btc_context");
     data.connections = json_value(bitcoin, "connections");
@@ -614,16 +930,25 @@ bool init_display() {
     }
 
     g_plane->drm_rotation = rotation_0;
-    g_buffer = display_allocate_buffer(g_plane, g_display->width, g_display->height);
+    g_display_buffers[0] = display_allocate_buffer(g_plane, g_display->width, g_display->height);
+    g_display_buffers[1] = display_allocate_buffer(g_plane, g_display->width, g_display->height);
+    g_display_buffers[2] = display_allocate_buffer(g_plane, g_display->width, g_display->height);
+    g_buffer = g_display_buffers[0];
     if (g_buffer == nullptr) {
         std::fprintf(stderr, "rockbase-lcdui: display buffer allocation failed\n");
         return false;
     }
 
-    auto* pixels = static_cast<uint32_t*>(g_buffer->map);
-    const uint32_t pixel_count = g_buffer->size / sizeof(uint32_t);
-    for (uint32_t i = 0; i < pixel_count; ++i) {
-        pixels[i] = 0xff000000;
+    for (display_buffer* buffer : g_display_buffers) {
+        if (buffer == nullptr) {
+            std::fprintf(stderr, "rockbase-lcdui: display buffer allocation failed\n");
+            return false;
+        }
+        auto* pixels = static_cast<uint32_t*>(buffer->map);
+        const uint32_t pixel_count = buffer->size / sizeof(uint32_t);
+        for (uint32_t i = 0; i < pixel_count; ++i) {
+            pixels[i] = 0xff000000;
+        }
     }
     std::printf("rockbase-lcdui: panel=%ux%u buffer=%ux%u stride=%u size=%u fourcc=ARGB8888 rotation=software-ccw\n",
                 g_display->width, g_display->height, g_buffer->width, g_buffer->height,
@@ -632,6 +957,16 @@ bool init_display() {
 }
 
 void cleanup_display() {
+    for (uint32_t i = 0; i < kTileCount; ++i) {
+        std::free(g_tile_cache[i]);
+        g_tile_cache[i] = nullptr;
+    }
+    for (uint32_t index = 0; index < kTileCount; ++index) {
+        if (g_tiles.page_snapshot[index] != nullptr) {
+            lv_draw_buf_destroy(g_tiles.page_snapshot[index]);
+            g_tiles.page_snapshot[index] = nullptr;
+        }
+    }
     if (g_touch.fd >= 0) {
         close(g_touch.fd);
         g_touch.fd = -1;
@@ -644,10 +979,13 @@ void cleanup_display() {
         close(g_backlight_fd);
         g_backlight_fd = -1;
     }
-    if (g_buffer != nullptr) {
-        display_free_buffer(g_buffer);
-        g_buffer = nullptr;
+    for (display_buffer*& buffer : g_display_buffers) {
+        if (buffer != nullptr) {
+            display_free_buffer(buffer);
+            buffer = nullptr;
+        }
     }
+    g_buffer = nullptr;
     if (g_plane != nullptr) {
         display_free_plane(g_plane);
         g_plane = nullptr;
@@ -670,6 +1008,14 @@ bool init_lv_display(lv_display_t** out_disp) {
 
     lv_display_set_color_format(disp, LV_COLOR_FORMAT_ARGB8888);
     lv_display_set_flush_cb(disp, flush_cb);
+    lv_timer_t* refr_timer = lv_display_get_refr_timer(disp);
+    if (refr_timer != nullptr) {
+        lv_timer_set_period(refr_timer, kDisplayRefrPeriodMs);
+    }
+    lv_timer_t* anim_timer = lv_anim_get_timer();
+    if (anim_timer != nullptr) {
+        lv_timer_set_period(anim_timer, kDisplayRefrPeriodMs);
+    }
 
     const size_t draw_buf_size = kUiWidth * kUiHeight * sizeof(uint32_t);
     g_lv_draw_buf = std::malloc(draw_buf_size);
@@ -772,6 +1118,31 @@ void touch_read_cb(lv_indev_t*, lv_indev_data_t* data) {
     data->point.x = clamp_int(phys_y, 0, static_cast<int>(kUiWidth - 1U));
     data->point.y = clamp_int(static_cast<int>(kUiHeight - 1U) - phys_x, 0, static_cast<int>(kUiHeight - 1U));
     data->state = g_touch.down ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+    g_swipe_current_x = data->point.x;
+
+    static bool was_down = false;
+    if (!was_down && g_touch.down) {
+        g_swipe_start_x = data->point.x;
+        g_swipe_start_page = g_active_page;
+    }
+    if (g_touch.down) {
+        g_force_redraw_until_ms = tick_ms() + kReleaseRedrawBoostMs;
+    }
+    if (was_down && !g_touch.down) {
+        g_release_page = g_swipe_start_page;
+        const int32_t swipe_dx = data->point.x - g_swipe_start_x;
+        if (swipe_dx <= -static_cast<int32_t>(kPageSwitchThresholdPx) &&
+            g_release_page + 1U < kTileCount) {
+            ++g_release_page;
+        }
+        else if (swipe_dx >= static_cast<int32_t>(kPageSwitchThresholdPx) && g_release_page > 0) {
+            --g_release_page;
+        }
+        set_active_page(g_release_page);
+        g_tile_snap_pending = true;
+        g_force_redraw_until_ms = tick_ms() + kReleaseRedrawBoostMs;
+    }
+    was_down = g_touch.down;
 }
 
 void init_touch_input(lv_display_t* disp) {
@@ -785,6 +1156,9 @@ void init_touch_input(lv_display_t* disp) {
     lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
     lv_indev_set_display(indev, disp);
     lv_indev_set_read_cb(indev, touch_read_cb);
+    lv_timer_set_period(lv_indev_get_read_timer(indev), kTouchReadPeriodMs);
+    lv_indev_set_scroll_limit(indev, 6);
+    lv_indev_set_scroll_throw(indev, 22);
 }
 
 lv_obj_t* add_label(lv_obj_t* parent, const char* text, int32_t x, int32_t y,
@@ -804,7 +1178,8 @@ void make_static(lv_obj_t* obj) {
 }
 
 lv_obj_t* create_card(lv_obj_t* parent, int32_t x, int32_t y, int32_t w, int32_t h,
-                      const char* title, const char* value, lv_color_t accent) {
+                      const char* title, const char* value, lv_color_t accent,
+                      lv_obj_t** title_label = nullptr) {
     lv_obj_t* card = lv_obj_create(parent);
     make_static(card);
     lv_obj_set_pos(card, x, y);
@@ -816,7 +1191,10 @@ lv_obj_t* create_card(lv_obj_t* parent, int32_t x, int32_t y, int32_t w, int32_t
     lv_obj_set_style_border_color(card, accent, 0);
     lv_obj_set_style_pad_all(card, 16, 0);
 
-    add_label(card, title, 0, 0, &lv_font_montserrat_16, lv_color_hex(0x9aa6ac));
+    lv_obj_t* title_obj = add_label(card, title, 0, 0, &lv_font_montserrat_16, lv_color_hex(0x9aa6ac));
+    if (title_label != nullptr) {
+        *title_label = title_obj;
+    }
     lv_obj_t* value_label = add_label(card, value, 0, 34, &lv_font_montserrat_22, lv_color_hex(0xf4efe2));
     lv_obj_set_width(value_label, w - 32);
     lv_label_set_long_mode(value_label, LV_LABEL_LONG_MODE_DOTS);
@@ -856,19 +1234,6 @@ void add_page_header(lv_obj_t* tile, const char* title, const char* subtitle, lv
     add_label(tile, subtitle, 38, 82, &lv_font_montserrat_18, lv_color_hex(0xb7c2c8));
 }
 
-void add_page_dots(lv_obj_t* tile, uint32_t active) {
-    for (uint32_t i = 0; i < kTileCount; ++i) {
-        lv_obj_t* dot = lv_obj_create(tile);
-        make_static(dot);
-        lv_obj_set_size(dot, i == active ? 30 : 10, 10);
-        lv_obj_set_pos(dot, 348 + static_cast<int32_t>(i) * 28, 438);
-        lv_obj_set_style_radius(dot, 5, 0);
-        lv_obj_set_style_bg_color(dot, i == active ? lv_color_hex(0xf0b44c) : lv_color_hex(0x60707a), 0);
-        lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(dot, 0, 0);
-    }
-}
-
 lv_dir_t tile_dir_for(uint32_t col) {
     if (col == 0) {
         return LV_DIR_RIGHT;
@@ -903,7 +1268,7 @@ lv_obj_t* create_tile_base(lv_obj_t* tv, uint8_t col, const TileSpec& spec) {
         add_dashboard_background(tile);
     }
     add_page_header(tile, spec.title, spec.subtitle, accent);
-    add_page_dots(tile, col);
+    g_tiles.page[col] = tile;
     return tile;
 }
 
@@ -923,7 +1288,8 @@ void build_bitcoin_tile(lv_obj_t* tv) {
     lv_label_set_long_mode(g_tiles.bitcoin_ip_label, LV_LABEL_LONG_MODE_DOTS);
     g_tiles.bitcoin_sync = create_card(tile, 42, 142, 210, 102, "Sync", "--", accent);
     g_tiles.bitcoin_progress = create_card(tile, 294, 142, 180, 102, "Progress", "--", accent);
-    g_tiles.bitcoin_height = create_card(tile, 516, 142, 240, 102, "Blocks / Headers", "--", accent);
+    g_tiles.bitcoin_height = create_card(tile, 516, 142, 240, 102, "Blocks / Headers", "--", accent,
+                                         &g_tiles.bitcoin_height_title);
     g_tiles.bitcoin_peers = create_card(tile, 42, 276, 104, 100, "Peers", "--", accent);
     g_tiles.bitcoin_difficulty = create_card(tile, 164, 276, 106, 100, "Difficulty", "--", accent);
     g_tiles.bitcoin_rss = create_card(tile, 288, 276, 130, 100, "RSS", "--", accent);
@@ -967,25 +1333,56 @@ void build_network_tile(lv_obj_t* tv) {
     g_tiles.network_reach = create_card(tile, 526, 294, 230, 104, "Stratum Reach", "--", accent);
 }
 
-void tile_event_cb(lv_event_t* e) {
-    lv_obj_t* tv = static_cast<lv_obj_t*>(lv_event_get_target(e));
-    lv_obj_t* active = lv_tileview_get_tile_active(tv);
-    if (active == nullptr || g_tiles.active_label == nullptr) {
-        return;
-    }
-
-    const int32_t x = lv_obj_get_x(active);
-    uint32_t page = static_cast<uint32_t>((x + static_cast<int32_t>(kUiWidth / 2U)) / static_cast<int32_t>(kUiWidth));
+void set_active_page(uint32_t page) {
     if (page >= kTileCount) {
         page = kTileCount - 1U;
     }
-    lv_label_set_text_fmt(g_tiles.active_label, "%s  %u/%u",
-                          kTiles[page].title, page + 1U, kTileCount);
+    g_active_page = page;
 }
 
 void refresh_clock_cb(lv_timer_t*) {
-    set_label(g_tiles.clock_time_label, current_time_text("%H:%M:%S"));
-    set_label(g_tiles.clock_date_label, current_time_text("%Y-%m-%d"));
+    const std::string time_text = current_time_text("%H:%M:%S");
+    const std::string date_text = current_time_text("%Y-%m-%d");
+    set_label(g_tiles.clock_time_label, time_text);
+    set_label(g_tiles.clock_date_label, date_text);
+    g_page_cache_dirty[0] = true;
+}
+
+void update_ibd_stage_card(const DashboardData& data, const std::string& blocks) {
+    std::string title = "Blocks / Headers";
+    std::string value = blocks;
+
+    if (data.ibd_stage_key == "pre_headers" || data.ibd_stage_key == "sync_headers") {
+        title = data.ibd_stage_key == "pre_headers" ? "Header Pre-Sync" : "Header Sync";
+        const std::string height = data.ibd_stage_height != "-" ? data.ibd_stage_height : data.headers_fmt;
+        value = height + " / " + data.headers_fmt;
+    }
+    else if (data.ibd_stage_key == "sync_blocks") {
+        title = "Block Sync";
+    }
+    else if (data.ibd_stage_key == "loading_index") {
+        title = "Block Index";
+        value = "Preparing chain";
+    }
+    else if (data.ibd_stage_key == "loading_blocks") {
+        title = "Block Files";
+        value = "Loading blocks";
+    }
+    else if (data.ibd_stage_key == "verifying_blocks") {
+        title = "Verifying";
+        value = "Chain state";
+    }
+    else if (data.ibd_stage_key == "rewinding_blocks") {
+        title = "Rewinding";
+        value = "Chain state";
+    }
+    else if (data.ibd_stage_key == "pruning") {
+        title = "Pruning";
+        value = "Block files";
+    }
+
+    set_label(g_tiles.bitcoin_height_title, title);
+    set_label(g_tiles.bitcoin_height, value);
 }
 
 void refresh_status_cb(lv_timer_t*) {
@@ -1004,7 +1401,7 @@ void refresh_status_cb(lv_timer_t*) {
 
     set_label(g_tiles.bitcoin_sync, sync_label(data.sync_key));
     set_label(g_tiles.bitcoin_progress, progress);
-    set_label(g_tiles.bitcoin_height, blocks);
+    update_ibd_stage_card(data, blocks);
     set_label(g_tiles.bitcoin_peers, data.connections);
     set_label(g_tiles.bitcoin_difficulty, data.difficulty_display);
     set_label(g_tiles.bitcoin_rss, data.rss);
@@ -1030,6 +1427,10 @@ void refresh_status_cb(lv_timer_t*) {
     set_label(g_tiles.network_mac, data.mac_addr);
     set_label(g_tiles.network_reach, data.stratum_reach);
 
+    for (uint32_t index = 0; index < kTileCount; ++index) {
+        g_page_cache_dirty[index] = true;
+    }
+
     if (!logged_first_status) {
         std::printf("rockbase-lcdui: status loaded ip=%s sync=%s blocks=%s headers=%s\n",
                     data.ip_addr.c_str(), data.sync_key.c_str(), data.blocks_fmt.c_str(), data.headers_fmt.c_str());
@@ -1038,14 +1439,46 @@ void refresh_status_cb(lv_timer_t*) {
     }
 }
 
+void cache_tile_pages() {
+    for (uint32_t index = 0; index < kTileCount; ++index) {
+        lv_obj_t* page = g_tiles.page[index];
+        if (page == nullptr) {
+            continue;
+        }
+
+        lv_draw_buf_t* snapshot = lv_snapshot_take(page, LV_COLOR_FORMAT_ARGB8888);
+        if (snapshot == nullptr) {
+            std::fprintf(stderr, "rockbase-lcdui: snapshot failed for page %u\n", index);
+            continue;
+        }
+
+        const uint32_t child_count = lv_obj_get_child_count(page);
+        for (uint32_t child_index = 0; child_index < child_count; ++child_index) {
+            lv_obj_add_flag(lv_obj_get_child(page, child_index), LV_OBJ_FLAG_HIDDEN);
+        }
+
+        lv_obj_t* image = lv_image_create(page);
+        lv_obj_remove_style_all(image);
+        lv_image_set_src(image, snapshot);
+        lv_obj_set_pos(image, 0, 0);
+        lv_obj_set_size(image, kUiWidth, kUiHeight);
+        make_static(image);
+        g_tiles.page_snapshot[index] = snapshot;
+        g_tiles.page_image[index] = image;
+        g_page_cache_dirty[index] = false;
+    }
+}
+
 void build_tile_stage(lv_obj_t* screen) {
     lv_obj_t* tv = lv_tileview_create(screen);
     lv_obj_set_size(tv, kUiWidth, kUiHeight);
     lv_obj_set_pos(tv, 0, 0);
+    lv_obj_set_style_anim_time(tv, kTileAnimMs, LV_PART_MAIN);
+    lv_obj_clear_flag(tv, LV_OBJ_FLAG_SCROLL_MOMENTUM);
+    lv_obj_clear_flag(tv, LV_OBJ_FLAG_SCROLL_ELASTIC);
     lv_obj_set_scrollbar_mode(tv, LV_SCROLLBAR_MODE_OFF);
     lv_obj_set_style_bg_color(tv, lv_color_hex(0x070b10), 0);
     lv_obj_set_style_bg_opa(tv, LV_OPA_COVER, 0);
-    lv_obj_add_event_cb(tv, tile_event_cb, LV_EVENT_VALUE_CHANGED, nullptr);
     g_tiles.tileview = tv;
 
     build_bitcoin_tile(tv);
@@ -1053,10 +1486,10 @@ void build_tile_stage(lv_obj_t* screen) {
     build_system_tile(tv);
     build_network_tile(tv);
 
-    g_tiles.active_label = add_label(screen, "Bitcoind  1/4", 636, 438, &lv_font_montserrat_16, lv_color_hex(0xe9d6a6));
     lv_tileview_set_tile_by_index(tv, 0, 0, LV_ANIM_OFF);
     refresh_clock_cb(nullptr);
     refresh_status_cb(nullptr);
+    cache_tile_pages();
     lv_timer_create(refresh_clock_cb, 1000, nullptr);
     lv_timer_create(refresh_status_cb, 5000, nullptr);
 }
@@ -1112,12 +1545,28 @@ int main() {
     lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
     lv_obj_t* boot_layer = build_boot_scene(screen);
+    lv_obj_t* fade_mask = lv_obj_create(screen);
+    lv_obj_remove_style_all(fade_mask);
+    make_static(fade_mask);
+    lv_obj_set_size(fade_mask, kUiWidth, kUiHeight);
+    lv_obj_set_pos(fade_mask, 0, 0);
+    lv_obj_set_style_bg_color(fade_mask, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(fade_mask, LV_OPA_COVER, 0);
     lv_refr_now(disp);
     if (backlight_ready) {
-        fade_backlight_in();
+        set_backlight(1);
+        lv_obj_fade_out(fade_mask, kBacklightFadeMs, 0);
+        run_lv_for(kBacklightFadeMs + 20);
+        lv_obj_delete(fade_mask);
+        fade_mask = nullptr;
+    }
+    else {
+        lv_obj_delete(fade_mask);
+        fade_mask = nullptr;
     }
     run_lv_for(kBootLogoHoldMs);
     build_tile_stage(screen);
+    build_tile_caches_from_snapshots();
     lv_obj_move_to_index(boot_layer, lv_obj_get_child_count(screen) - 1);
     lv_obj_fade_out(boot_layer, kDashboardFadeMs, 0);
     run_lv_for(kDashboardFadeMs + 80);
@@ -1128,8 +1577,45 @@ int main() {
     std::fflush(stdout);
 
     while (!g_stop) {
-        lv_timer_handler();
-        usleep(20000);
+        const uint32_t now_ms = tick_ms();
+        const bool interacting = g_touch.down || g_tile_snap_pending ||
+                                 static_cast<int32_t>(g_force_redraw_until_ms - now_ms) > 0;
+        refresh_one_dirty_page_if_idle();
+
+        // Fast path: blend pre-rendered caches during mid-scroll (~1ms vs ~80ms LVGL render)
+        bool did_blend = false;
+        if (interacting && g_tiles.tileview != nullptr) {
+            const int32_t sx = lv_obj_get_scroll_x(g_tiles.tileview);
+            if (sx > 0 && sx % static_cast<int32_t>(kUiWidth) != 0) {
+                if (blend_tile_caches(sx)) {
+                    if (present_display_buffer() == 0) {
+                        did_blend = true;
+                    }
+                }
+            }
+        }
+
+        if (g_tile_snap_pending && g_tiles.tileview != nullptr) {
+            lv_tileview_set_tile_by_index(g_tiles.tileview, static_cast<uint8_t>(g_release_page), 0, LV_ANIM_ON);
+            g_tile_snap_pending = false;
+        }
+        if (!did_blend && interacting && g_tiles.tileview != nullptr) {
+            lv_obj_invalidate(g_tiles.tileview);
+        }
+        g_scroll_blend_active = did_blend;
+        uint32_t next_ms = lv_timer_handler();
+        g_scroll_blend_active = false;
+        if (interacting) {
+            next_ms = 0;
+        }
+        uint32_t sleep_us = next_ms * 1000U;
+        if (sleep_us < kMinLvSleepUs) {
+            sleep_us = kMinLvSleepUs;
+        }
+        if (sleep_us > kMaxLvSleepUs) {
+            sleep_us = kMaxLvSleepUs;
+        }
+        usleep(sleep_us);
     }
 
     cleanup_display();

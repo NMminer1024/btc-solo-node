@@ -5,11 +5,13 @@ CONSOLE=/dev/console
 DIAG_LOG_DIR=/root/log
 DIAG_LOG_FILE=${DIAG_LOG_DIR}/serialhealth-diag.log
 DIAG_LOG_MAX_KB=256
+CONSOLE_OUTPUT=${ROCKBASE_SERIAL_HEALTH_CONSOLE:-1}
 SYSRQ_LAST_FILE=/tmp/rockbase-serial-healthd.sysrq
 SYSRQ_COOLDOWN_SEC=30
 export TZ="${TZ:-CST-8}"
 
 log_console() {
+    [ "${CONSOLE_OUTPUT}" = "1" ] || return 0
     printf '[health] %s %s\n' "$(date '+%F %T')" "$*" >"${CONSOLE}" 2>/dev/null
 }
 
@@ -24,7 +26,9 @@ rotate_diag_log_if_needed() {
 
 log_diag() {
     line="[health] $(date '+%F %T') $*"
-    printf '%s\n' "${line}" >"${CONSOLE}" 2>/dev/null
+    if [ "${CONSOLE_OUTPUT}" = "1" ]; then
+        printf '%s\n' "${line}" >"${CONSOLE}" 2>/dev/null
+    fi
     mkdir -p "${DIAG_LOG_DIR}" 2>/dev/null || true
     rotate_diag_log_if_needed
     printf '%s\n' "${line}" >>"${DIAG_LOG_FILE}" 2>/dev/null || true

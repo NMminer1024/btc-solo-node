@@ -654,6 +654,10 @@ render_status_json() {
     if [ -z "${headers}" ] || [ "${headers}" = "-" ]; then
         headers="${log_headers}"
     fi
+    if [ -n "${headers}" ] && [ -n "${log_headers}" ] &&
+       [ "${headers}" != "-" ] && [ "${log_headers}" != "-" ]; then
+        headers=$(max_int "${headers}" "${log_headers}")
+    fi
     if [ -z "${progress}" ] || [ "${progress}" = "-" ]; then
         progress="${log_progress}"
     fi
@@ -772,7 +776,7 @@ render_status_json() {
 
         case "${ibd_stage_key}" in
             pre_headers|sync_headers)
-                if [ "${header_stage_fresh}" = "1" ] && [ -n "${stage_pct_num}" ]; then
+                if [ "${blocks}" = "0" ] && [ -n "${stage_pct_num}" ]; then
                     if awk -v p="${stage_pct_num}" 'BEGIN{exit !((p + 0) < 99.9)}'; then
                         header_stage_active=1
                     fi
@@ -823,7 +827,8 @@ render_status_json() {
         progress_ring="${height_based_progress}"
     fi
 
-    if [ "${btc_running}" != "0" ] && [ "${header_gap}" -gt 0 ] 2>/dev/null && [ -n "${height_based_progress}" ]; then
+     if [ "${btc_running}" != "0" ] && [ "${block_sync_needed}" = "1" ] &&
+         [ "${header_gap}" -gt 0 ] 2>/dev/null && [ -n "${height_based_progress}" ]; then
         ibd_stage_key="sync_blocks"
         ibd_stage_label="Synchronizing blocks"
         ibd_stage_height=$(fmt_int "${blocks}")
