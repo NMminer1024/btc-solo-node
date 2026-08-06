@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bitpony <bitpony@example.com>
+Date: Thu, 6 Aug 2026 20:45:00 +0800
+Subject: [PATCH] rtl8189fs: disable SDIO power saving
+
+Disable the Realtek IPS/LPS power-saving paths for Rockbase. Field
+freeze logs showed RTL8189FS SDIO threads stuck around the command and
+transmit paths while the system was under storage pressure; keeping the
+WiFi device out of IPS/LPS removes the low-power SDIO transition path
+from the runtime test image.
+
+Signed-off-by: bitpony <bitpony@example.com>
+---
+ Makefile | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index 3e4e8b8..0c4b0aa 100644
+--- a/Makefile
++++ b/Makefile
+@@ -54,9 +54,9 @@ CONFIG_SDIO_HCI = y
+ CONFIG_GSPI_HCI = n
+ ########################## Features ###########################
+ CONFIG_MP_INCLUDED = y
+-CONFIG_POWER_SAVING = y
+-CONFIG_IPS_MODE = default
+-CONFIG_LPS_MODE = default
++CONFIG_POWER_SAVING = n
++CONFIG_IPS_MODE = 0
++CONFIG_LPS_MODE = 0
+ CONFIG_USB_AUTOSUSPEND = n
+ CONFIG_HW_PWRP_DETECTION = n
+ CONFIG_BT_COEXIST = n
+-- 
+2.34.1
+
