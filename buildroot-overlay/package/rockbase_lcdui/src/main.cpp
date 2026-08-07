@@ -43,7 +43,6 @@ constexpr uint32_t kReleaseRedrawBoostMs = 220;
 constexpr uint32_t kDisplayRefrPeriodMs = 10;
 constexpr uint32_t kPresentIntervalMs = 20;
 constexpr const char* kBootLogoRawPath = "/usr/share/rockbase-lcdui/boot-logo-800x480.argb";
-constexpr const char* kDashboardRawPath = "/usr/share/rockbase-lcdui/bitcoin_dashboard_800x480.argb";
 constexpr const char* kStatusCachePath = "/tmp/status-api.json";
 volatile sig_atomic_t g_stop = 0;
 display* g_display = nullptr;
@@ -155,15 +154,22 @@ struct DashboardData {
 
 constexpr TileSpec kTiles[kTileCount] = {
     {"Bitcoind", "Local Bitcoin node overview", 0x0a141b, 0xf0b44c, true},
-    {"Stratum", "Pool and miner session placeholder", 0x101418, 0x51c7a3, false},
-    {"System", "CPU, memory, disk and process placeholder", 0x13151e, 0x8fb7ff, false},
-    {"Network", "WiFi, LAN and peer status placeholder", 0x101719, 0xff8c64, false},
+    {"Stratum", "Pool and miner session placeholder", 0x101418, 0x51c7a3, true},
+    {"System", "CPU, memory, disk and process placeholder", 0x13151e, 0x8fb7ff, true},
+    {"Network", "WiFi, LAN and peer status placeholder", 0x101719, 0xff8c64, true},
+};
+
+constexpr const char* kPageBgRawPaths[kTileCount] = {
+    "/usr/share/rockbase-lcdui/dashboard_bg_800x480.argb",
+    "/usr/share/rockbase-lcdui/stratum_bg_800x480.argb",
+    "/usr/share/rockbase-lcdui/system_bg_800x480.argb",
+    "/usr/share/rockbase-lcdui/network_bg_800x480.argb",
 };
 
 TouchInput g_touch;
 TileRuntime g_tiles;
 RawImage g_boot_logo;
-RawImage g_dashboard_bg;
+RawImage g_page_bg[kTileCount];
 bool g_tile_snap_pending = false;
 static uint32_t* g_tile_cache[kTileCount] = {};  // pre-rendered physical frames per tile
 bool g_scroll_blend_active = false;
@@ -1213,20 +1219,12 @@ void set_label_fmt(lv_obj_t* label, const char* fmt, const std::string& value) {
     }
 }
 
-void style_tile(lv_obj_t* tile, lv_color_t bg, lv_color_t accent) {
+void style_tile(lv_obj_t* tile, lv_color_t bg, lv_color_t /*accent*/) {
     /* Do not remove all styles from a tileview tile: LVGL stores tile size/pos as local style props. */
     lv_obj_set_style_bg_color(tile, bg, 0);
     lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(tile, 0, 0);
     lv_obj_set_style_pad_all(tile, 0, 0);
-
-    lv_obj_t* band = lv_obj_create(tile);
-    make_static(band);
-    lv_obj_set_pos(band, 0, 0);
-    lv_obj_set_size(band, 800, 480);
-    lv_obj_set_style_bg_color(band, accent, 0);
-    lv_obj_set_style_bg_opa(band, LV_OPA_20, 0);
-    lv_obj_set_style_border_width(band, 0, 0);
 }
 
 void add_page_header(lv_obj_t* tile, const char* title, const char* subtitle, lv_color_t accent) {
@@ -1244,14 +1242,14 @@ lv_dir_t tile_dir_for(uint32_t col) {
     return static_cast<lv_dir_t>(LV_DIR_LEFT | LV_DIR_RIGHT);
 }
 
-void add_dashboard_background(lv_obj_t* tile) {
-    if (!g_dashboard_bg.ready) {
+void add_dashboard_background(lv_obj_t* tile, uint32_t page) {
+    if (page >= kTileCount || !g_page_bg[page].ready) {
         return;
     }
 
     lv_obj_t* img = lv_image_create(tile);
     lv_obj_remove_style_all(img);
-    lv_image_set_src(img, &g_dashboard_bg.dsc);
+    lv_image_set_src(img, &g_page_bg[page].dsc);
     lv_obj_set_pos(img, 0, 0);
     lv_obj_set_size(img, kUiWidth, kUiHeight);
     lv_obj_move_to_index(img, 0);
@@ -1265,7 +1263,7 @@ lv_obj_t* create_tile_base(lv_obj_t* tv, uint8_t col, const TileSpec& spec) {
     lv_obj_set_pos(tile, static_cast<int32_t>(col) * static_cast<int32_t>(kUiWidth), 0);
     style_tile(tile, bg, accent);
     if (spec.use_dashboard_bg) {
-        add_dashboard_background(tile);
+        add_dashboard_background(tile, col);
     }
     add_page_header(tile, spec.title, spec.subtitle, accent);
     g_tiles.page[col] = tile;
@@ -1531,7 +1529,9 @@ int main() {
     }
 
     load_argb_image(kBootLogoRawPath, g_boot_logo);
-    load_argb_image(kDashboardRawPath, g_dashboard_bg);
+    for (uint32_t index = 0; index < kTileCount; ++index) {
+        load_argb_image(kPageBgRawPaths[index], g_page_bg[index]);
+    }
 
     lv_display_t* disp = nullptr;
     if (!init_lv_display(&disp)) {
