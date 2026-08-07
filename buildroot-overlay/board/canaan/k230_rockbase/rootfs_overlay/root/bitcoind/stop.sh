@@ -8,7 +8,7 @@ CONF=/root/bitcoind/bitcoin.conf
 DATADIR=/root/block
 LOGFILE=/root/bitcoind/debug.log
 
-if ! ps | grep -v grep | grep -q bitcoind; then
+if ! pidof bitcoind > /dev/null 2>&1; then
     echo "bitcoind is not running"
     exit 0
 fi
@@ -25,7 +25,7 @@ while [ $SECONDS -lt $MAX_WAIT ]; do
         echo "bitcoind stopped OK"
         exit 0
     fi
-    if ! ps | grep -v grep | grep -q bitcoind; then
+    if ! pidof bitcoind > /dev/null 2>&1; then
         # 进程已退出但可能没写日志（配置文件切换等情况）
         echo "bitcoind process exited (no shutdown log)"
         exit 0

@@ -65,7 +65,7 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo " [1/4] 检查本地 bitcoind 状态"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-if ps | grep -v grep | grep -q bitcoind; then
+if pidof bitcoind > /dev/null 2>&1; then
     echo -e "  ${RED}✗ 本地 bitcoind 仍在运行！${NC}"
     echo ""
     echo "  请先停止: bitcoin-cli -datadir=$LOCAL_DATADIR stop"
@@ -115,7 +115,7 @@ echo " [3/4] 检查远程 bitcoind 状态"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # 用 grep -q 检测，避免 grep -c 无匹配时退出码=1 被 || 误判
-if $SSH_CMD root@"$TARGET_IP" "ps | grep -v grep | grep -q bitcoind" 2>/dev/null; then
+if $SSH_CMD root@"$TARGET_IP" "pidof bitcoind > /dev/null 2>&1" 2>/dev/null; then
     echo -e "  ${RED}✗ 远程 bitcoind 仍在运行${NC}"
     echo ""
     echo "  请在目标设备执行: bitcoin-cli -datadir=$REMOTE_DATADIR stop"
@@ -198,7 +198,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo " [5/5] 清空目标端旧数据"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  正在清空 root@$TARGET_IP:$REMOTE_DATADIR/ ..."
-$SSH_CMD root@"$TARGET_IP" "rm -rf $REMOTE_DATADIR_Q && mkdir -p $REMOTE_DATADIR_Q"
+$SSH_CMD root@"$TARGET_IP" "find $REMOTE_DATADIR_Q -mindepth 1 -delete 2>/dev/null; mkdir -p $REMOTE_DATADIR_Q"
 if [ $? -ne 0 ]; then
     echo -e "  ${RED}✗ 清空失败${NC}"
     exit 1

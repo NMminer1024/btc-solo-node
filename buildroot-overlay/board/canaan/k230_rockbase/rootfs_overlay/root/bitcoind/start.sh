@@ -15,13 +15,13 @@ find_log() {
     echo "$DATADIR/debug.log"
 }
 
-if ps | grep -v grep | grep -q bitcoind; then
+if pidof bitcoind > /dev/null 2>&1; then
     echo "bitcoind already running, showing log..."
 else
     echo "Starting bitcoind..."
     bitcoind -conf="$CONF" -datadir="$DATADIR" -daemon
     sleep 2
-    if ps | grep -v grep | grep -q bitcoind; then
+    if pidof bitcoind > /dev/null 2>&1; then
         echo "bitcoind started OK"
     else
         echo "bitcoind FAILED to start"

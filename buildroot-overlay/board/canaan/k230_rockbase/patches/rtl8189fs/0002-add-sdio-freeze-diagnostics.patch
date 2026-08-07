@@ -1,0 +1,470 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bitpony <bitpony@example.com>
+Date: Fri, 7 Aug 2026 09:45:00 +0800
+Subject: [PATCH] rtl8189fs: add SDIO freeze diagnostics
+
+Add rate-limited diagnostics around the RTL8189FS SDIO IRQ, RX/TX port,
+low-level CMD53 read/write, command thread, and transmit thread paths.
+These messages are intended to preserve the last active WiFi/SDIO path on
+the serial console when the Rockbase boards freeze.
+
+This patch is diagnostic only. It does not alter locking, return values,
+timeouts, power-management policy, retry behavior, or recovery behavior.
+
+Signed-off-by: bitpony <bitpony@example.com>
+---
+ core/rtw_cmd.c                    | 27 +++++++++++++++++++++++++--
+ core/rtw_xmit.c                   | 14 +++++++++++++-
+ hal/rtl8188f/sdio/rtl8189fs_xmit.c | 14 +++++++++++++-
+ hal/rtl8188f/sdio/sdio_ops.c      | 42 ++++++++++++++++++++++++++++++++++++++++
+ os_dep/linux/sdio_intf.c          | 24 +++++++++++++++++++++++
+ os_dep/linux/sdio_ops_linux.c     | 48 +++++++++++++++++++++++++++++++++++++++++++++
+ 6 files changed, 165 insertions(+), 4 deletions(-)
+
+diff --git a/core/rtw_cmd.c b/core/rtw_cmd.c
+index 09985fc..19cc51f 100644
+--- a/core/rtw_cmd.c
++++ b/core/rtw_cmd.c
+@@ -518,6 +518,29 @@ void rtw_stop_cmd_thread(_adapter *adapter)
+ 	}
+ }
+ 
++static bool rb8189_diag_cmd_ratelimit(systime *last, u32 period_ms)
++{
++	systime now = rtw_get_current_time();
++
++	if (*last && rtw_get_passing_time_ms(*last) < period_ms)
++		return false;
++
++	*last = now;
++	return true;
++}
++
++static void rb8189_diag_cmd_start(struct cmd_obj *pcmd, struct cmd_priv *pcmdpriv)
++{
++	static systime last;
++
++	if (!rb8189_diag_cmd_ratelimit(&last, 5000))
++		return;
++
++	pr_warn("[rb8189-diag] rtw_cmd_thread cmd start "CMD_FMT" pid=%d comm=%s issued=%u done=%u seq=%u\n",
++		 CMD_ARG(pcmd), current->pid, current->comm,
++		 pcmdpriv->cmd_issued_cnt, pcmdpriv->cmd_done_cnt, pcmdpriv->cmd_seq);
++}
++
+ thread_return rtw_cmd_thread(thread_context context)
+ {
+ 	u8 ret;
+@@ -644,6 +667,7 @@ _next:
+ 				, pcmd->res == H2C_ENQ_HEAD ? "ENQ_HEAD " : (pcmd->res == H2C_ENQ_HEAD_FAIL ? "ENQ_HEAD_FAIL " : ""));
+ 
+ 		_rtw_memcpy(pcmdbuf, pcmd->parmbuf, pcmd->cmdsz);
++		rb8189_diag_cmd_start(pcmd, pcmdpriv);
+ 		ret = cmd_hdl(pcmd->padapter, pcmdbuf);
+ 		pcmd->res = ret;
+ 
+@@ -664,7 +688,9 @@ post_process:
+ 
+ 		cmd_process_time = rtw_get_passing_time_ms(cmd_start_time);
+ 		if (cmd_process_time > 1000) {
+-			RTW_INFO(ADPT_FMT" "CMD_FMT" process_time=%d\n", ADPT_ARG(pcmd->padapter), CMD_ARG(pcmd), cmd_process_time);
++			pr_warn("[rb8189-diag] rtw_cmd_thread cmd done "ADPT_FMT" "CMD_FMT" ret=%u process_time=%d issued=%u done=%u seq=%u\n",
++				ADPT_ARG(pcmd->padapter), CMD_ARG(pcmd), pcmd->res, cmd_process_time,
++				pcmdpriv->cmd_issued_cnt, pcmdpriv->cmd_done_cnt, pcmdpriv->cmd_seq);
+ 			if (0)
+ 				rtw_warn_on(1);
+ 		}
+diff --git a/core/rtw_xmit.c b/core/rtw_xmit.c
+index 1465523..672e8d5 100644
+--- a/core/rtw_xmit.c
++++ b/core/rtw_xmit.c
+@@ -5595,10 +5595,22 @@ sint check_pending_xmitbuf(
+ 	return ret;
+ }
+ 
++static void rb8189_diag_xmit_handler_done(PADAPTER padapter, s32 err, systime start)
++{
++	u32 elapsed = rtw_get_passing_time_ms(start);
++
++	if (elapsed < 1000)
++		return;
++
++	pr_warn("[rb8189-diag] rtw_xmit_thread handler done "FUNC_ADPT_FMT" pid=%d comm=%s ret=%d elapsed_ms=%u\n",
++		 FUNC_ADPT_ARG(padapter), current->pid, current->comm, err, elapsed);
++}
++
+ thread_return rtw_xmit_thread(thread_context context)
+ {
+ 	s32 err;
+ 	PADAPTER padapter;
++	systime start;
+ #ifdef RTW_XMIT_THREAD_HIGH_PRIORITY
+ #ifdef PLATFORM_LINUX
+ 	struct sched_param param = { .sched_priority = 1 };
+@@ -5613,7 +5625,9 @@ thread_return rtw_xmit_thread(thread_context context)
+ 	thread_enter("RTW_XMIT_THREAD");
+ 
+ 	do {
++		start = rtw_get_current_time();
+ 		err = rtw_hal_xmit_thread_handler(padapter);
++		rb8189_diag_xmit_handler_done(padapter, err, start);
+ 		flush_signals_thread();
+ 	} while (_SUCCESS == err);
+ 
+diff --git a/hal/rtl8188f/sdio/rtl8189fs_xmit.c b/hal/rtl8188f/sdio/rtl8189fs_xmit.c
+index b4c678d..0e49481 100644
+--- a/hal/rtl8188f/sdio/rtl8189fs_xmit.c
++++ b/hal/rtl8188f/sdio/rtl8189fs_xmit.c
+@@ -586,12 +586,24 @@ next:
+ 	return _SUCCESS;
+ }
+ 
++static void rb8189_diag_hal_xmit_done(PADAPTER padapter, const char *op, s32 ret, systime start)
++{
++	u32 elapsed = rtw_get_passing_time_ms(start);
++
++	if (elapsed < 1000)
++		return;
++
++	pr_warn("[rb8189-diag] %s done "FUNC_ADPT_FMT" pid=%d comm=%s ret=%d elapsed_ms=%u\n",
++		 op, FUNC_ADPT_ARG(padapter), current->pid, current->comm, ret, elapsed);
++}
++
+ thread_return rtl8188fs_xmit_thread(thread_context context)
+ {
+ 	s32 ret;
+ 	PADAPTER padapter;
+ 	struct xmit_priv *pxmitpriv;
+ 	u8 thread_name[20] = "RTWHALXT";
++	systime start;
+ 
+ 
+ 	ret = _SUCCESS;
+@@ -604,7 +616,9 @@ thread_return rtl8188fs_xmit_thread(thread_context context)
+ 	RTW_INFO("start "FUNC_ADPT_FMT"\n", FUNC_ADPT_ARG(padapter));
+ 
+ 	do {
++		start = rtw_get_current_time();
+ 		ret = rtl8188fs_xmit_handler(padapter);
++		rb8189_diag_hal_xmit_done(padapter, "rtl8188fs_xmit_handler", ret, start);
+ 		flush_signals_thread();
+ 	} while (_SUCCESS == ret);
+ 
+diff --git a/hal/rtl8188f/sdio/sdio_ops.c b/hal/rtl8188f/sdio/sdio_ops.c
+index a1726eb..b3fd670 100644
+--- a/hal/rtl8188f/sdio/sdio_ops.c
++++ b/hal/rtl8188f/sdio/sdio_ops.c
+@@ -18,6 +18,30 @@
+ 
+ /* #define SDIO_DEBUG_IO 1 */
+ #define CONFIG_RTW_SDIO_REG_FORCE_CMD52 0
++#define RB8189_DIAG_SLOW_PORT_MS 200
++#define RB8189_DIAG_PERIOD_MS 5000
++
++static bool rb8189_diag_ratelimit(systime *last, u32 period_ms)
++{
++	systime now = rtw_get_current_time();
++
++	if (*last && rtw_get_passing_time_ms(*last) < period_ms)
++		return false;
++
++	*last = now;
++	return true;
++}
++
++static void rb8189_diag_port_done(const char *op, u32 addr, u32 cnt, u32 oldcnt, s32 err, systime start)
++{
++	u32 elapsed = rtw_get_passing_time_ms(start);
++
++	if (elapsed < RB8189_DIAG_SLOW_PORT_MS && !err)
++		return;
++
++	pr_warn("[rb8189-diag] %s done pid=%d comm=%s addr=0x%05x cnt=%u oldcnt=%u err=%d elapsed_ms=%u\n",
++		 op, current->pid, current->comm, addr, cnt, oldcnt, err, elapsed);
++}
+ 
+ #define WLAN_IOREG_CMD_ADDR(addr) ((WLAN_IOREG_DEVICE_ID << 13) | ((addr) & WLAN_IOREG_MSK))
+ #define WLAN_TXHIQ_CMD_ADDR(r4_cnt) ((WLAN_TX_HIQ_DEVICE_ID << 13) | ((r4_cnt) & WLAN_FIFO_MSK))
+@@ -582,6 +606,7 @@ static u32 sdio_read_port(
+ 	u8 *oldmem;
+ #endif
+ 	s32 err;
++	systime start;
+ 
+ 
+ 	padapter = pintfhdl->padapter;
+@@ -607,7 +632,9 @@ static u32 sdio_read_port(
+ #endif
+ 	}
+ 
++	start = rtw_get_current_time();
+ 	err = _sd_read(pintfhdl, addr, cnt, mem);
++	rb8189_diag_port_done("sdio_read_port", addr, cnt, oldcnt, err, start);
+ 
+ #ifdef SDIO_DYNAMIC_ALLOC_MEM
+ 	if ((oldcnt != cnt) && (oldmem)) {
+@@ -646,6 +673,8 @@ static u32 sdio_write_port(
+ 	PADAPTER padapter;
+ 	s32 err;
+ 	struct xmit_buf *xmitbuf = (struct xmit_buf *)mem;
++	u32 oldcnt;
++	systime start;
+ 
+ 	padapter = pintfhdl->padapter;
+ 
+@@ -654,12 +683,15 @@ static u32 sdio_write_port(
+ 		return _FAIL;
+ 	}
+ 
++	oldcnt = cnt;
+ 	cnt = _RND4(cnt);
+ 	HalSdioGetCmdAddr8188FSdio(padapter, addr, cnt >> 2, &addr);
+ 
+ 	cnt = rtw_sdio_cmd53_align_size(adapter_to_dvobj(padapter), cnt);
+ 
++	start = rtw_get_current_time();
+ 	err = sd_write(pintfhdl, addr, cnt, xmitbuf->pdata);
++	rb8189_diag_port_done("sdio_write_port", addr, cnt, oldcnt, err, start);
+ 
+ 	rtw_sctx_done_err(&xmitbuf->sctx,
+ 		  err ? RTW_SCTX_DONE_WRITE_PORT_ERR : RTW_SCTX_DONE_SUCCESS);
+@@ -1652,11 +1684,18 @@ void sd_int_hdl(PADAPTER padapter)
+ 	#if !CMD52_ACCESS_HISR_RX_REQ_LEN
+ 	u8 data[6];
+ 	#endif
++	systime start;
++	u32 elapsed;
++	static systime last_enter;
+ 
+ 	if (RTW_CANNOT_RUN(padapter))
+ 		return;
+ 
+ 	phal = GET_HAL_DATA(padapter);
++	start = rtw_get_current_time();
++	if (rb8189_diag_ratelimit(&last_enter, RB8189_DIAG_PERIOD_MS))
++		pr_warn("[rb8189-diag] sd_int_hdl enter pid=%d comm=%s\n",
++			 current->pid, current->comm);
+ 
+ 	#if SD_INT_HDL_DIS_HIMR_RX_REQ
+ 	disable_himr_rx_req_8188f_sdio(padapter);
+@@ -1705,6 +1744,11 @@ void sd_int_hdl(PADAPTER padapter)
+ 	#if SD_INT_HDL_DIS_HIMR_RX_REQ
+ 	restore_himr_8188f_sdio(padapter);
+ 	#endif
++
++	elapsed = rtw_get_passing_time_ms(start);
++	if (elapsed >= RB8189_DIAG_SLOW_PORT_MS)
++		pr_warn("[rb8189-diag] sd_int_hdl done pid=%d comm=%s hisr=0x%08x himr=0x%08x elapsed_ms=%u\n",
++			 current->pid, current->comm, phal->sdio_hisr, phal->sdio_himr, elapsed);
+ }
+ 
+ /*
+diff --git a/os_dep/linux/sdio_intf.c b/os_dep/linux/sdio_intf.c
+index 4e7117a..0b7fed6 100644
+--- a/os_dep/linux/sdio_intf.c
++++ b/os_dep/linux/sdio_intf.c
+@@ -148,9 +148,23 @@ static struct rtw_if_operations sdio_ops = {
+ 	.write		= rtw_sdio_raw_write,
+ };
+ 
++static bool rb8189_diag_irq_ratelimit(systime *last, u32 period_ms)
++{
++	systime now = rtw_get_current_time();
++
++	if (*last && rtw_get_passing_time_ms(*last) < period_ms)
++		return false;
++
++	*last = now;
++	return true;
++}
++
+ static void sd_sync_int_hdl(struct sdio_func *func)
+ {
+ 	struct dvobj_priv *psdpriv;
++	systime start;
++	u32 elapsed;
++	static systime last_enter;
+ 
+ 	psdpriv = sdio_get_drvdata(func);
+ 
+@@ -159,9 +173,19 @@ static void sd_sync_int_hdl(struct sdio_func *func)
+ 		return;
+ 	}
+ 
++	start = rtw_get_current_time();
++	if (rb8189_diag_irq_ratelimit(&last_enter, 5000))
++		pr_warn("[rb8189-diag] sd_sync_int_hdl enter pid=%d comm=%s func=%p\n",
++			 current->pid, current->comm, func);
++
+ 	rtw_sdio_set_irq_thd(psdpriv, current);
+ 	sd_int_hdl(dvobj_get_primary_adapter(psdpriv));
+ 	rtw_sdio_set_irq_thd(psdpriv, NULL);
++
++	elapsed = rtw_get_passing_time_ms(start);
++	if (elapsed >= 200)
++		pr_warn("[rb8189-diag] sd_sync_int_hdl done pid=%d comm=%s func=%p elapsed_ms=%u\n",
++			 current->pid, current->comm, func, elapsed);
+ }
+ 
+ int sdio_alloc_irq(struct dvobj_priv *dvobj)
+diff --git a/os_dep/linux/sdio_ops_linux.c b/os_dep/linux/sdio_ops_linux.c
+index 41898f8..a8ad9e0 100644
+--- a/os_dep/linux/sdio_ops_linux.c
++++ b/os_dep/linux/sdio_ops_linux.c
+@@ -16,6 +16,42 @@
+ 
+ #include <drv_types.h>
+ 
++#define RB8189_DIAG_SLOW_SDIO_MS 200
++#define RB8189_DIAG_PERIOD_MS 5000
++
++static bool rb8189_diag_ratelimit(systime *last, u32 period_ms)
++{
++	systime now = rtw_get_current_time();
++
++	if (*last && rtw_get_passing_time_ms(*last) < period_ms)
++		return false;
++
++	*last = now;
++	return true;
++}
++
++static void rb8189_diag_sdio_enter(const char *op, u32 addr, u32 cnt, bool claim)
++{
++	static systime last;
++
++	if (!rb8189_diag_ratelimit(&last, RB8189_DIAG_PERIOD_MS))
++		return;
++
++	pr_warn("[rb8189-diag] %s enter pid=%d comm=%s addr=0x%05x cnt=%u claim=%u\n",
++		 op, current->pid, current->comm, addr, cnt, claim ? 1 : 0);
++}
++
++static void rb8189_diag_sdio_done(const char *op, u32 addr, u32 cnt, bool claim, s32 err, systime start)
++{
++	u32 elapsed = rtw_get_passing_time_ms(start);
++
++	if (elapsed < RB8189_DIAG_SLOW_SDIO_MS && !err)
++		return;
++
++	pr_warn("[rb8189-diag] %s done pid=%d comm=%s addr=0x%05x cnt=%u claim=%u err=%d elapsed_ms=%u\n",
++		 op, current->pid, current->comm, addr, cnt, claim ? 1 : 0, err, elapsed);
++}
++
+ inline bool rtw_is_sdio30(_adapter *adapter)
+ {
+ 	struct dvobj_priv *dvobj = adapter_to_dvobj(adapter);
+@@ -679,6 +715,7 @@ s32 _sd_read(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 
+ 	int err = -EPERM;
+ 	struct sdio_func *func;
++	systime start;
+ 
+ 	padapter = pintfhdl->padapter;
+ 	psdiodev = pintfhdl->pintf_dev;
+@@ -690,6 +727,8 @@ s32 _sd_read(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 	}
+ 
+ 	func = psdio->func;
++	start = rtw_get_current_time();
++	rb8189_diag_sdio_enter("_sd_read", addr, cnt, false);
+ 
+ 	if (unlikely((cnt == 1) || (cnt == 2))) {
+ 		int i;
+@@ -703,6 +741,7 @@ s32 _sd_read(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 				break;
+ 			}
+ 		}
++		rb8189_diag_sdio_done("_sd_read", addr, cnt, false, err, start);
+ 		return err;
+ 	}
+ 
+@@ -713,6 +752,7 @@ s32 _sd_read(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 	if (err == (-ESHUTDOWN) || err == (-ENODEV) || err == (-ENOMEDIUM) || err == (-ETIMEDOUT))
+ 		rtw_set_surprise_removed(padapter);
+ 
++	rb8189_diag_sdio_done("_sd_read", addr, cnt, false, err, start);
+ 
+ 	return err;
+ }
+@@ -739,6 +779,7 @@ s32 sd_read(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 	struct sdio_func *func;
+ 	bool claim_needed;
+ 	s32 err = -EPERM;
++	systime start;
+ 
+ 	padapter = pintfhdl->padapter;
+ 	psdiodev = pintfhdl->pintf_dev;
+@@ -750,12 +791,15 @@ s32 sd_read(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 	}
+ 	func = psdio->func;
+ 	claim_needed = rtw_sdio_claim_host_needed(func);
++	start = rtw_get_current_time();
++	rb8189_diag_sdio_enter("sd_read", addr, cnt, claim_needed);
+ 
+ 	if (claim_needed)
+ 		sdio_claim_host(func);
+ 	err = _sd_read(pintfhdl, addr, cnt, pdata);
+ 	if (claim_needed)
+ 		sdio_release_host(func);
++	rb8189_diag_sdio_done("sd_read", addr, cnt, claim_needed, err, start);
+ 	return err;
+ }
+ 
+@@ -783,6 +827,7 @@ s32 _sd_write(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 	struct sdio_func *func;
+ 	u32 size;
+ 	s32 err = -EPERM;
++	systime start;
+ 
+ 	padapter = pintfhdl->padapter;
+ 	psdiodev = pintfhdl->pintf_dev;
+@@ -795,6 +840,8 @@ s32 _sd_write(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 
+ 	func = psdio->func;
+ 	/*	size = sdio_align_size(func, cnt); */
++	start = rtw_get_current_time();
++	rb8189_diag_sdio_enter("_sd_write", addr, cnt, false);
+ 
+ 	if (unlikely((cnt == 1) || (cnt == 2))) {
+ 		int i;
+@@ -808,6 +854,7 @@ s32 _sd_write(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 			}
+ 		}
+ 
++		rb8189_diag_sdio_done("_sd_write", addr, cnt, false, err, start);
+ 		return err;
+ 	}
+ 
+@@ -816,6 +863,7 @@ s32 _sd_write(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 	if (err)
+ 		RTW_ERR("%s: FAIL(%d)! ADDR=%#x Size=%d(%d)\n", __func__, err, addr, cnt, size);
+ 
++	rb8189_diag_sdio_done("_sd_write", addr, cnt, false, err, start);
+ 
+ 	return err;
+ }
+@@ -842,6 +890,7 @@ s32 sd_write(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 	struct sdio_func *func;
+ 	bool claim_needed;
+ 	s32 err = -EPERM;
++	systime start;
+ 	padapter = pintfhdl->padapter;
+ 	psdiodev = pintfhdl->pintf_dev;
+ 	psdio = &psdiodev->intf_data;
+@@ -853,12 +902,15 @@ s32 sd_write(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 
+ 	func = psdio->func;
+ 	claim_needed = rtw_sdio_claim_host_needed(func);
++	start = rtw_get_current_time();
++	rb8189_diag_sdio_enter("sd_write", addr, cnt, claim_needed);
+ 
+ 	if (claim_needed)
+ 		sdio_claim_host(func);
+ 	err = _sd_write(pintfhdl, addr, cnt, pdata);
+ 	if (claim_needed)
+ 		sdio_release_host(func);
++	rb8189_diag_sdio_done("sd_write", addr, cnt, claim_needed, err, start);
+ 	return err;
+ }
+ 
