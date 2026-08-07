@@ -1,0 +1,134 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bitpony <bitpony@example.com>
+Date: Fri, 7 Aug 2026 14:30:00 +0800
+Subject: [PATCH] mmc: add Rockbase host claim diagnostics
+
+Add serial-console diagnostics around slow MMC host claims. This is used
+to distinguish RTL8189FS SDIO deadlocks between host-claim contention and
+lower-level command/data transfer stalls.
+
+This patch is diagnostic only. It does not change claim ownership,
+timeouts, retry policy, request dispatch, or recovery behavior.
+
+Signed-off-by: bitpony <bitpony@example.com>
+---
+ drivers/mmc/core/core.c | 70 +++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 70 insertions(+)
+
+diff --git a/drivers/mmc/core/core.c b/drivers/mmc/core/core.c
+index 724e6e3d7..d68a1a994 100644
+--- a/drivers/mmc/core/core.c
++++ b/drivers/mmc/core/core.c
+@@ -25,6 +25,7 @@
+ #include <linux/random.h>
+ #include <linux/slab.h>
+ #include <linux/of.h>
++#include <linux/jiffies.h>
+ 
+ #include <linux/mmc/card.h>
+ #include <linux/mmc/host.h>
+@@ -61,6 +62,50 @@ static const unsigned freqs[] = { 400000, 300000, 200000, 100000 };
+ bool use_spi_crc = 1;
+ module_param(use_spi_crc, bool, 0);
+ 
++#define RB_MMC_CLAIM_WAIT_WARN_MS	1000
++#define RB_MMC_CLAIM_ACQUIRED_WARN_MS	200
++
++static void rb_mmc_diag_capture_owner(struct mmc_host *host, pid_t *owner_pid,
++				      char *owner_comm, size_t owner_comm_len,
++				      int *claim_cnt, int *claimed)
++{
++	struct task_struct *owner = NULL;
++
++	*owner_pid = -1;
++	strscpy(owner_comm, "-", owner_comm_len);
++	*claim_cnt = host->claim_cnt;
++	*claimed = host->claimed;
++
++	if (host->claimer)
++		owner = host->claimer->task;
++
++	if (!owner)
++		return;
++
++	*owner_pid = task_pid_nr(owner);
++	strscpy(owner_comm, owner->comm, owner_comm_len);
++}
++
++static void rb_mmc_diag_claim_wait(struct mmc_host *host, unsigned long start,
++				   bool first_wait, pid_t owner_pid,
++				   const char *owner_comm, int claimed,
++				   int claim_cnt)
++{
++	unsigned int waited_ms = jiffies_to_msecs(jiffies - start);
++
++	pr_warn("[rb-mmc-diag] claim wait%s host=%s waiter=%d:%s owner=%d:%s claimed=%d claim_cnt=%d waited_ms=%u\n",
++		first_wait ? " begin" : "", mmc_hostname(host), current->pid,
++		current->comm, owner_pid, owner_comm, claimed, claim_cnt,
++		waited_ms);
++}
++
++static void rb_mmc_diag_claim_acquired(struct mmc_host *host, unsigned int waited_ms)
++{
++	pr_warn("[rb-mmc-diag] claim acquired host=%s waiter=%d:%s claim_cnt=%d waited_ms=%u\n",
++		mmc_hostname(host), current->pid, current->comm, host->claim_cnt,
++		waited_ms);
++}
++
+ static int mmc_schedule_delayed_work(struct delayed_work *work,
+ 				     unsigned long delay)
+ {
+@@ -789,6 +834,16 @@ int __mmc_claim_host(struct mmc_host *host, struct mmc_ctx *ctx,
+ 	unsigned long flags;
+ 	int stop;
+ 	bool pm = false;
++	unsigned long start = jiffies;
++	unsigned long next_warn = start;
++	bool did_wait = false;
++	bool first_wait = true;
++	bool warn_wait;
++	bool warn_first_wait;
++	pid_t warn_owner_pid = -1;
++	char warn_owner_comm[TASK_COMM_LEN];
++	int warn_claim_cnt = 0;
++	int warn_claimed = 0;
+ 
+ 	might_sleep();
+ 
+@@ -799,7 +854,25 @@ int __mmc_claim_host(struct mmc_host *host, struct mmc_ctx *ctx,
+ 		stop = abort ? atomic_read(abort) : 0;
+ 		if (stop || !host->claimed || mmc_ctx_matches(host, ctx, task))
+ 			break;
++		did_wait = true;
++		warn_wait = false;
++		warn_first_wait = first_wait;
++		if (time_after_eq(jiffies, next_warn)) {
++			warn_wait = true;
++			first_wait = false;
++			next_warn = jiffies +
++				    msecs_to_jiffies(RB_MMC_CLAIM_WAIT_WARN_MS);
++			rb_mmc_diag_capture_owner(host, &warn_owner_pid,
++						  warn_owner_comm,
++						  sizeof(warn_owner_comm),
++						  &warn_claim_cnt,
++						  &warn_claimed);
++		}
+ 		spin_unlock_irqrestore(&host->lock, flags);
++		if (warn_wait)
++			rb_mmc_diag_claim_wait(host, start, warn_first_wait,
++					       warn_owner_pid, warn_owner_comm,
++					       warn_claimed, warn_claim_cnt);
+ 		schedule();
+ 		spin_lock_irqsave(&host->lock, flags);
+ 	}
+@@ -818,6 +891,10 @@ int __mmc_claim_host(struct mmc_host *host, struct mmc_ctx *ctx,
+ 	if (pm)
+ 		pm_runtime_get_sync(mmc_dev(host));
+ 
++	if (!stop && did_wait &&
++	    jiffies_to_msecs(jiffies - start) >= RB_MMC_CLAIM_ACQUIRED_WARN_MS)
++		rb_mmc_diag_claim_acquired(host, jiffies_to_msecs(jiffies - start));
++
+ 	return stop;
+ }
+ EXPORT_SYMBOL(__mmc_claim_host);
