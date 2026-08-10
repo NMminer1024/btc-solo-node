@@ -1730,17 +1730,17 @@ void build_bitcoin_tile(lv_obj_t* tv) {
     lv_obj_add_flag(g_tiles.bitcoin_height_total, LV_OBJ_FLAG_HIDDEN);
     lv_obj_t* block_time_card = create_card_frame(tile, 300, 372, 456, 58, "Block Time", accent,
                                                   &g_tiles.bitcoin_block_date_title);
-    lv_obj_set_width(g_tiles.bitcoin_block_date_title, 112);
     lv_obj_set_y(g_tiles.bitcoin_block_date_title, 10);
-    lv_label_set_long_mode(g_tiles.bitcoin_block_date_title, LV_LABEL_LONG_MODE_CLIP);
-    g_tiles.bitcoin_block_date = add_label(block_time_card, "--", 118, 10, &lv_font_montserrat_16,
+    g_tiles.bitcoin_block_date = add_label(block_time_card, "--", 0, 10, &lv_font_montserrat_16,
                                            lv_color_hex(0xf4efe2));
-    lv_obj_set_width(g_tiles.bitcoin_block_date, 84);
+    lv_obj_set_width(g_tiles.bitcoin_block_date, 100);
     lv_label_set_long_mode(g_tiles.bitcoin_block_date, LV_LABEL_LONG_MODE_DOTS);
-    g_tiles.bitcoin_block_time = add_label(block_time_card, "", 208, 10, &lv_font_montserrat_16,
+    g_tiles.bitcoin_block_time = add_label(block_time_card, "", 0, 10, &lv_font_montserrat_16,
                                            lv_color_hex(0x78848b));
     lv_obj_set_width(g_tiles.bitcoin_block_time, 128);
     lv_label_set_long_mode(g_tiles.bitcoin_block_time, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_align_to(g_tiles.bitcoin_block_date, g_tiles.bitcoin_block_date_title, LV_ALIGN_OUT_RIGHT_MID, 25, 0);
+    lv_obj_align_to(g_tiles.bitcoin_block_time, g_tiles.bitcoin_block_date, LV_ALIGN_OUT_RIGHT_MID, 10, 0);
 }
 
 void build_stratum_tile(lv_obj_t* tv) {
