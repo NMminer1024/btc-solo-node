@@ -158,8 +158,8 @@ index a1726eb..b3fd670 100644
  
  /* #define SDIO_DEBUG_IO 1 */
  #define CONFIG_RTW_SDIO_REG_FORCE_CMD52 0
-+#define RB8189_DIAG_SLOW_PORT_MS 200
-+#define RB8189_DIAG_PERIOD_MS 5000
++#define RB8189_DIAG_SLOW_PORT_MS 300
++#define RB8189_DIAG_PERIOD_MS 30000
 +
 +static bool rb8189_diag_ratelimit(systime *last, u32 period_ms)
 +{
@@ -292,7 +292,7 @@ index 4e7117a..0b7fed6 100644
  	}
  
 +	start = rtw_get_current_time();
-+	if (rb8189_diag_irq_ratelimit(&last_enter, 5000))
++	if (rb8189_diag_irq_ratelimit(&last_enter, 30000))
 +		pr_warn("[rb8189-diag] sd_sync_int_hdl enter pid=%d comm=%s func=%p\n",
 +			 current->pid, current->comm, func);
 +
@@ -301,7 +301,7 @@ index 4e7117a..0b7fed6 100644
  	rtw_sdio_set_irq_thd(psdpriv, NULL);
 +
 +	elapsed = rtw_get_passing_time_ms(start);
-+	if (elapsed >= 200)
++	if (elapsed >= 300)
 +		pr_warn("[rb8189-diag] sd_sync_int_hdl done pid=%d comm=%s func=%p elapsed_ms=%u\n",
 +			 current->pid, current->comm, func, elapsed);
  }
@@ -316,7 +316,7 @@ index 41898f8..a8ad9e0 100644
  #include <drv_types.h>
  
 +#define RB8189_DIAG_SLOW_SDIO_MS 200
-+#define RB8189_DIAG_PERIOD_MS 5000
++#define RB8189_DIAG_PERIOD_MS 30000
 +
 +static bool rb8189_diag_ratelimit(systime *last, u32 period_ms)
 +{

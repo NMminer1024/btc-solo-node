@@ -6,8 +6,12 @@ DIAG_LOG_DIR=/root/log
 DIAG_LOG_FILE=${DIAG_LOG_DIR}/serialhealth-diag.log
 DIAG_LOG_MAX_KB=256
 CONSOLE_OUTPUT=${ROCKBASE_SERIAL_HEALTH_CONSOLE:-1}
+CONSOLE_SUMMARY_INTERVAL=${ROCKBASE_SERIAL_HEALTH_SUMMARY_INTERVAL:-10}
+DIAG_COOLDOWN_SEC=${ROCKBASE_SERIAL_HEALTH_DIAG_COOLDOWN_SEC:-10}
+DIAG_LAST_FILE=/tmp/rockbase-serial-healthd.diag
 SYSRQ_LAST_FILE=/tmp/rockbase-serial-healthd.sysrq
-SYSRQ_COOLDOWN_SEC=30
+SYSRQ_COOLDOWN_SEC=${ROCKBASE_SERIAL_HEALTH_SYSRQ_COOLDOWN_SEC:-120}
+SYSRQ_KEYS=${ROCKBASE_SERIAL_HEALTH_SYSRQ_KEYS:-w}
 export TZ="${TZ:-CST-8}"
 
 log_console() {
@@ -40,6 +44,13 @@ num_or_zero() {
         *) printf '%s' "$1" ;;
     esac
 }
+
+CONSOLE_SUMMARY_INTERVAL="$(num_or_zero "${CONSOLE_SUMMARY_INTERVAL}")"
+[ "${CONSOLE_SUMMARY_INTERVAL}" -gt 0 ] || CONSOLE_SUMMARY_INTERVAL=10
+DIAG_COOLDOWN_SEC="$(num_or_zero "${DIAG_COOLDOWN_SEC}")"
+[ "${DIAG_COOLDOWN_SEC}" -gt 0 ] || DIAG_COOLDOWN_SEC=10
+SYSRQ_COOLDOWN_SEC="$(num_or_zero "${SYSRQ_COOLDOWN_SEC}")"
+[ "${SYSRQ_COOLDOWN_SEC}" -gt 0 ] || SYSRQ_COOLDOWN_SEC=120
 
 read_disk() {
     awk -v dev="$1" '$3 == dev { print $6, $10, $13, $14, $12 }' /proc/diskstats 2>/dev/null
@@ -307,6 +318,7 @@ dump_io_diag() {
     block_wbusy="$4"
 
     log_diag "diag trigger=${reason} d=${d_count} disk_wbusy=${disk_wbusy}% block_wbusy=${block_wbusy}%"
+    log_diag "$(watched_threads_line)"
 
     if [ -r /proc/pressure/io ]; then
         psi="$(awk '{ if (out == "") out = $0; else out = out ";" $0 } END { print out }' /proc/pressure/io 2>/dev/null)"
@@ -322,6 +334,24 @@ dump_io_diag() {
     dump_mmc_sysfs
 }
 
+should_emit_diag() {
+    now="$1"
+    last=""
+
+    [ -r "${DIAG_LAST_FILE}" ] && last="$(cat "${DIAG_LAST_FILE}" 2>/dev/null)"
+    last="$(num_or_zero "${last}")"
+    if [ -n "${last}" ] && [ "${last}" -gt 0 ] && [ $((now - last)) -lt "${DIAG_COOLDOWN_SEC}" ]; then
+        return 1
+    fi
+
+    printf '%s\n' "${now}" >"${DIAG_LAST_FILE}" 2>/dev/null || true
+    return 0
+}
+
+sysrq_key_list() {
+    printf '%s\n' "${SYSRQ_KEYS}" | tr '+,' '  '
+}
+
 maybe_trigger_sysrq() {
     reason="$1"
     now="$2"
@@ -335,9 +365,14 @@ maybe_trigger_sysrq() {
     fi
 
     printf '%s\n' "${now}" >"${SYSRQ_LAST_FILE}" 2>/dev/null || true
-    log_diag "diag sysrq reason=${reason} keys=w+t"
-    printf 'w' >/proc/sysrq-trigger 2>/dev/null || true
-    printf 't' >/proc/sysrq-trigger 2>/dev/null || true
+    log_diag "diag sysrq reason=${reason} keys=${SYSRQ_KEYS}"
+    for key in $(sysrq_key_list); do
+        case "${key}" in
+            w|m|p|l|t)
+                printf '%s' "${key}" >/proc/sysrq-trigger 2>/dev/null || true
+                ;;
+        esac
+    done
 }
 
 root_dev="$(sed -n 's/.*root=\/dev\/\([^ ]*\).*/\1/p' /proc/cmdline)"
@@ -366,7 +401,9 @@ prev_block_wio="${4:-0}"
 prev_irq="$(read_irq_groups)"
 prev_softirq="$(read_softirqs)"
 
-log_console "start interval=${INTERVAL}s root=${root_dev} disk=${disk_dev} block=${block_dev} sysrq=$(cat /proc/sys/kernel/sysrq 2>/dev/null)"
+log_console "start interval=${INTERVAL}s summary_interval=${CONSOLE_SUMMARY_INTERVAL}s root=${root_dev} disk=${disk_dev} block=${block_dev} sysrq=$(cat /proc/sys/kernel/sysrq 2>/dev/null) sysrq_keys=${SYSRQ_KEYS}"
+
+summary_last=0
 
 while :; do
     sleep "${INTERVAL}"
@@ -400,19 +437,27 @@ while :; do
     up="$(cut -d' ' -f1 /proc/uptime | cut -d. -f1)"
     task_stats="$(tasks_line)"
     d_count="$(num_or_zero "$(tasks_d_count "${task_stats}")")"
-    log_console "uptime=${up}s load=${load} $(mem_line) $(vm_line) ${task_stats} $(procs_line) $(net_line)"
-    log_console "io ${disk_stats} | ${root_stats} | ${block_stats}"
 
     curr_irq="$(read_irq_groups)"
     curr_softirq="$(read_softirqs)"
-    log_console "$(delta_metric_line irq 'mmc wifi gpio i2c' "${prev_irq}" "${curr_irq}") $(delta_metric_line softirq 'NET_RX NET_TX BLOCK TIMER SCHED RCU' "${prev_softirq}" "${curr_softirq}")"
-    log_console "$(watched_threads_line)"
+    if [ $((up - summary_last)) -ge "${CONSOLE_SUMMARY_INTERVAL}" ]; then
+        log_console "uptime=${up}s load=${load} $(mem_line) $(vm_line) ${task_stats} $(procs_line) $(net_line)"
+        log_console "io ${disk_stats} | ${root_stats} | ${block_stats}"
+        log_console "$(delta_metric_line irq 'mmc wifi gpio i2c' "${prev_irq}" "${curr_irq}") $(delta_metric_line softirq 'NET_RX NET_TX BLOCK TIMER SCHED RCU' "${prev_softirq}" "${curr_softirq}")"
+        log_console "$(watched_threads_line)"
+        summary_last="${up}"
+    fi
+
     if [ "${d_count}" -gt 0 ]; then
-        dump_io_diag "D" "${d_count}" "${disk_wbusy}" "${block_wbusy}"
-        maybe_trigger_sysrq "D" "${up}"
+        if should_emit_diag "${up}"; then
+            dump_io_diag "D" "${d_count}" "${disk_wbusy}" "${block_wbusy}"
+            maybe_trigger_sysrq "D" "${up}"
+        fi
     elif [ "${disk_wbusy}" -gt 200 ] || [ "${block_wbusy}" -gt 200 ]; then
-        dump_io_diag "wbusy" "${d_count}" "${disk_wbusy}" "${block_wbusy}"
-        maybe_trigger_sysrq "wbusy" "${up}"
+        if should_emit_diag "${up}"; then
+            dump_io_diag "wbusy" "${d_count}" "${disk_wbusy}" "${block_wbusy}"
+            maybe_trigger_sysrq "wbusy" "${up}"
+        fi
     fi
     prev_irq="${curr_irq}"
     prev_softirq="${curr_softirq}"

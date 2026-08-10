@@ -34,15 +34,6 @@ diff --git a/include/linux/mmc/host.h b/include/linux/mmc/host.h
 diff --git a/drivers/mmc/core/core.c b/drivers/mmc/core/core.c
 --- a/drivers/mmc/core/core.c
 +++ b/drivers/mmc/core/core.c
-@@ -63,7 +63,7 @@ bool use_spi_crc = 1;
- module_param(use_spi_crc, bool, 0);
- 
- #define RB_MMC_CLAIM_WAIT_WARN_MS	1000
--#define RB_MMC_CLAIM_ACQUIRED_WARN_MS	200
-+#define RB_MMC_CLAIM_HOLD_WARN_MS	200
- 
- static void rb_mmc_diag_capture_owner(struct mmc_host *host, pid_t *owner_pid,
- 				      char *owner_comm, size_t owner_comm_len,
 @@ -101,9 +101,18 @@ static void rb_mmc_diag_claim_wait(struct mmc_host *host, unsigned long start,
  
  static void rb_mmc_diag_claim_acquired(struct mmc_host *host, unsigned int waited_ms)
@@ -85,17 +76,7 @@ diff --git a/drivers/mmc/core/core.c b/drivers/mmc/core/core.c
  		if (host->claim_cnt == 1)
  			pm = true;
  	} else
-@@ -891,8 +911,7 @@ int __mmc_claim_host(struct mmc_host *host, struct mmc_ctx *ctx,
- 	if (pm)
- 		pm_runtime_get_sync(mmc_dev(host));
- 
--	if (!stop && did_wait &&
--	    jiffies_to_msecs(jiffies - start) >= RB_MMC_CLAIM_ACQUIRED_WARN_MS)
-+	if (!stop && did_wait)
- 		rb_mmc_diag_claim_acquired(host, jiffies_to_msecs(jiffies - start));
- 
- 	return stop;
-@@ -909,10 +928,30 @@ EXPORT_SYMBOL(__mmc_claim_host);
+@@ -909,10 +928,31 @@ EXPORT_SYMBOL(__mmc_claim_host);
  void mmc_release_host(struct mmc_host *host)
  {
  	unsigned long flags;
@@ -117,7 +98,8 @@ diff --git a/drivers/mmc/core/core.c b/drivers/mmc/core/core.c
 +		claim_cnt = host->claim_cnt;
 +		owner_pid = host->rb_claim_owner_pid;
 +		strscpy(owner_comm, host->rb_claim_owner_comm, sizeof(owner_comm));
-+		log_release = contended || held_ms >= RB_MMC_CLAIM_HOLD_WARN_MS;
++		log_release = held_ms >= RB_MMC_CLAIM_HOLD_WARN_MS ||
++			      (contended && held_ms >= RB_MMC_CLAIM_ACQUIRED_WARN_MS);
 +		host->rb_claim_acquired_jiffies = 0;
 +		host->rb_claim_owner_pid = -1;
 +		strscpy(host->rb_claim_owner_comm, "-", sizeof(host->rb_claim_owner_comm));

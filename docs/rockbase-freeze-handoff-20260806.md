@@ -11,6 +11,7 @@
   - 1G/124.28 一类：`mmc0=SDIO`，`mmc1=SD`
 - 2026-08-07 新增 COM14 真实卡死证据：在已禁用 RTL8189FS WiFi 低功耗的镜像上仍复现卡死，因此“WiFi 低功耗”不是充分根因。
 - 2026-08-08 新增 COM5 真实卡死证据：`124.28` 在新日志补丁下反复出现 `mmc0 host claim` 在 `RTW_XMIT_THREAD`、`RTW_CMD_THREAD`、`kworker/0:x` 三方之间来回争抢，最终网络能力拖死，但串口仍能继续打印。
+- 2026-08-10 新增 COM21 真实卡死证据：`124.23` 在 2G 最新镜像上再次卡死，`mmc1=SDIO` 上 `RTW_XMIT_THREAD` 与 `sdio irq kworker` 高频抢 host；同时确认当前内核诊断日志本身过于密集，`claim wait begin waited_ms=0` 级别日志会明显放大单核系统调度压力。
 - `cmd=57` 已确认是 `_Set_Drv_Extra`。当前频繁出现的 `cmd=57,11,1`、`cmd=57,5,0`、`cmd=57,2,0` 说明 `CMD_THREAD` 处理的是驱动后台 work，而不是单一业务命令；这类后台 work 也在参与 SDIO host 争抢。
 - 用户明确不倾向 watchdog 自动重启，因为 bitcoind 区块数据可能损坏；优先方向是让系统不要卡死，以及在卡死时保留内核级串口证据。
 
@@ -112,6 +113,32 @@
   - 不是传统整机 D 态堆死：`tasks=... D0`
 - 本次结论：`124.28` 的 freeze 已基本收敛为 `RTL8189FS + mmc0(SDIO)` 上的 host claim 争抢活锁；其结果是网络/网页能力先失效，串口和部分调度仍可短时存活。
 
+2026-08-10，`COM21_2026_08_10.12.40.41.959.txt` 新增真实卡死现场：
+
+- 日志文件：`C:\Users\bitpony\Desktop\log\COM21_2026_08_10.12.40.41.959.txt`
+- 设备：`124.23`，2G 板，`wlan0=up ip=192.168.124.23/24`。
+- 运行阶段：用户已烧录包含 `0005-serialize-sdio-host-and-dedupe-bg-cmds.patch` 的 1G/2G 最新镜像后观察；本日志属于 2G 板。
+- 当前状态确认：分析时 `ping 192.168.124.23` 100% 丢包，SSH 返回 `No route to host`，网络侧已经不可用。
+- host 拓扑：
+  - `mmc0 card=mmc0:5048 type=SD name=SD128`
+  - `mmc1 card=mmc1:0001 type=SDIO`
+- 尾部不是 SD 卡写回压死：
+  - `dirty=68KB wb=0KB`
+  - `mmcblk0p3` 写入只有 MB 级，`wbusy` 约十几到几十
+  - `bitcoind:up`，`ckpool:down`，`rockbase-lcdui:up`
+- 关键现场：
+  - `RTW_XMIT_THREAD state=D wchan=__mmc_claim_host`
+  - D 栈仍在 `8189fs` TX 路径：`_rtw_down_sema -> rtl8188fs_xmit_buf_handler -> rtw_hal_xmit_thread_handler -> rtw_xmit_thread`
+  - `mmc1` 上反复出现 `RTW_XMIT_THREAD` 与 `kworker/0:3`、`kworker/0:4` 互为 waiter/owner：
+    - `claim wait begin host=mmc1 waiter=955:RTW_XMIT_THREAD owner=18390:kworker/0:3`
+    - `claim wait begin host=mmc1 waiter=18390:kworker/0:3 owner=955:RTW_XMIT_THREAD`
+  - `sd_sync_int_hdl` 仍能间歇完成，但耗时有 100-276ms 级别长尾；`rtw_cmd_thread cmd=57,11,1` 能快速完成，不是本次尾部唯一阻塞点。
+- 诊断日志自身的新问题：
+  - 本文件中 `[rb-mmc-diag] claim wait begin` 出现约 `12435` 次。
+  - `[rb-mmc-diag] claim acquired` 只有约 `13` 次，`claim release` 为 `0` 次，说明当前最密集的是“开始等待”日志，而不是有意义的长等待/长持有闭环。
+  - 大量 `waited_ms=0` 的 `claim wait begin` 是低价值高成本日志，会在串口 `printk` 路径上放大单核调度压力，可能进一步恶化 SDIO host 争抢。
+- 本次结论：`0005` 没有完全解决 2G 板真实 freeze；核心仍指向 `RTL8189FS + mmc1(SDIO)` host claim/IRQ/XMIT 争抢。下一步必须先给内核诊断日志做阈值和限频，避免诊断本身放大问题，然后再继续评估 SDIO 串行化是否需要覆盖 IRQ/workqueue 更完整的入口。
+
 ## 已加入的诊断改动
 
 当前工作区已有未提交改动，主要文件如下：
@@ -134,7 +161,8 @@
   - 打开 sysrq
 - `buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/usr/bin/rockbase_serial_healthd.sh`
   - 串口打印更细的 D 状态、VM、MMC host、进程栈诊断
-  - 当出现 D 状态或极高 wbusy 时，触发 sysrq `w` 和 `t`，冷却时间 30 秒
+  - 2026-08-10 已将常态 health 摘要降为默认 10 秒一次，异常 diag 默认 10 秒冷却
+  - 默认只触发 sysrq `w`，不再默认触发 `t` 全任务表；如需全任务 dump，显式设置 `ROCKBASE_SERIAL_HEALTH_SYSRQ_KEYS=w+t`
   - 同步写 `/root/log/serialhealth-diag.log`，保留最近诊断文本
 - `buildroot-overlay/board/canaan/k230_rockbase/patches/linux/0028-add-rockbase-linux-dts.patch`
   - 1G DTS 增加 `ramoops@3fc00000`，预留 4M
@@ -230,7 +258,7 @@ sudo mount -t drvfs D: /mnt/d -o rw,metadata,uid=$(id -u),gid=$(id -g),umask=022
    - `[health] diag trigger=...`
    - `[health] diag vm ...`
    - `[health] diag stack ...`
-   - kernel hung task/sysrq `w`/`t` 输出
+   - kernel hung task/sysrq `w` 输出；默认不再要求 `t` 全任务表，除非专门排查调度器全局状态。
 4. 硬复位后检查 pstore/ramoops：
 
 ```bash
@@ -268,6 +296,11 @@ cat /sys/fs/pstore/* 2>/dev/null | tail -n 200
   - 不建议先调大 MMC/SDIO timeout 掩盖问题
   - 不建议先改 `bitcoind`、ext4、VM dirty 参数作为主修复
   - 不建议继续把“WiFi 低功耗”当成唯一主因
+- 诊断日志必须先限频：
+  - `rb-mmc-diag claim wait begin` 不应在 `waited_ms=0` 时每次打印。
+  - 建议只打印 `waited_ms >= 200ms/500ms` 的等待，或按 host+waiter+owner 组合限频。
+  - `claim acquired/release` 比 `wait begin` 更有价值，应保留长等待/长持有记录。
+  - `rb8189-diag` 的 enter/before/after 级别日志也应只在 trace 采样或慢操作时打印，避免在正常高频 IRQ/RX/TX 路径刷屏。
 
 ## 接手注意事项
 

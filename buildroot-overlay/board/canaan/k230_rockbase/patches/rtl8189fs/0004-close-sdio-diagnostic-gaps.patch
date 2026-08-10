@@ -26,7 +26,8 @@ diff --git a/core/rtw_cmd.c b/core/rtw_cmd.c
  {
  	static systime last;
  
- 	if (!rb8189_diag_cmd_ratelimit(&last, 5000))
+-	if (!rb8189_diag_cmd_ratelimit(&last, 5000))
++	if (!rb8189_diag_cmd_ratelimit(&last, 30000))
 -		return;
 +		return false;
  
@@ -98,8 +99,8 @@ diff --git a/os_dep/linux/sdio_intf.c b/os_dep/linux/sdio_intf.c
  	rtw_sdio_set_irq_thd(psdpriv, NULL);
  
  	elapsed = rtw_get_passing_time_ms(start);
--	if (elapsed >= 200)
-+	if (trace || elapsed >= 200)
+-	if (elapsed >= 300)
++	if (trace || elapsed >= 300)
  		pr_warn("[rb8189-diag] sd_sync_int_hdl done seq=%u pid=%d comm=%s func=%p elapsed_ms=%u\n",
  			 seq, current->pid, current->comm, func, elapsed);
  }

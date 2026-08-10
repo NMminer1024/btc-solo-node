@@ -24,8 +24,8 @@ index b3fd670..2f7ea63 100644
 +++ b/hal/rtl8188f/sdio/sdio_ops.c
 @@ -20,6 +20,7 @@
  #define CONFIG_RTW_SDIO_REG_FORCE_CMD52 0
- #define RB8189_DIAG_SLOW_PORT_MS 200
- #define RB8189_DIAG_PERIOD_MS 5000
+ #define RB8189_DIAG_SLOW_PORT_MS 300
+ #define RB8189_DIAG_PERIOD_MS 30000
 +static u32 rb8189_diag_irq_seq;
  
  static bool rb8189_diag_ratelimit(systime *last, u32 period_ms)
@@ -144,11 +144,11 @@ index 0b7fed6..7250138 100644
  	}
  
  	start = rtw_get_current_time();
--	if (rb8189_diag_irq_ratelimit(&last_enter, 5000))
+-	if (rb8189_diag_irq_ratelimit(&last_enter, 30000))
 -		pr_warn("[rb8189-diag] sd_sync_int_hdl enter pid=%d comm=%s func=%p\n",
 -			 current->pid, current->comm, func);
 +	seq = ++rb8189_diag_sync_irq_seq;
-+	trace = rb8189_diag_irq_ratelimit(&last_enter, 5000);
++	trace = rb8189_diag_irq_ratelimit(&last_enter, 30000);
 +	if (trace)
 +		pr_warn("[rb8189-diag] sd_sync_int_hdl enter seq=%u pid=%d comm=%s func=%p\n",
 +			 seq, current->pid, current->comm, func);
@@ -164,7 +164,7 @@ index 0b7fed6..7250138 100644
  	rtw_sdio_set_irq_thd(psdpriv, NULL);
  
  	elapsed = rtw_get_passing_time_ms(start);
- 	if (elapsed >= 200)
+ 	if (elapsed >= 300)
 -		pr_warn("[rb8189-diag] sd_sync_int_hdl done pid=%d comm=%s func=%p elapsed_ms=%u\n",
 -			 current->pid, current->comm, func, elapsed);
 +		pr_warn("[rb8189-diag] sd_sync_int_hdl done seq=%u pid=%d comm=%s func=%p elapsed_ms=%u\n",
@@ -183,7 +183,7 @@ index a8ad9e0..efc9bdf 100644
 +#include <linux/atomic.h>
  
  #define RB8189_DIAG_SLOW_SDIO_MS 200
- #define RB8189_DIAG_PERIOD_MS 5000
+ #define RB8189_DIAG_PERIOD_MS 30000
 +static atomic_t rb8189_diag_sdio_seq = ATOMIC_INIT(0);
  
  static bool rb8189_diag_ratelimit(systime *last, u32 period_ms)

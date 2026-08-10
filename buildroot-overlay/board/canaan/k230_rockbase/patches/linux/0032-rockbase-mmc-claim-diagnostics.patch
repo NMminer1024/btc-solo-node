@@ -12,8 +12,8 @@ timeouts, retry policy, request dispatch, or recovery behavior.
 
 Signed-off-by: bitpony <bitpony@example.com>
 ---
- drivers/mmc/core/core.c | 70 +++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 70 insertions(+)
+ drivers/mmc/core/core.c | 71 +++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 71 insertions(+)
 
 diff --git a/drivers/mmc/core/core.c b/drivers/mmc/core/core.c
 index 724e6e3d7..d68a1a994 100644
@@ -27,12 +27,14 @@ index 724e6e3d7..d68a1a994 100644
  
  #include <linux/mmc/card.h>
  #include <linux/mmc/host.h>
-@@ -61,6 +62,50 @@ static const unsigned freqs[] = { 400000, 300000, 200000, 100000 };
+@@ -61,6 +62,52 @@ static const unsigned freqs[] = { 400000, 300000, 200000, 100000 };
  bool use_spi_crc = 1;
  module_param(use_spi_crc, bool, 0);
  
++#define RB_MMC_CLAIM_FIRST_WARN_MS	200
 +#define RB_MMC_CLAIM_WAIT_WARN_MS	1000
 +#define RB_MMC_CLAIM_ACQUIRED_WARN_MS	200
++#define RB_MMC_CLAIM_HOLD_WARN_MS	500
 +
 +static void rb_mmc_diag_capture_owner(struct mmc_host *host, pid_t *owner_pid,
 +				      char *owner_comm, size_t owner_comm_len,
@@ -83,7 +85,7 @@ index 724e6e3d7..d68a1a994 100644
  	int stop;
  	bool pm = false;
 +	unsigned long start = jiffies;
-+	unsigned long next_warn = start;
++	unsigned long next_warn = start + msecs_to_jiffies(RB_MMC_CLAIM_FIRST_WARN_MS);
 +	bool did_wait = false;
 +	bool first_wait = true;
 +	bool warn_wait;
