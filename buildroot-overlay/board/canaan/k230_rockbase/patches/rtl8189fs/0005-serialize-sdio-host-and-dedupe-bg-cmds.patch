@@ -1,0 +1,475 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bitpony <bitpony@example.com>
+Date: Mon, 10 Aug 2026 10:20:00 +0800
+Subject: [PATCH] rtl8189fs: serialize SDIO host access and dedupe bg cmds
+
+Serialize non-IRQ top-level SDIO host users behind a single device mutex so
+background worker paths no longer contend for the same mmc host concurrently.
+Do not lock the SDIO IRQ handler because the MMC core already owns the host
+while dispatching it, and taking the driver mutex there can invert lock order
+against xmit/cmd paths. Also dedupe repeated dynamic-check and power saving
+drvextra work while one instance is already pending so the command thread does
+not keep stacking more host-claim work under pressure.
+
+Signed-off-by: bitpony <bitpony@example.com>
+---
+diff --git a/core/rtw_cmd.c b/core/rtw_cmd.c
+index 3d74861..18724cd 100644
+--- a/core/rtw_cmd.c
++++ b/core/rtw_cmd.c
+@@ -62,6 +62,8 @@ sint	_rtw_init_cmd_priv(struct	cmd_priv *pcmdpriv)
+ 	pcmdpriv->cmd_issued_cnt = pcmdpriv->cmd_done_cnt = pcmdpriv->rsp_cnt = 0;
+ 
+ 	_rtw_mutex_init(&pcmdpriv->sctx_mutex);
++	_rtw_spinlock_init(&pcmdpriv->drvextra_cmd_lock);
++	pcmdpriv->drvextra_cmd_pending = 0;
+ exit:
+ 
+ 
+@@ -227,9 +229,71 @@ void _rtw_free_cmd_priv(struct	cmd_priv *pcmdpriv)
+ 			rtw_mfree(pcmdpriv->rsp_allocated_buf, MAX_RSPSZ + 4);
+ 
+ 		_rtw_mutex_free(&pcmdpriv->sctx_mutex);
++		_rtw_spinlock_free(&pcmdpriv->drvextra_cmd_lock);
+ 	}
+ }
+ 
++static bool rb8189_drvextra_dedup_needed(int ec_id)
++{
++	switch (ec_id) {
++	case DYNAMIC_CHK_WK_CID:
++	case POWER_SAVING_CTRL_WK_CID:
++		return true;
++	default:
++		return false;
++	}
++}
++
++static bool rb8189_drvextra_mark_pending(struct cmd_priv *pcmdpriv,
++					 struct cmd_obj *cmd_obj)
++{
++	struct drvextra_cmd_parm *extra_parm;
++	_irqL irqL;
++	u64 mask;
++	bool queued = true;
++
++	if (!cmd_obj || cmd_obj->cmdcode != GEN_CMD_CODE(_Set_Drv_Extra))
++		return true;
++
++	extra_parm = (struct drvextra_cmd_parm *)cmd_obj->parmbuf;
++	if (!extra_parm || extra_parm->ec_id < 0 || extra_parm->ec_id >= 64)
++		return true;
++	if (!rb8189_drvextra_dedup_needed(extra_parm->ec_id))
++		return true;
++
++	mask = 1ULL << extra_parm->ec_id;
++	_enter_critical(&pcmdpriv->drvextra_cmd_lock, &irqL);
++	if (pcmdpriv->drvextra_cmd_pending & mask)
++		queued = false;
++	else
++		pcmdpriv->drvextra_cmd_pending |= mask;
++	_exit_critical(&pcmdpriv->drvextra_cmd_lock, &irqL);
++
++	return queued;
++}
++
++static void rb8189_drvextra_clear_pending(struct cmd_priv *pcmdpriv,
++					  struct cmd_obj *cmd_obj)
++{
++	struct drvextra_cmd_parm *extra_parm;
++	_irqL irqL;
++	u64 mask;
++
++	if (!cmd_obj || cmd_obj->cmdcode != GEN_CMD_CODE(_Set_Drv_Extra))
++		return;
++
++	extra_parm = (struct drvextra_cmd_parm *)cmd_obj->parmbuf;
++	if (!extra_parm || extra_parm->ec_id < 0 || extra_parm->ec_id >= 64)
++		return;
++	if (!rb8189_drvextra_dedup_needed(extra_parm->ec_id))
++		return;
++
++	mask = 1ULL << extra_parm->ec_id;
++	_enter_critical(&pcmdpriv->drvextra_cmd_lock, &irqL);
++	pcmdpriv->drvextra_cmd_pending &= ~mask;
++	_exit_critical(&pcmdpriv->drvextra_cmd_lock, &irqL);
++}
++
+ /*
+ Calling Context:
+ 
+@@ -447,6 +511,18 @@ u32 rtw_enqueue_cmd(struct cmd_priv *pcmdpriv, struct cmd_obj *cmd_obj)
+ 		pcmdpriv = &(GET_PRIMARY_ADAPTER(padapter)->cmdpriv);
+ #endif
+ 
++	if (!rb8189_drvextra_mark_pending(pcmdpriv, cmd_obj)) {
++		if (cmd_obj->cmdcode == GEN_CMD_CODE(_Set_Drv_Extra)) {
++			struct drvextra_cmd_parm *extra_parm = (struct drvextra_cmd_parm *)cmd_obj->parmbuf;
++
++			if (extra_parm && extra_parm->pbuf && extra_parm->size > 0)
++				rtw_mfree(extra_parm->pbuf, extra_parm->size);
++		}
++		rtw_free_cmd_obj(cmd_obj);
++		res = _SUCCESS;
++		goto exit;
++	}
++
+ 	res = rtw_cmd_filter(pcmdpriv, cmd_obj);
+ 	if ((_FAIL == res) || (cmd_obj->cmdsz > MAX_CMDSZ)) {
+ 		if (cmd_obj->cmdsz > MAX_CMDSZ) {
+@@ -460,11 +536,14 @@ u32 rtw_enqueue_cmd(struct cmd_priv *pcmdpriv, struct cmd_obj *cmd_obj)
+ 			if (extra_parm->pbuf && extra_parm->size > 0)
+ 				rtw_mfree(extra_parm->pbuf, extra_parm->size);
+ 		}
++		rb8189_drvextra_clear_pending(pcmdpriv, cmd_obj);
+ 		rtw_free_cmd_obj(cmd_obj);
+ 		goto exit;
+ 	}
+ 
+ 	res = _rtw_enqueue_cmd(&pcmdpriv->cmd_queue, cmd_obj, 0);
++	if (res != _SUCCESS)
++		rb8189_drvextra_clear_pending(pcmdpriv, cmd_obj);
+ 
+ 	if (res == _SUCCESS)
+ 		_rtw_up_sema(&pcmdpriv->cmd_queue_sema);
+@@ -674,6 +753,7 @@ _next:
+ 		pcmdpriv->cmd_seq++;
+ 
+ post_process:
++		rb8189_drvextra_clear_pending(pcmdpriv, pcmd);
+ 
+ 		_enter_critical_mutex(&(pcmd->padapter->cmdpriv.sctx_mutex), NULL);
+ 		if (pcmd->sctx) {
+@@ -739,6 +819,7 @@ post_process:
+ 		else if (pcmd->cmdcode == GEN_CMD_CODE(_SetChannelSwitch))
+ 			adapter_to_rfctl(padapter)->csa_ch = 0;
+ 		#endif
++		rb8189_drvextra_clear_pending(pcmdpriv, pcmd);
+ 
+ 		_enter_critical_mutex(&(pcmd->padapter->cmdpriv.sctx_mutex), NULL);
+ 		if (pcmd->sctx) {
+diff --git a/include/drv_types.h b/include/drv_types.h
+index 4226bb6..de34bda 100644
+--- a/include/drv_types.h
++++ b/include/drv_types.h
+@@ -1170,6 +1170,9 @@ struct dvobj_priv {
+ #ifdef INTF_OPS
+ 	INTF_OPS intf_ops;
+ #endif
++#ifdef CONFIG_SDIO_HCI
++	_mutex sdio_claim_mutex;
++#endif
+ 
+ 	/*-------- below is for USB INTERFACE --------*/
+ 
+diff --git a/include/rtw_cmd.h b/include/rtw_cmd.h
+index e562140..c706d05 100644
+--- a/include/rtw_cmd.h
++++ b/include/rtw_cmd.h
+@@ -65,6 +65,8 @@ struct cmd_priv {
+ 
+ 	_adapter *padapter;
+ 	_mutex sctx_mutex;
++	_lock drvextra_cmd_lock;
++	u64 drvextra_cmd_pending;
+ };
+ 
+ #ifdef CONFIG_EVENT_THREAD_MODE
+diff --git a/include/sdio_ops.h b/include/sdio_ops.h
+index 29f795d..0e90261 100644
+--- a/include/sdio_ops.h
++++ b/include/sdio_ops.h
+@@ -33,6 +33,8 @@ void sdio_deinit(struct dvobj_priv *dvobj);
+ int sdio_alloc_irq(struct dvobj_priv *dvobj);
+ void sdio_free_irq(struct dvobj_priv *dvobj);
+ u8 sdio_get_num_of_func(struct dvobj_priv *dvobj);
++void rtw_sdio_bus_lock(struct dvobj_priv *dvobj);
++void rtw_sdio_bus_unlock(struct dvobj_priv *dvobj);
+ 
+ #if 0
+ extern void sdio_func1cmd52_read(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *rmem);
+diff --git a/os_dep/linux/os_intfs.c b/os_dep/linux/os_intfs.c
+index 0abc43a..e2705f3 100644
+--- a/os_dep/linux/os_intfs.c
++++ b/os_dep/linux/os_intfs.c
+@@ -2259,6 +2259,9 @@ struct dvobj_priv *devobj_init(void)
+ 	_rtw_mutex_init(&pdvobj->setbw_mutex);
+ 	_rtw_mutex_init(&pdvobj->rf_read_reg_mutex);
+ 	_rtw_mutex_init(&pdvobj->ioctrl_mutex);
++#ifdef CONFIG_SDIO_HCI
++	_rtw_mutex_init(&pdvobj->sdio_claim_mutex);
++#endif
+ #ifdef CONFIG_SDIO_INDIRECT_ACCESS
+ 	_rtw_mutex_init(&pdvobj->sd_indirect_access_mutex);
+ #endif
+@@ -2353,6 +2356,9 @@ void devobj_deinit(struct dvobj_priv *pdvobj)
+ 	_rtw_mutex_free(&pdvobj->setbw_mutex);
+ 	_rtw_mutex_free(&pdvobj->rf_read_reg_mutex);
+ 	_rtw_mutex_free(&pdvobj->ioctrl_mutex);
++#ifdef CONFIG_SDIO_HCI
++	_rtw_mutex_free(&pdvobj->sdio_claim_mutex);
++#endif
+ #ifdef CONFIG_SDIO_INDIRECT_ACCESS
+ 	_rtw_mutex_free(&pdvobj->sd_indirect_access_mutex);
+ #endif
+diff --git a/os_dep/linux/sdio_ops_linux.c b/os_dep/linux/sdio_ops_linux.c
+index 8b8c84d..260148b 100644
+--- a/os_dep/linux/sdio_ops_linux.c
++++ b/os_dep/linux/sdio_ops_linux.c
+@@ -90,6 +90,16 @@ inline void rtw_sdio_set_irq_thd(struct dvobj_priv *dvobj, _thread_hdl_ thd_hdl)
+ 
+ 	sdio_data->sys_sdio_irq_thd = thd_hdl;
+ }
++
++void rtw_sdio_bus_lock(struct dvobj_priv *dvobj)
++{
++	_enter_critical_mutex(&dvobj->sdio_claim_mutex, NULL);
++}
++
++void rtw_sdio_bus_unlock(struct dvobj_priv *dvobj)
++{
++	_exit_critical_mutex(&dvobj->sdio_claim_mutex, NULL);
++}
+ #ifndef RTW_HALMAC
+ u8 sd_f0_read8(struct intf_hdl *pintfhdl, u32 addr, s32 *err)
+ {
+@@ -114,11 +124,15 @@ u8 sd_f0_read8(struct intf_hdl *pintfhdl, u32 addr, s32 *err)
+ 	func = psdio->func;
+ 	claim_needed = rtw_sdio_claim_host_needed(func);
+ 
++	if (claim_needed)
++		rtw_sdio_bus_lock(psdiodev);
+ 	if (claim_needed)
+ 		sdio_claim_host(func);
+ 	v = sdio_f0_readb(func, addr, err);
+ 	if (claim_needed)
+ 		sdio_release_host(func);
++	if (claim_needed)
++		rtw_sdio_bus_unlock(psdiodev);
+ 	if (err && *err)
+ 		RTW_ERR("%s: FAIL!(%d) addr=0x%05x\n", __func__, *err, addr);
+ 
+@@ -147,11 +161,15 @@ void sd_f0_write8(struct intf_hdl *pintfhdl, u32 addr, u8 v, s32 *err)
+ 	func = psdio->func;
+ 	claim_needed = rtw_sdio_claim_host_needed(func);
+ 
++	if (claim_needed)
++		rtw_sdio_bus_lock(psdiodev);
+ 	if (claim_needed)
+ 		sdio_claim_host(func);
+ 	sdio_f0_writeb(func, v, addr, err);
+ 	if (claim_needed)
+ 		sdio_release_host(func);
++	if (claim_needed)
++		rtw_sdio_bus_unlock(psdiodev);
+ 	if (err && *err)
+ 		RTW_ERR("%s: FAIL!(%d) addr=0x%05x val=0x%02x\n", __func__, *err, addr, v);
+ 
+@@ -221,11 +239,15 @@ s32 sd_cmd52_read(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *pdata)
+ 	func = psdio->func;
+ 	claim_needed = rtw_sdio_claim_host_needed(func);
+ 
++	if (claim_needed)
++		rtw_sdio_bus_lock(psdiodev);
+ 	if (claim_needed)
+ 		sdio_claim_host(func);
+ 	err = _sd_cmd52_read(pintfhdl, addr, cnt, pdata);
+ 	if (claim_needed)
+ 		sdio_release_host(func);
++	if (claim_needed)
++		rtw_sdio_bus_unlock(psdiodev);
+ 
+ 
+ 	return err;
+@@ -295,11 +317,15 @@ s32 sd_cmd52_write(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *pdata)
+ 	func = psdio->func;
+ 	claim_needed = rtw_sdio_claim_host_needed(func);
+ 
++	if (claim_needed)
++		rtw_sdio_bus_lock(psdiodev);
+ 	if (claim_needed)
+ 		sdio_claim_host(func);
+ 	err = _sd_cmd52_write(pintfhdl, addr, cnt, pdata);
+ 	if (claim_needed)
+ 		sdio_release_host(func);
++	if (claim_needed)
++		rtw_sdio_bus_unlock(psdiodev);
+ 
+ 
+ 	return err;
+@@ -356,11 +382,15 @@ u8 sd_read8(struct intf_hdl *pintfhdl, u32 addr, s32 *err)
+ 	func = psdio->func;
+ 	claim_needed = rtw_sdio_claim_host_needed(func);
+ 
++	if (claim_needed)
++		rtw_sdio_bus_lock(psdiodev);
+ 	if (claim_needed)
+ 		sdio_claim_host(func);
+ 	v = sdio_readb(func, addr, err);
+ 	if (claim_needed)
+ 		sdio_release_host(func);
++	if (claim_needed)
++		rtw_sdio_bus_unlock(psdiodev);
+ 	if (err && *err)
+ 		RTW_ERR("%s: FAIL!(%d) addr=0x%05x\n", __func__, *err, addr);
+ 
+@@ -390,11 +420,15 @@ u16 sd_read16(struct intf_hdl *pintfhdl, u32 addr, s32 *err)
+ 	func = psdio->func;
+ 	claim_needed = rtw_sdio_claim_host_needed(func);
+ 
++	if (claim_needed)
++		rtw_sdio_bus_lock(psdiodev);
+ 	if (claim_needed)
+ 		sdio_claim_host(func);
+ 	v = sdio_readw(func, addr, err);
+ 	if (claim_needed)
+ 		sdio_release_host(func);
++	if (claim_needed)
++		rtw_sdio_bus_unlock(psdiodev);
+ 	if (err && *err)
+ 		RTW_ERR("%s: FAIL!(%d) addr=0x%05x\n", __func__, *err, addr);
+ 
+@@ -483,6 +517,8 @@ u32 sd_read32(struct intf_hdl *pintfhdl, u32 addr, s32 *err)
+ 	func = psdio->func;
+ 	claim_needed = rtw_sdio_claim_host_needed(func);
+ 
++	if (claim_needed)
++		rtw_sdio_bus_lock(psdiodev);
+ 	if (claim_needed)
+ 		sdio_claim_host(func);
+ 	v = sdio_readl(func, addr, err);
+@@ -524,6 +560,9 @@ u32 sd_read32(struct intf_hdl *pintfhdl, u32 addr, s32 *err)
+ 
+ 	}
+ 
++	if (claim_needed)
++		rtw_sdio_bus_unlock(psdiodev);
++
+ 
+ 	return  v;
+ }
+@@ -550,11 +589,15 @@ void sd_write8(struct intf_hdl *pintfhdl, u32 addr, u8 v, s32 *err)
+ 	func = psdio->func;
+ 	claim_needed = rtw_sdio_claim_host_needed(func);
+ 
++	if (claim_needed)
++		rtw_sdio_bus_lock(psdiodev);
+ 	if (claim_needed)
+ 		sdio_claim_host(func);
+ 	sdio_writeb(func, v, addr, err);
+ 	if (claim_needed)
+ 		sdio_release_host(func);
++	if (claim_needed)
++		rtw_sdio_bus_unlock(psdiodev);
+ 	if (err && *err)
+ 		RTW_ERR("%s: FAIL!(%d) addr=0x%05x val=0x%02x\n", __func__, *err, addr, v);
+ 
+@@ -581,11 +624,15 @@ void sd_write16(struct intf_hdl *pintfhdl, u32 addr, u16 v, s32 *err)
+ 	func = psdio->func;
+ 	claim_needed = rtw_sdio_claim_host_needed(func);
+ 
++	if (claim_needed)
++		rtw_sdio_bus_lock(psdiodev);
+ 	if (claim_needed)
+ 		sdio_claim_host(func);
+ 	sdio_writew(func, v, addr, err);
+ 	if (claim_needed)
+ 		sdio_release_host(func);
++	if (claim_needed)
++		rtw_sdio_bus_unlock(psdiodev);
+ 	if (err && *err)
+ 		RTW_ERR("%s: FAIL!(%d) addr=0x%05x val=0x%04x\n", __func__, *err, addr, v);
+ 
+@@ -664,6 +711,8 @@ void sd_write32(struct intf_hdl *pintfhdl, u32 addr, u32 v, s32 *err)
+ 	func = psdio->func;
+ 	claim_needed = rtw_sdio_claim_host_needed(func);
+ 
++	if (claim_needed)
++		rtw_sdio_bus_lock(psdiodev);
+ 	if (claim_needed)
+ 		sdio_claim_host(func);
+ 	sdio_writel(func, v, addr, err);
+@@ -703,6 +752,9 @@ void sd_write32(struct intf_hdl *pintfhdl, u32 addr, u32 v, s32 *err)
+ 			RTW_ERR("%s: (%d) addr=0x%05x val=0x%08x, try_cnt=%d\n", __func__, *err, addr, v, i);
+ 	}
+ 
++	if (claim_needed)
++		rtw_sdio_bus_unlock(psdiodev);
++
+ }
+ #endif /* !RTW_HALMAC */
+ 
+@@ -821,6 +873,8 @@ s32 sd_read(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 	start = rtw_get_current_time();
+ 	trace = rb8189_diag_sdio_enter("sd_read", addr, cnt, claim_needed, &seq);
+ 
++	if (claim_needed)
++		rtw_sdio_bus_lock(psdiodev);
+ 	if (claim_needed && trace)
+ 		rb8189_diag_sdio_mark("sd_read", "before_claim", seq, addr, cnt, claim_needed);
+ 	if (claim_needed)
+@@ -838,6 +892,8 @@ s32 sd_read(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 		sdio_release_host(func);
+ 	if (claim_needed && trace)
+ 		rb8189_diag_sdio_mark("sd_read", "release_done", seq, addr, cnt, claim_needed);
++	if (claim_needed)
++		rtw_sdio_bus_unlock(psdiodev);
+ 	rb8189_diag_sdio_done("sd_read", seq, addr, cnt, claim_needed, trace, err, start);
+ 	return err;
+ }
+@@ -957,6 +1013,8 @@ s32 sd_write(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 	start = rtw_get_current_time();
+ 	trace = rb8189_diag_sdio_enter("sd_write", addr, cnt, claim_needed, &seq);
+ 
++	if (claim_needed)
++		rtw_sdio_bus_lock(psdiodev);
+ 	if (claim_needed && trace)
+ 		rb8189_diag_sdio_mark("sd_write", "before_claim", seq, addr, cnt, claim_needed);
+ 	if (claim_needed)
+@@ -974,6 +1032,8 @@ s32 sd_write(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, void *pdata)
+ 		sdio_release_host(func);
+ 	if (claim_needed && trace)
+ 		rb8189_diag_sdio_mark("sd_write", "release_done", seq, addr, cnt, claim_needed);
++	if (claim_needed)
++		rtw_sdio_bus_unlock(psdiodev);
+ 	rb8189_diag_sdio_done("sd_write", seq, addr, cnt, claim_needed, trace, err, start);
+ 	return err;
+ }
+@@ -1055,6 +1115,8 @@ int __must_check rtw_sdio_raw_read(struct dvobj_priv *d, unsigned int addr,
+ 	dev_dbg(&func->dev, "rtw_sdio: READ from 0x%05x\n", addr);
+ #endif /* RTW_SDIO_DUMP */
+ 
++	if (claim_needed)
++		rtw_sdio_bus_lock(d);
+ 	if (claim_needed)
+ 		sdio_claim_host(func);
+ 
+@@ -1101,6 +1163,8 @@ int __must_check rtw_sdio_raw_read(struct dvobj_priv *d, unsigned int addr,
+ 
+ 	if (claim_needed)
+ 		sdio_release_host(func);
++	if (claim_needed)
++		rtw_sdio_bus_unlock(d);
+ 
+ #ifdef RTW_SDIO_DUMP
+ 	print_hex_dump(KERN_DEBUG, "rtw_sdio: READ ",
+@@ -1175,6 +1239,8 @@ int __must_check rtw_sdio_raw_write(struct dvobj_priv *d, unsigned int addr,
+ 		       buf, GET_DUMP_LEN(len), false);
+ #endif /* RTW_SDIO_DUMP */
+ 
++	if (claim_needed)
++		rtw_sdio_bus_lock(d);
+ 	if (claim_needed)
+ 		sdio_claim_host(func);
+ 
+@@ -1221,6 +1287,8 @@ int __must_check rtw_sdio_raw_write(struct dvobj_priv *d, unsigned int addr,
+ 
+ 	if (claim_needed)
+ 		sdio_release_host(func);
++	if (claim_needed)
++		rtw_sdio_bus_unlock(d);
+ 
+ 	if (WARN_ON(error)) {
+ 		dev_err(&func->dev, "%s: sdio write failed (%d)\n", __func__, error);
+-- 
+2.34.1

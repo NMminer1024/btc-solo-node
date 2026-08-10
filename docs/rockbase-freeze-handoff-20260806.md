@@ -4,12 +4,14 @@
 
 ## 当前结论
 
-- 主要怀疑方向：SD 卡写回/flush/jbd2/ext4 路径在高写压下把块层和 MMC 请求队列压满，导致多个任务进入 D 状态，系统响应显著下降，最终可能发展成整机卡死。
-- 已确认 SD 卡和 WiFi 不是同一个 MMC host：日志显示 `mmc0` 是 SD 卡 `SD128`，`mmc1` 是 SDIO WiFi。因此目前更像是 SD 卡/块层/文件系统写回问题，不是 SD 与 WiFi 共用同一个 host 的硬件互斥。
-- 压测已经能稳定制造与昨晚卡死现场相似的前兆：高 `disk_wbusy`/`block_wbusy`、`flush-179:0`、`kblockd`、`jbd2/mmcblk0p3-8`、多个 `dd` 进入 D 状态。
-- 压测尚未稳定复现“屏幕时间停止、串口完全无后续有效输出”的最终卡死状态。当前压测阶段屏幕仍能更新，说明系统尚未完全死锁。
-- 2026-08-07 新增 COM14 真实卡死证据：在已禁用 RTL8189FS WiFi 低功耗的镜像上仍复现卡死，因此“WiFi 低功耗”不是充分根因；当前需要把重点转向 `8189fs` 的 SDIO TX/RX 事务、`sdio_irq_work`、`RTW_XMIT_THREAD` 与 MMC core/workqueue 交互。
-- COM14 这次和纯 SD 写压压测不是同一形态：最终阶段 `dirty`/`writeback` 很低，D 状态不集中在 ext4/jbd2/flush，而是出现 `RTW_XMIT_THREAD` 卡在 `sd_write -> sdio_write_port`，同时 `events` workqueue 中有 `sdio_irq_work` 执行或堆积。
+- 早期“SD 卡写回/flush/jbd2/ext4 主因”判断已经降级为次要问题。它能解释 2026-08-06 的纯写压前兆，但解释不了后续多次真实 freeze 的尾部现场。
+- 当前主嫌疑已经收敛到 `RTL8189FS + mmc0/SDIO` 路径，尤其是 `RTW_XMIT_THREAD`、`RTW_CMD_THREAD`、`sdio irq kworker` 在 `mmc_claim_host()` 上的争抢/活锁。
+- 已确认 SD 卡和 WiFi 不共用同一个 host，但不同板卡的 host 编号不同：
+  - 2G/124.29 一类：`mmc0=SD`，`mmc1=SDIO`
+  - 1G/124.28 一类：`mmc0=SDIO`，`mmc1=SD`
+- 2026-08-07 新增 COM14 真实卡死证据：在已禁用 RTL8189FS WiFi 低功耗的镜像上仍复现卡死，因此“WiFi 低功耗”不是充分根因。
+- 2026-08-08 新增 COM5 真实卡死证据：`124.28` 在新日志补丁下反复出现 `mmc0 host claim` 在 `RTW_XMIT_THREAD`、`RTW_CMD_THREAD`、`kworker/0:x` 三方之间来回争抢，最终网络能力拖死，但串口仍能继续打印。
+- `cmd=57` 已确认是 `_Set_Drv_Extra`。当前频繁出现的 `cmd=57,11,1`、`cmd=57,5,0`、`cmd=57,2,0` 说明 `CMD_THREAD` 处理的是驱动后台 work，而不是单一业务命令；这类后台 work 也在参与 SDIO host 争抢。
 - 用户明确不倾向 watchdog 自动重启，因为 bitcoind 区块数据可能损坏；优先方向是让系统不要卡死，以及在卡死时保留内核级串口证据。
 
 ## 关键日志证据
@@ -84,6 +86,31 @@
   - `mmc0 card=mmc0:0001 type=SDIO`
   - `mmc1 card=mmc1:5048 type=SD name=SD64G`
 - 本次结论：124.28 与 COM14/124.29 指向同一个问题族，不是单纯 SD 卡写回压死，也不是 WiFi 低功耗未关闭；核心嫌疑仍是 RTL8189FS SDIO host claim/read-write/irq work 路径在真实业务流量下卡住，进一步拖垮单核系统调度与 MMC/workqueue。
+
+2026-08-08，`COM5_2026_08_07.17.20.23.510.txt` 新增真实卡死现场：
+
+- 日志文件：`C:\Users\bitpony\Desktop\log\COM5_2026_08_07.17.20.23.510.txt`
+- 设备：`124.28`，1G 板，`wlan0=up ip=192.168.124.28/24`，该板上 `mmc0=SDIO`，`mmc1=SD`。
+- 这次拿到的是更靠近最终 freeze 的现场。串口在 `2026-08-08 09:21:54` 仍有输出，但网络侧已表现为网页刷不开，说明更像 WiFi/SDIO 子系统活锁，而不是整机 panic 或 ext4 写回压死。
+- 最关键的新证据不是单次超时，而是 `mmc0 host claim` 进入高频争抢闭环，参与方明确包括：
+  - `800:RTW_XMIT_THREAD`
+  - `801:RTW_CMD_THREAD`
+  - `19484:kworker/0:3` 或 `17886:kworker/0:0`
+- 典型日志片段：
+  - `claim wait begin host=mmc0 waiter=800:RTW_XMIT_THREAD owner=19484:kworker/0:3`
+  - `claim wait begin host=mmc0 waiter=801:RTW_CMD_THREAD owner=19484:kworker/0:3`
+  - `claim wait begin host=mmc0 waiter=17886:kworker/0:0 owner=801:RTW_CMD_THREAD`
+  - `claim wait begin host=mmc0 waiter=800:RTW_XMIT_THREAD owner=801:RTW_CMD_THREAD`
+- 同时还能间歇看到少量闭环完成，说明不是“某一条线程永远睡死”，而是进入了争抢/饥饿/活锁状态：
+  - `sd_sync_int_hdl done ... elapsed_ms=364/476`
+  - `claim acquired ... waited_ms=324/524`
+  - `sd_write done ... elapsed_ms=356/556`
+- `RTW_CMD_THREAD` 仍然持续出现 `rtw_cmd_thread cmd start cmd=57,...`，但没有匹配的 `cmd done`，说明 `_Set_Drv_Extra` 类后台工作很可能也在卡点链路中。
+- 这次现场再次排除：
+  - 不是 `bitcoind` 自身挂掉：`procs=bitcoind:up`
+  - 不是 SD 卡写回高压：`dirty/wb` 很低，`mmcblk1` 负载轻
+  - 不是传统整机 D 态堆死：`tasks=... D0`
+- 本次结论：`124.28` 的 freeze 已基本收敛为 `RTL8189FS + mmc0(SDIO)` 上的 host claim 争抢活锁；其结果是网络/网页能力先失效，串口和部分调度仍可短时存活。
 
 ## 已加入的诊断改动
 
@@ -215,17 +242,32 @@ cat /sys/fs/pstore/* 2>/dev/null | tail -n 200
 
 ## 可能的修复方向
 
-这些还没有最终验证，作为后续候选：
+这些还没有最终验证，当前按优先级排序如下：
 
-- 限制 bitcoind/dbcache 或业务写入峰值，避免把 SD 卡写回队列打满。
-- 调整 VM dirty 参数，降低脏页积累：
-  - `vm.dirty_background_bytes`
-  - `vm.dirty_bytes`
-  - `vm.dirty_expire_centisecs`
-  - `vm.dirty_writeback_centisecs`
-- 检查 ext4 mount 选项，评估 `commit=`、`data=`、barrier 相关影响，但不能牺牲区块数据一致性。
-- 验证 SD 卡质量、写入延迟长尾和供电稳定性。
-- 如果 sysrq/pstore 能捕获最终卡死现场，再决定是否需要内核级 MMC 超时、blk-mq、ext4/jbd2 方向的补丁。
+- 第一优先级：在 `RTL8189FS` 驱动里增加“SDIO 单入口串行化”。
+  - 在 `dvobj_priv` 增加一层高位 `mutex`/bus gate。
+  - 只包顶层入口，不包 `_sd_read/_sd_write` 这种已在 claim 内部的函数。
+  - 重点串行化：
+    - `sd_read()/sd_write()`
+    - `sd_sync_int_hdl()` / threaded IRQ 入口
+    - 需要 `sdio_claim_host()` 的 local read/write 顶层入口
+  - 目标：不让 `RTW_XMIT_THREAD`、`RTW_CMD_THREAD`、`kworker` 同时冲到 `mmc_claim_host()`，先在驱动层排队，再去拿 host。
+- 第二优先级：对 `_Set_Drv_Extra` 背景 work 做去重/降频。
+  - 当前频繁出现的 `cmd=57,11,1`、`cmd=57,5,0`、`cmd=57,2,0` 都属于 `_Set_Drv_Extra`。
+  - 这类 work 若已 pending/running，就不要重复入队。
+  - 重点排查并收敛：
+    - `C2H_WK_CID`
+    - `POWER_SAVING_CTRL_WK_CID`
+    - `DYNAMIC_CHK_WK_CID`
+  - 目标：减少 `CMD_THREAD` 对 `mmc0` 的无效竞争。
+- 第三优先级：如果前两步仍不足，再评估“单 worker 总线模型”。
+  - 所有 SDIO 访问汇入 dedicated worker 串行执行。
+  - 改动较大，不建议作为当前第一刀。
+- 当前不建议优先做的方向：
+  - 不建议先加 watchdog
+  - 不建议先调大 MMC/SDIO timeout 掩盖问题
+  - 不建议先改 `bitcoind`、ext4、VM dirty 参数作为主修复
+  - 不建议继续把“WiFi 低功耗”当成唯一主因
 
 ## 接手注意事项
 

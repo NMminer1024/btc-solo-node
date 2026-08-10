@@ -1,0 +1,178 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bitpony <bitpony@example.com>
+Date: Fri, 7 Aug 2026 22:30:00 +0800
+Subject: [PATCH] rtl8189fs: close SDIO freeze diagnostic gaps
+
+Add matching completion logs for traced command-thread, SDIO IRQ, and
+SDIO read/write paths so the serial console shows whether a suspected
+freeze stopped before handler entry, inside the handler, or after the
+operation returned.
+
+This patch is diagnostic only. It does not change locking, transfer
+ordering, retry policy, power saving, or recovery behavior.
+
+Signed-off-by: bitpony <bitpony@example.com>
+---
+diff --git a/core/rtw_cmd.c b/core/rtw_cmd.c
+--- a/core/rtw_cmd.c
++++ b/core/rtw_cmd.c
+@@ -529,16 +529,30 @@
+ 	return true;
+ }
+ 
+-static void rb8189_diag_cmd_start(struct cmd_obj *pcmd, struct cmd_priv *pcmdpriv)
++static bool rb8189_diag_cmd_start(struct cmd_obj *pcmd, struct cmd_priv *pcmdpriv,
++				  u32 diag_seq)
+ {
+ 	static systime last;
+ 
+ 	if (!rb8189_diag_cmd_ratelimit(&last, 5000))
+-		return;
++		return false;
+ 
+ 	pr_warn("[rb8189-diag] rtw_cmd_thread cmd start "CMD_FMT" pid=%d comm=%s issued=%u done=%u seq=%u\n",
+ 		 CMD_ARG(pcmd), current->pid, current->comm,
+-		 pcmdpriv->cmd_issued_cnt, pcmdpriv->cmd_done_cnt, pcmdpriv->cmd_seq);
++		 pcmdpriv->cmd_issued_cnt, pcmdpriv->cmd_done_cnt, diag_seq);
++	return true;
++}
++
++static void rb8189_diag_cmd_done(struct cmd_obj *pcmd, struct cmd_priv *pcmdpriv,
++				 u32 diag_seq, u32 cmd_process_time, bool traced)
++{
++	if (!traced && cmd_process_time <= 1000)
++		return;
++
++	pr_warn("[rb8189-diag] rtw_cmd_thread cmd done "ADPT_FMT" "CMD_FMT" ret=%u process_time=%d issued=%u done=%u seq=%u traced=%u\n",
++		ADPT_ARG(pcmd->padapter), CMD_ARG(pcmd), pcmd->res, cmd_process_time,
++		pcmdpriv->cmd_issued_cnt, pcmdpriv->cmd_done_cnt, diag_seq,
++		traced ? 1 : 0);
+ }
+ 
+ thread_return rtw_cmd_thread(thread_context context)
+@@ -554,6 +568,8 @@
+ 	struct cmd_priv *pcmdpriv = &(padapter->cmdpriv);
+ 	struct drvextra_cmd_parm *extra_parm = NULL;
+ 	_irqL irqL;
++	bool diag_cmd_traced;
++	u32 diag_cmd_seq;
+ 
+ 	thread_enter("RTW_CMD_THREAD");
+ 
+@@ -604,6 +620,8 @@
+ 		}
+ 
+ 		cmd_start_time = rtw_get_current_time();
++		diag_cmd_traced = false;
++		diag_cmd_seq = pcmdpriv->cmd_seq;
+ 		pcmdpriv->cmd_issued_cnt++;
+ 
+ 		if (pcmd->cmdsz > MAX_CMDSZ) {
+@@ -667,7 +685,7 @@
+ 				, pcmd->res == H2C_ENQ_HEAD ? "ENQ_HEAD " : (pcmd->res == H2C_ENQ_HEAD_FAIL ? "ENQ_HEAD_FAIL " : ""));
+ 
+ 		_rtw_memcpy(pcmdbuf, pcmd->parmbuf, pcmd->cmdsz);
+-		rb8189_diag_cmd_start(pcmd, pcmdpriv);
++		diag_cmd_traced = rb8189_diag_cmd_start(pcmd, pcmdpriv, diag_cmd_seq);
+ 		ret = cmd_hdl(pcmd->padapter, pcmdbuf);
+ 		pcmd->res = ret;
+ 
+@@ -687,10 +705,9 @@
+ 		_exit_critical_mutex(&(pcmd->padapter->cmdpriv.sctx_mutex), NULL);
+ 
+ 		cmd_process_time = rtw_get_passing_time_ms(cmd_start_time);
+-		if (cmd_process_time > 1000) {
+-			pr_warn("[rb8189-diag] rtw_cmd_thread cmd done "ADPT_FMT" "CMD_FMT" ret=%u process_time=%d issued=%u done=%u seq=%u\n",
+-				ADPT_ARG(pcmd->padapter), CMD_ARG(pcmd), pcmd->res, cmd_process_time,
+-				pcmdpriv->cmd_issued_cnt, pcmdpriv->cmd_done_cnt, pcmdpriv->cmd_seq);
++		if (diag_cmd_traced || cmd_process_time > 1000) {
++			rb8189_diag_cmd_done(pcmd, pcmdpriv, diag_cmd_seq,
++					     cmd_process_time, diag_cmd_traced);
+ 			if (0)
+ 				rtw_warn_on(1);
+ 		}
+diff --git a/os_dep/linux/sdio_intf.c b/os_dep/linux/sdio_intf.c
+--- a/os_dep/linux/sdio_intf.c
++++ b/os_dep/linux/sdio_intf.c
+@@ -195,7 +195,7 @@
+ 	rtw_sdio_set_irq_thd(psdpriv, NULL);
+ 
+ 	elapsed = rtw_get_passing_time_ms(start);
+-	if (elapsed >= 200)
++	if (trace || elapsed >= 200)
+ 		pr_warn("[rb8189-diag] sd_sync_int_hdl done seq=%u pid=%d comm=%s func=%p elapsed_ms=%u\n",
+ 			 seq, current->pid, current->comm, func, elapsed);
+ }
+diff --git a/os_dep/linux/sdio_ops_linux.c b/os_dep/linux/sdio_ops_linux.c
+--- a/os_dep/linux/sdio_ops_linux.c
++++ b/os_dep/linux/sdio_ops_linux.c
+@@ -54,11 +54,11 @@
+ }
+ 
+ static void rb8189_diag_sdio_done(const char *op, u32 seq, u32 addr, u32 cnt,
+-				  bool claim, s32 err, systime start)
++				  bool claim, bool trace, s32 err, systime start)
+ {
+ 	u32 elapsed = rtw_get_passing_time_ms(start);
+ 
+-	if (elapsed < RB8189_DIAG_SLOW_SDIO_MS && !err)
++	if (!trace && elapsed < RB8189_DIAG_SLOW_SDIO_MS && !err)
+ 		return;
+ 
+ 	pr_warn("[rb8189-diag] %s done seq=%u pid=%d comm=%s addr=0x%05x cnt=%u claim=%u err=%d elapsed_ms=%u\n",
+@@ -762,7 +762,7 @@
+ 		}
+ 		if (trace)
+ 			rb8189_diag_sdio_mark("_sd_read", "after_cmd52_loop", seq, addr, cnt, false);
+-		rb8189_diag_sdio_done("_sd_read", seq, addr, cnt, false, err, start);
++		rb8189_diag_sdio_done("_sd_read", seq, addr, cnt, false, trace, err, start);
+ 		return err;
+ 	}
+ 
+@@ -777,7 +777,7 @@
+ 	if (err == (-ESHUTDOWN) || err == (-ENODEV) || err == (-ENOMEDIUM) || err == (-ETIMEDOUT))
+ 		rtw_set_surprise_removed(padapter);
+ 
+-	rb8189_diag_sdio_done("_sd_read", seq, addr, cnt, false, err, start);
++	rb8189_diag_sdio_done("_sd_read", seq, addr, cnt, false, trace, err, start);
+ 
+ 	return err;
+ }
+@@ -838,7 +838,7 @@
+ 		sdio_release_host(func);
+ 	if (claim_needed && trace)
+ 		rb8189_diag_sdio_mark("sd_read", "release_done", seq, addr, cnt, claim_needed);
+-	rb8189_diag_sdio_done("sd_read", seq, addr, cnt, claim_needed, err, start);
++	rb8189_diag_sdio_done("sd_read", seq, addr, cnt, claim_needed, trace, err, start);
+ 	return err;
+ }
+ 
+@@ -900,7 +900,7 @@
+ 
+ 		if (trace)
+ 			rb8189_diag_sdio_mark("_sd_write", "after_cmd52_loop", seq, addr, cnt, false);
+-		rb8189_diag_sdio_done("_sd_write", seq, addr, cnt, false, err, start);
++		rb8189_diag_sdio_done("_sd_write", seq, addr, cnt, false, trace, err, start);
+ 		return err;
+ 	}
+ 
+@@ -913,7 +913,7 @@
+ 	if (err)
+ 		RTW_ERR("%s: FAIL(%d)! ADDR=%#x Size=%d(%d)\n", __func__, err, addr, cnt, size);
+ 
+-	rb8189_diag_sdio_done("_sd_write", seq, addr, cnt, false, err, start);
++	rb8189_diag_sdio_done("_sd_write", seq, addr, cnt, false, trace, err, start);
+ 
+ 	return err;
+ }
+@@ -974,7 +974,7 @@
+ 		sdio_release_host(func);
+ 	if (claim_needed && trace)
+ 		rb8189_diag_sdio_mark("sd_write", "release_done", seq, addr, cnt, claim_needed);
+-	rb8189_diag_sdio_done("sd_write", seq, addr, cnt, claim_needed, err, start);
++	rb8189_diag_sdio_done("sd_write", seq, addr, cnt, claim_needed, trace, err, start);
+ 	return err;
+ }
+ 
+-- 
+2.34.1

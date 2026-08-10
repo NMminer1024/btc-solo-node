@@ -30,6 +30,7 @@ constexpr uint32_t kUiHeight = 480;
 constexpr uint32_t kPageSwitchThresholdPx = kUiWidth / 10U;
 constexpr uint32_t kFramePixels = kUiWidth * kUiHeight;
 constexpr uint32_t kTileCount = 4;
+constexpr uint32_t kBitcoinStageCount = 7;
 constexpr const char* kBacklightGpioChip = "/dev/gpiochip0";
 constexpr uint32_t kBacklightGpioLine = 25;
 constexpr uint32_t kBacklightFadeMs = 1000;
@@ -79,13 +80,18 @@ struct TileRuntime {
     lv_obj_t* clock_time_label = nullptr;
     lv_obj_t* clock_date_label = nullptr;
     lv_obj_t* bitcoin_ip_label = nullptr;
-    lv_obj_t* bitcoin_sync = nullptr;
+    lv_obj_t* bitcoin_stage_dot[kBitcoinStageCount] {};
+    lv_obj_t* bitcoin_stage_label[kBitcoinStageCount] {};
     lv_obj_t* bitcoin_progress = nullptr;
     lv_obj_t* bitcoin_height_title = nullptr;
+    lv_obj_t* bitcoin_height_current = nullptr;
+    lv_obj_t* bitcoin_height_sep = nullptr;
+    lv_obj_t* bitcoin_height_total = nullptr;
     lv_obj_t* bitcoin_height = nullptr;
     lv_obj_t* bitcoin_peers = nullptr;
-    lv_obj_t* bitcoin_difficulty = nullptr;
-    lv_obj_t* bitcoin_rss = nullptr;
+    lv_obj_t* bitcoin_block_date_title = nullptr;
+    lv_obj_t* bitcoin_block_date_meta = nullptr;
+    lv_obj_t* bitcoin_block_time_meta = nullptr;
     lv_obj_t* bitcoin_block_date = nullptr;
     lv_obj_t* stratum_state = nullptr;
     lv_obj_t* stratum_url = nullptr;
@@ -164,6 +170,16 @@ constexpr const char* kPageBgRawPaths[kTileCount] = {
     "/usr/share/rockbase-lcdui/stratum_bg_800x480.argb",
     "/usr/share/rockbase-lcdui/system_bg_800x480.argb",
     "/usr/share/rockbase-lcdui/network_bg_800x480.argb",
+};
+
+constexpr const char* kBitcoinStageLabels[kBitcoinStageCount] = {
+    "Starting",
+    "Load Index",
+    "Chainstate",
+    "Header Pre-sync",
+    "Header Sync",
+    "Block Sync",
+    "Synced",
 };
 
 TouchInput g_touch;
@@ -833,9 +849,86 @@ std::string join_value(const std::string& left, const char* sep, const std::stri
     return fallback;
 }
 
+long parse_leading_int(const std::string& value, long fallback = -1) {
+    long out = 0;
+    bool seen_digit = false;
+    for (char ch : value) {
+        if (ch >= '0' && ch <= '9') {
+            seen_digit = true;
+            out = out * 10 + (ch - '0');
+        }
+        else if (seen_digit) {
+            break;
+        }
+    }
+    return seen_digit ? out : fallback;
+}
+
+bool has_value(const std::string& value) {
+    return !value.empty() && value != "-";
+}
+
+std::string format_progress_percent(const std::string& value, int32_t max_width) {
+    if (!has_value(value)) {
+        return "--";
+    }
+
+    char* end = nullptr;
+    const double pct = std::strtod(value.c_str(), &end);
+    if (end == value.c_str()) {
+        return "--";
+    }
+
+    char buf[16];
+    for (int precision = 6; precision >= 0; --precision) {
+        std::snprintf(buf, sizeof(buf), "%.*f%%", precision, pct);
+
+        lv_point_t size {};
+        lv_text_get_size(&size, buf, &lv_font_montserrat_36, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        if (size.x <= max_width) {
+            return buf;
+        }
+    }
+
+    std::snprintf(buf, sizeof(buf), "%.0f%%", pct);
+    return buf;
+}
+
+void split_date_time(const std::string& value, std::string& date_part, std::string& time_part) {
+    if (!has_value(value)) {
+        date_part = "--";
+        time_part.clear();
+        return;
+    }
+    const std::size_t split = value.find(' ');
+    if (split == std::string::npos) {
+        date_part = value;
+        time_part.clear();
+        return;
+    }
+    date_part = value.substr(0, split);
+    time_part = value.substr(split + 1);
+}
+
+void split_pair_value(const std::string& value, std::string& left_part, std::string& right_part) {
+    if (!has_value(value)) {
+        left_part = "--";
+        right_part.clear();
+        return;
+    }
+    const std::size_t split = value.find(" / ");
+    if (split == std::string::npos) {
+        left_part = value;
+        right_part.clear();
+        return;
+    }
+    left_part = value.substr(0, split);
+    right_part = value.substr(split + 3);
+}
+
 std::string sync_label(const std::string& key) {
-    if (key == "pre_headers") return "Pre-sync blockheaders";
-    if (key == "sync_headers") return "Synchronizing blockheaders";
+    if (key == "pre_headers") return "Header";
+    if (key == "sync_headers") return "Header";
     if (key == "sync_blocks") return "Synchronizing blocks";
     if (key == "loading_index") return "Loading block index";
     if (key == "loading_blocks") return "Loading block files";
@@ -845,6 +938,23 @@ std::string sync_label(const std::string& key) {
     if (key == "synced") return "Synced";
     if (key == "btc_not_running") return "Not Running";
     return "IBD Syncing";
+}
+
+std::string bitcoin_phase_label(const DashboardData& data) {
+    const std::string key = data.ibd_stage_key != "-" ? data.ibd_stage_key : data.sync_key;
+    if (data.sync_key == "btc_not_running") return "Not Running";
+    if (data.sync_key == "synced" || key == "synced") return "Synced";
+    if (key == "pre_headers") return "Header";
+    if (key == "sync_headers") return "Header";
+    if (key == "sync_blocks") return "Block Sync";
+    if (key == "loading_index") return "Load Index";
+    if (key == "loading_blocks") return "Load Blocks";
+    if (key == "verifying_blocks") return "Verify Chain";
+    if (key == "rewinding_blocks") return "Rewind Chain";
+    if (key == "pruning") return "Pruning";
+    if (key == "syncing") return "IBD Syncing";
+    if (parse_leading_int(data.connections, -1) == 0) return "Connecting";
+    return sync_label(data.sync_key);
 }
 
 std::string ntp_label(const std::string& key) {
@@ -1183,6 +1293,18 @@ void make_static(lv_obj_t* obj) {
     lv_obj_clear_flag(obj, LV_OBJ_FLAG_CLICKABLE);
 }
 
+lv_obj_t* create_stage_dot(lv_obj_t* parent, int32_t x, int32_t y) {
+    lv_obj_t* dot = lv_obj_create(parent);
+    make_static(dot);
+    lv_obj_remove_style_all(dot);
+    lv_obj_set_pos(dot, x, y);
+    lv_obj_set_size(dot, 13, 13);
+    lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(dot, 2, 0);
+    return dot;
+}
+
 lv_obj_t* create_card(lv_obj_t* parent, int32_t x, int32_t y, int32_t w, int32_t h,
                       const char* title, const char* value, lv_color_t accent,
                       lv_obj_t** title_label = nullptr) {
@@ -1216,6 +1338,62 @@ void set_label(lv_obj_t* label, const std::string& value) {
 void set_label_fmt(lv_obj_t* label, const char* fmt, const std::string& value) {
     if (label != nullptr) {
         lv_label_set_text_fmt(label, fmt, value.c_str());
+    }
+}
+
+uint32_t bitcoin_stage_index(const DashboardData& data) {
+    const std::string key = data.ibd_stage_key != "-" ? data.ibd_stage_key : data.sync_key;
+    if (data.sync_key == "btc_not_running") {
+        return 0;
+    }
+    if (data.sync_key == "synced" || key == "synced") {
+        return 6;
+    }
+    if (key == "loading_index") {
+        return 1;
+    }
+    if (key == "loading_blocks" || key == "verifying_blocks" ||
+        key == "rewinding_blocks" || key == "pruning") {
+        return 2;
+    }
+    if (key == "pre_headers") {
+        return 3;
+    }
+    if (key == "sync_headers") {
+        return 4;
+    }
+    if (key == "sync_blocks" || key == "syncing") {
+        return 5;
+    }
+    return 0;
+}
+
+void update_bitcoin_stage_list(uint32_t active_stage) {
+    constexpr uint32_t kDoneDot = 0x2f7d5d;
+    constexpr uint32_t kActiveDot = 0x37e88b;
+    constexpr uint32_t kPendingDot = 0x46515a;
+    constexpr uint32_t kDoneText = 0x8ab79f;
+    constexpr uint32_t kActiveText = 0xf4efe2;
+    constexpr uint32_t kPendingText = 0x78848b;
+
+    if (active_stage >= kBitcoinStageCount) {
+        active_stage = 0;
+    }
+
+    for (uint32_t index = 0; index < kBitcoinStageCount; ++index) {
+        const bool done = index < active_stage;
+        const bool active = index == active_stage;
+        const uint32_t dot_color = active ? kActiveDot : (done ? kDoneDot : kPendingDot);
+        const uint32_t text_color = active ? kActiveText : (done ? kDoneText : kPendingText);
+        lv_obj_t* dot = g_tiles.bitcoin_stage_dot[index];
+        if (dot != nullptr) {
+            lv_obj_set_style_bg_color(dot, lv_color_hex(dot_color), 0);
+            lv_obj_set_style_border_color(dot, lv_color_hex(active ? 0xd9ffea : dot_color), 0);
+            lv_obj_set_style_border_width(dot, active ? 2 : 0, 0);
+        }
+        if (g_tiles.bitcoin_stage_label[index] != nullptr) {
+            lv_obj_set_style_text_color(g_tiles.bitcoin_stage_label[index], lv_color_hex(text_color), 0);
+        }
     }
 }
 
@@ -1281,17 +1459,54 @@ void build_bitcoin_tile(lv_obj_t* tv) {
     g_tiles.clock_date_label = add_label(tile, "----/--/--", 540, 72, &lv_font_montserrat_16, lv_color_hex(0x9aa6ac));
     lv_obj_set_width(g_tiles.clock_date_label, 180);
     lv_obj_set_style_text_align(g_tiles.clock_date_label, LV_TEXT_ALIGN_LEFT, 0);
-    g_tiles.bitcoin_ip_label = add_label(tile, "IP --", 538, 112, &lv_font_montserrat_16, lv_color_hex(0xb7c2c8));
-    lv_obj_set_width(g_tiles.bitcoin_ip_label, 220);
+    g_tiles.bitcoin_ip_label = add_label(tile, "--", 42, 438, &lv_font_montserrat_16, lv_color_hex(0xb7c2c8));
+    lv_obj_set_width(g_tiles.bitcoin_ip_label, 260);
     lv_label_set_long_mode(g_tiles.bitcoin_ip_label, LV_LABEL_LONG_MODE_DOTS);
-    g_tiles.bitcoin_sync = create_card(tile, 42, 142, 210, 102, "Sync", "--", accent);
-    g_tiles.bitcoin_progress = create_card(tile, 294, 142, 180, 102, "Progress", "--", accent);
-    g_tiles.bitcoin_height = create_card(tile, 516, 142, 240, 102, "Blocks / Headers", "--", accent,
+
+    add_label(tile, "Sync Flow", 42, 130, &lv_font_montserrat_18, lv_color_hex(0xf0b44c));
+    for (uint32_t index = 0; index < kBitcoinStageCount; ++index) {
+        const int32_t row_y = 164 + static_cast<int32_t>(index) * 33;
+        g_tiles.bitcoin_stage_dot[index] = create_stage_dot(tile, 50, row_y + 7);
+        g_tiles.bitcoin_stage_label[index] = add_label(tile, kBitcoinStageLabels[index], 76, row_y,
+                                                       &lv_font_montserrat_18, lv_color_hex(0x78848b));
+        lv_obj_set_width(g_tiles.bitcoin_stage_label[index], 190);
+    }
+    update_bitcoin_stage_list(0);
+
+    g_tiles.bitcoin_progress = create_card(tile, 300, 142, 216, 96, "Progress", "--", accent);
+    g_tiles.bitcoin_peers = create_card(tile, 540, 142, 216, 96, "Peers", "--", accent);
+    g_tiles.bitcoin_height = create_card(tile, 300, 262, 456, 88, "Blocks / Header", "--", accent,
                                          &g_tiles.bitcoin_height_title);
-    g_tiles.bitcoin_peers = create_card(tile, 42, 276, 104, 100, "Peers", "--", accent);
-    g_tiles.bitcoin_difficulty = create_card(tile, 164, 276, 106, 100, "Difficulty", "--", accent);
-    g_tiles.bitcoin_rss = create_card(tile, 288, 276, 130, 100, "RSS", "--", accent);
-    g_tiles.bitcoin_block_date = create_card(tile, 436, 276, 320, 100, "Block Time", "--", accent);
+    lv_obj_set_style_text_font(g_tiles.bitcoin_progress, &lv_font_montserrat_36, 0);
+    lv_obj_set_style_text_font(g_tiles.bitcoin_peers, &lv_font_montserrat_36, 0);
+    lv_obj_set_style_text_font(g_tiles.bitcoin_height, &lv_font_montserrat_36, 0);
+    lv_obj_set_y(g_tiles.bitcoin_height, 24);
+    g_tiles.bitcoin_height_current = add_label(lv_obj_get_parent(g_tiles.bitcoin_height), "--", 0, 24,
+                                               &lv_font_montserrat_36, lv_color_hex(0x78848b));
+    lv_obj_set_width(g_tiles.bitcoin_height_current, 152);
+    lv_label_set_long_mode(g_tiles.bitcoin_height_current, LV_LABEL_LONG_MODE_DOTS);
+    g_tiles.bitcoin_height_sep = add_label(lv_obj_get_parent(g_tiles.bitcoin_height), "/", 156, 24,
+                                           &lv_font_montserrat_36, lv_color_hex(0x9aa6ac));
+    g_tiles.bitcoin_height_total = add_label(lv_obj_get_parent(g_tiles.bitcoin_height), "", 184, 24,
+                                             &lv_font_montserrat_36, lv_color_hex(0xf4efe2));
+    lv_obj_set_width(g_tiles.bitcoin_height_total, 190);
+    lv_label_set_long_mode(g_tiles.bitcoin_height_total, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_add_flag(g_tiles.bitcoin_height_current, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(g_tiles.bitcoin_height_sep, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(g_tiles.bitcoin_height_total, LV_OBJ_FLAG_HIDDEN);
+    g_tiles.bitcoin_block_date = create_card(tile, 300, 372, 456, 58, "Block Time", "", accent,
+                                             &g_tiles.bitcoin_block_date_title);
+    lv_obj_set_width(g_tiles.bitcoin_block_date_title, 126);
+    g_tiles.bitcoin_block_date_meta = add_label(lv_obj_get_parent(g_tiles.bitcoin_block_date), "--", 152, 0,
+                                                &lv_font_montserrat_16, lv_color_hex(0xf4efe2));
+    lv_obj_set_width(g_tiles.bitcoin_block_date_meta, 108);
+    lv_obj_set_style_text_align(g_tiles.bitcoin_block_date_meta, LV_TEXT_ALIGN_LEFT, 0);
+    lv_label_set_long_mode(g_tiles.bitcoin_block_date_meta, LV_LABEL_LONG_MODE_CLIP);
+    g_tiles.bitcoin_block_time_meta = add_label(lv_obj_get_parent(g_tiles.bitcoin_block_date), "", 258, 0,
+                                                &lv_font_montserrat_16, lv_color_hex(0x78848b));
+    lv_obj_set_width(g_tiles.bitcoin_block_time_meta, 140);
+    lv_obj_set_style_text_align(g_tiles.bitcoin_block_time_meta, LV_TEXT_ALIGN_LEFT, 0);
+    lv_label_set_long_mode(g_tiles.bitcoin_block_time_meta, LV_LABEL_LONG_MODE_CLIP);
 }
 
 void build_stratum_tile(lv_obj_t* tv) {
@@ -1347,13 +1562,15 @@ void refresh_clock_cb(lv_timer_t*) {
 }
 
 void update_ibd_stage_card(const DashboardData& data, const std::string& blocks) {
-    std::string title = "Blocks / Headers";
+    std::string title = "Blocks / Header";
     std::string value = blocks;
+    bool split_header_pair = false;
 
     if (data.ibd_stage_key == "pre_headers" || data.ibd_stage_key == "sync_headers") {
-        title = data.ibd_stage_key == "pre_headers" ? "Header Pre-Sync" : "Header Sync";
-        const std::string height = data.ibd_stage_height != "-" ? data.ibd_stage_height : data.headers_fmt;
-        value = height + " / " + data.headers_fmt;
+        title = "Header";
+        const std::string height = has_value(data.ibd_stage_height) ? data.ibd_stage_height : data.headers_fmt;
+        value = join_value(height, " / ", data.headers_fmt);
+        split_header_pair = true;
     }
     else if (data.ibd_stage_key == "sync_blocks") {
         title = "Block Sync";
@@ -1380,31 +1597,63 @@ void update_ibd_stage_card(const DashboardData& data, const std::string& blocks)
     }
 
     set_label(g_tiles.bitcoin_height_title, title);
-    set_label(g_tiles.bitcoin_height, value);
+    if (split_header_pair) {
+        std::string left_value;
+        std::string right_value;
+        split_pair_value(value, left_value, right_value);
+        set_label(g_tiles.bitcoin_height_current, left_value);
+        set_label(g_tiles.bitcoin_height_sep, right_value.empty() ? "" : "/");
+        set_label(g_tiles.bitcoin_height_total, right_value);
+        lv_obj_add_flag(g_tiles.bitcoin_height, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(g_tiles.bitcoin_height_current, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(g_tiles.bitcoin_height_sep, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(g_tiles.bitcoin_height_total, LV_OBJ_FLAG_HIDDEN);
+    }
+    else {
+        lv_obj_clear_flag(g_tiles.bitcoin_height, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g_tiles.bitcoin_height_current, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g_tiles.bitcoin_height_sep, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g_tiles.bitcoin_height_total, LV_OBJ_FLAG_HIDDEN);
+        set_label(g_tiles.bitcoin_height, value);
+    }
 }
 
 void refresh_status_cb(lv_timer_t*) {
     static bool logged_first_status = false;
     DashboardData data;
     if (!load_dashboard_data(data)) {
-        set_label(g_tiles.bitcoin_sync, "status cache missing");
+        set_label(g_tiles.bitcoin_progress, "No status");
+        set_label(g_tiles.bitcoin_height_title, "Blocks / Header");
+        set_label(g_tiles.bitcoin_height, "--");
+        lv_obj_clear_flag(g_tiles.bitcoin_height, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g_tiles.bitcoin_height_current, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g_tiles.bitcoin_height_sep, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(g_tiles.bitcoin_height_total, LV_OBJ_FLAG_HIDDEN);
+        set_label(g_tiles.bitcoin_block_date_title, "Block Time");
+        set_label(g_tiles.bitcoin_block_date_meta, "--");
+        set_label(g_tiles.bitcoin_block_time_meta, "");
+        set_label(g_tiles.bitcoin_block_date, "");
         return;
     }
 
     const std::string blocks = join_value(data.blocks_fmt, " / ", data.headers_fmt);
-    const std::string progress = data.progress_ring != "-" ? data.progress_ring + "%" : "-";
+    const std::string progress = format_progress_percent(data.progress_ring, lv_obj_get_width(g_tiles.bitcoin_progress));
     const std::string mem = join_value(data.mem_used_display, " / ", data.mem_total_display);
     const std::string swap = join_value(data.swap_used_display, " / ", data.swap_total_display);
     const std::string load = join_value(data.load_display, " | ", data.load_avg_display);
+    std::string block_date;
+    std::string block_time;
+    split_date_time(data.best_block_date, block_date, block_time);
 
-    set_label(g_tiles.bitcoin_sync, sync_label(data.sync_key));
+    update_bitcoin_stage_list(bitcoin_stage_index(data));
     set_label(g_tiles.bitcoin_progress, progress);
     update_ibd_stage_card(data, blocks);
     set_label(g_tiles.bitcoin_peers, data.connections);
-    set_label(g_tiles.bitcoin_difficulty, data.difficulty_display);
-    set_label(g_tiles.bitcoin_rss, data.rss);
-    set_label(g_tiles.bitcoin_block_date, data.best_block_date);
-    set_label(g_tiles.bitcoin_ip_label, "IP " + join_value(data.ip_addr, " | ", data.btc_context));
+    set_label(g_tiles.bitcoin_block_date_title, "Block Time");
+    set_label(g_tiles.bitcoin_block_date_meta, block_date);
+    set_label(g_tiles.bitcoin_block_time_meta, block_time);
+    set_label(g_tiles.bitcoin_block_date, "");
+    set_label(g_tiles.bitcoin_ip_label, data.ip_addr);
 
     set_label(g_tiles.stratum_state, data.ckpool_state);
     set_label(g_tiles.stratum_url, data.stratum_url);
