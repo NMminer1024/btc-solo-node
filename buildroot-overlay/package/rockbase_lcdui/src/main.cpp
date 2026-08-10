@@ -91,10 +91,11 @@ struct TileRuntime {
     lv_obj_t* bitcoin_block_date_title = nullptr;
     lv_obj_t* bitcoin_block_date = nullptr;
     lv_obj_t* bitcoin_block_time = nullptr;
-    lv_obj_t* stratum_state = nullptr;
-    lv_obj_t* stratum_url = nullptr;
-    lv_obj_t* stratum_user = nullptr;
-    lv_obj_t* stratum_mode = nullptr;
+    lv_obj_t* stratum_state_dot = nullptr;
+    lv_obj_t* stratum_state_label = nullptr;
+    lv_obj_t* stratum_url_label = nullptr;
+    lv_obj_t* stratum_chart = nullptr;
+    lv_obj_t* stratum_chart_hint = nullptr;
     lv_obj_t* system_load = nullptr;
     lv_obj_t* system_mem = nullptr;
     lv_obj_t* system_disk = nullptr;
@@ -140,7 +141,10 @@ struct DashboardData {
     std::string recommended_mode = "-";
     std::string btc_address = "-";
     std::string load_display = "-";
+    std::string load_pct = "-";
     std::string load_avg_display = "-";
+    std::string load_avg_1 = "-";
+    std::string load_avg_5 = "-";
     std::string mem_used_display = "-";
     std::string mem_total_display = "-";
     std::string disk_size_info = "-";
@@ -177,18 +181,19 @@ struct BitcoinPageModel {
 
 struct StratumPageModel {
     std::string state = "--";
+    std::string state_class = "-";
     std::string url = "--";
     std::string user = "--";
     std::string mode = "--";
 };
 
 struct SystemPageModel {
-    std::string load = "--";
+    std::string cpu_busy = "--";
+    std::string load_avg = "--";
     std::string mem = "--";
     std::string disk = "--";
-    std::string temp = "--";
     std::string uptime = "--";
-    std::string swap = "--";
+    std::string temp = "--";
 };
 
 struct NetworkPageModel {
@@ -214,7 +219,7 @@ constexpr uint32_t page_dirty_bit(uint32_t page) {
 
 constexpr TileSpec kTiles[kTileCount] = {
     {"Bitcoind", "Local Bitcoin solo node overview", 0x0a141b, 0xf0b44c, true},
-    {"Stratum", "Pool and miner session placeholder", 0x101418, 0x51c7a3, true},
+    {"Stratum", "Local stratum status and fleet hashrate", 0x101418, 0x51c7a3, true},
     {"System", "CPU, memory, disk and process placeholder", 0x13151e, 0x8fb7ff, true},
     {"Network", "WiFi, LAN and peer status placeholder", 0x101719, 0xff8c64, true},
 };
@@ -1114,7 +1119,10 @@ bool load_dashboard_data(DashboardData& data) {
     data.btc_address = json_value(mining, "btc_address");
 
     data.load_display = json_value(system, "load_display");
+    data.load_pct = json_value(system, "load_pct");
     data.load_avg_display = json_value(system, "load_avg_display");
+    data.load_avg_1 = json_value(system, "load_avg_1");
+    data.load_avg_5 = json_value(system, "load_avg_5");
     data.mem_used_display = json_value(system, "mem_used_display");
     data.mem_total_display = json_value(system, "mem_total_display");
     data.disk_size_info = json_value(system, "disk_size_info");
@@ -1408,6 +1416,40 @@ lv_obj_t* create_stage_dot(lv_obj_t* parent, int32_t x, int32_t y) {
     return dot;
 }
 
+lv_obj_t* create_status_dot(lv_obj_t* parent, int32_t x, int32_t y, int32_t size) {
+    lv_obj_t* dot = lv_obj_create(parent);
+    make_static(dot);
+    lv_obj_remove_style_all(dot);
+    lv_obj_set_pos(dot, x, y);
+    lv_obj_set_size(dot, size, size);
+    lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(dot, 2, 0);
+    return dot;
+}
+
+void populate_stratum_placeholder_chart(lv_obj_t* chart) {
+    if (chart == nullptr) {
+        return;
+    }
+
+    static constexpr int32_t kHashrateSample[] = {
+        18, 22, 25, 23, 30, 28, 34, 38, 36, 44, 41, 49, 46, 54, 58, 56, 63, 67
+    };
+
+    lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
+    lv_chart_set_point_count(chart, sizeof(kHashrateSample) / sizeof(kHashrateSample[0]));
+    lv_chart_set_update_mode(chart, LV_CHART_UPDATE_MODE_SHIFT);
+    lv_chart_set_div_line_count(chart, 4, 6);
+    lv_chart_set_axis_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, 80);
+
+    lv_chart_series_t* series = lv_chart_add_series(chart, lv_color_hex(0x51c7a3), LV_CHART_AXIS_PRIMARY_Y);
+    for (size_t index = 0; index < sizeof(kHashrateSample) / sizeof(kHashrateSample[0]); ++index) {
+        lv_chart_set_next_value(chart, series, kHashrateSample[index]);
+    }
+    lv_chart_refresh(chart);
+}
+
 lv_obj_t* create_card(lv_obj_t* parent, int32_t x, int32_t y, int32_t w, int32_t h,
                       const char* title, const char* value, lv_color_t accent,
                       lv_obj_t** title_label = nullptr) {
@@ -1482,6 +1524,37 @@ bool set_hidden(lv_obj_t* obj, bool hidden) {
         lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
     }
     return true;
+}
+
+void set_stratum_state_visual(const std::string& state_class, const std::string& state_text) {
+    uint32_t fill = 0x5d6770;
+    uint32_t border = 0x8a949d;
+    uint32_t text = 0xb7c2c8;
+
+    if (state_class == "ok") {
+        fill = 0x37e88b;
+        border = 0xd7ffee;
+        text = 0xf4efe2;
+    }
+    else if (state_class == "warn") {
+        fill = 0xf0b44c;
+        border = 0xffe2aa;
+        text = 0xf4efe2;
+    }
+    else if (state_class == "err") {
+        fill = 0xd65a5a;
+        border = 0xffc1c1;
+        text = 0xf4efe2;
+    }
+
+    if (g_tiles.stratum_state_dot != nullptr) {
+        lv_obj_set_style_bg_color(g_tiles.stratum_state_dot, lv_color_hex(fill), 0);
+        lv_obj_set_style_border_color(g_tiles.stratum_state_dot, lv_color_hex(border), 0);
+    }
+    if (g_tiles.stratum_state_label != nullptr) {
+        lv_obj_set_style_text_color(g_tiles.stratum_state_label, lv_color_hex(text), 0);
+        set_label(g_tiles.stratum_state_label, state_text);
+    }
 }
 
 uint32_t bitcoin_stage_index(const DashboardData& data) {
@@ -1575,16 +1648,22 @@ bool build_ui_model(UiModel& model) {
     model.bitcoin.log_headers = data.headers_fmt;
 
     model.stratum.state = data.ckpool_state;
+    model.stratum.state_class = data.ckpool_class;
     model.stratum.url = data.stratum_url;
     model.stratum.user = data.btc_address != "-" ? data.btc_address : data.user_hint;
     model.stratum.mode = data.recommended_mode;
 
-    model.system.load = join_value(data.load_display, " | ", data.load_avg_display);
+    model.system.cpu_busy = data.load_pct != "-" ? data.load_pct + "%" : "--";
+    if (data.load_avg_1 != "-" && data.load_avg_5 != "-") {
+        model.system.load_avg = std::string("1m ") + data.load_avg_1 + "\n5m " + data.load_avg_5;
+    }
+    else {
+        model.system.load_avg = "--";
+    }
     model.system.mem = join_value(data.mem_used_display, " / ", data.mem_total_display);
     model.system.disk = data.disk_size_info;
-    model.system.temp = data.temp;
     model.system.uptime = data.uptime;
-    model.system.swap = join_value(data.swap_used_display, " / ", data.swap_total_display);
+    model.system.temp = data.temp;
 
     model.network.ip = data.ip_addr;
     model.network.ssid = data.wifi_ssid;
@@ -1748,10 +1827,45 @@ void build_stratum_tile(lv_obj_t* tv) {
     const lv_color_t accent = lv_color_hex(spec.accent);
     lv_obj_t* tile = create_tile_base(tv, 1, spec);
 
-    g_tiles.stratum_state = create_card(tile, 42, 148, 210, 112, "ckpool", "--", accent);
-    g_tiles.stratum_url = create_card(tile, 294, 148, 462, 112, "Stratum URL", "--", accent);
-    g_tiles.stratum_user = create_card(tile, 42, 294, 336, 104, "Worker / Wallet", "--", accent);
-    g_tiles.stratum_mode = create_card(tile, 422, 294, 334, 104, "Mode", "--", accent);
+    g_tiles.stratum_state_dot = create_status_dot(tile, 42, 108, 18);
+    g_tiles.stratum_state_label = add_label(tile, "ckpool", 68, 102, &lv_font_montserrat_22, lv_color_hex(0xf4efe2));
+    lv_obj_set_style_text_letter_space(g_tiles.stratum_state_label, 1, 0);
+
+    g_tiles.stratum_url_label = add_label(tile, "--", 292, 106, &lv_font_montserrat_18, lv_color_hex(0xf4efe2));
+    lv_obj_set_width(g_tiles.stratum_url_label, 458);
+    lv_label_set_long_mode(g_tiles.stratum_url_label, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
+    lv_obj_set_style_text_align(g_tiles.stratum_url_label, LV_TEXT_ALIGN_RIGHT, 0);
+
+    lv_obj_t* chart_panel = lv_obj_create(tile);
+    make_static(chart_panel);
+    lv_obj_set_pos(chart_panel, 42, 140);
+    lv_obj_set_size(chart_panel, 716, 286);
+    lv_obj_set_style_radius(chart_panel, 20, 0);
+    lv_obj_set_style_bg_color(chart_panel, lv_color_hex(0x0f171d), 0);
+    lv_obj_set_style_bg_opa(chart_panel, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(chart_panel, 1, 0);
+    lv_obj_set_style_border_color(chart_panel, lv_color_hex(0x2f4250), 0);
+    lv_obj_set_style_pad_all(chart_panel, 16, 0);
+
+    add_label(chart_panel, "Total Hashrate", 0, 0, &lv_font_montserrat_18, lv_color_hex(0xf0b44c));
+    g_tiles.stratum_chart_hint = add_label(chart_panel, "placeholder curve", 0, 0, &lv_font_montserrat_16,
+                                           lv_color_hex(0x78848b));
+    lv_obj_align_to(g_tiles.stratum_chart_hint, chart_panel, LV_ALIGN_TOP_RIGHT, -2, 4);
+
+    g_tiles.stratum_chart = lv_chart_create(chart_panel);
+    make_static(g_tiles.stratum_chart);
+    lv_obj_set_pos(g_tiles.stratum_chart, 0, 34);
+    lv_obj_set_size(g_tiles.stratum_chart, 684, 218);
+    lv_obj_set_style_radius(g_tiles.stratum_chart, 0, 0);
+    lv_obj_set_style_bg_color(g_tiles.stratum_chart, lv_color_hex(0x0f171d), 0);
+    lv_obj_set_style_bg_opa(g_tiles.stratum_chart, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(g_tiles.stratum_chart, 0, 0);
+    lv_obj_set_style_line_width(g_tiles.stratum_chart, 2, LV_PART_ITEMS);
+    lv_obj_set_style_line_color(g_tiles.stratum_chart, lv_color_hex(0x51c7a3), LV_PART_ITEMS);
+    lv_obj_set_style_line_width(g_tiles.stratum_chart, 1, LV_PART_MAIN);
+    lv_obj_set_style_line_color(g_tiles.stratum_chart, lv_color_hex(0x26333b), LV_PART_MAIN);
+    lv_chart_set_div_line_count(g_tiles.stratum_chart, 4, 6);
+    populate_stratum_placeholder_chart(g_tiles.stratum_chart);
 }
 
 void build_system_tile(lv_obj_t* tv) {
@@ -1759,12 +1873,12 @@ void build_system_tile(lv_obj_t* tv) {
     const lv_color_t accent = lv_color_hex(spec.accent);
     lv_obj_t* tile = create_tile_base(tv, 2, spec);
 
-    g_tiles.system_load = create_card(tile, 42, 148, 210, 112, "Load", "--", accent);
-    g_tiles.system_mem = create_card(tile, 294, 148, 210, 112, "Memory", "--", accent);
-    g_tiles.system_disk = create_card(tile, 546, 148, 210, 112, "Block Disk", "--", accent);
-    g_tiles.system_temp = create_card(tile, 42, 294, 154, 104, "Temp", "--", accent);
-    g_tiles.system_uptime = create_card(tile, 218, 294, 286, 104, "Uptime", "--", accent);
-    g_tiles.system_swap = create_card(tile, 526, 294, 230, 104, "Swap", "--", accent);
+    g_tiles.system_load = create_card(tile, 42, 148, 210, 112, "CPU Busy", "--", accent);
+    g_tiles.system_mem = create_card(tile, 294, 148, 210, 112, "Load Avg", "--", accent);
+    g_tiles.system_disk = create_card(tile, 546, 148, 210, 112, "Memory", "--", accent);
+    g_tiles.system_temp = create_card(tile, 42, 294, 210, 104, "Block Disk", "--", accent);
+    g_tiles.system_uptime = create_card(tile, 294, 294, 210, 104, "Uptime", "--", accent);
+    g_tiles.system_swap = create_card(tile, 546, 294, 210, 104, "Temp", "--", accent);
 }
 
 void build_network_tile(lv_obj_t* tv) {
@@ -1861,21 +1975,19 @@ uint32_t apply_ui_model(const UiModel& model) {
     }
 
     dirty = false;
-    dirty |= set_label(g_tiles.stratum_state, model.stratum.state);
-    dirty |= set_label(g_tiles.stratum_url, model.stratum.url);
-    dirty |= set_label(g_tiles.stratum_user, model.stratum.user);
-    dirty |= set_label(g_tiles.stratum_mode, model.stratum.mode);
+    dirty |= set_label(g_tiles.stratum_url_label, model.stratum.url);
+    set_stratum_state_visual(model.stratum.state_class, model.stratum.state);
     if (dirty) {
         dirty_mask |= page_dirty_bit(1);
     }
 
     dirty = false;
-    dirty |= set_label(g_tiles.system_load, model.system.load);
-    dirty |= set_label(g_tiles.system_mem, model.system.mem);
-    dirty |= set_label(g_tiles.system_disk, model.system.disk);
-    dirty |= set_label(g_tiles.system_temp, model.system.temp);
+    dirty |= set_label(g_tiles.system_load, model.system.cpu_busy);
+    dirty |= set_label(g_tiles.system_mem, model.system.load_avg);
+    dirty |= set_label(g_tiles.system_disk, model.system.mem);
+    dirty |= set_label(g_tiles.system_temp, model.system.disk);
     dirty |= set_label(g_tiles.system_uptime, model.system.uptime);
-    dirty |= set_label(g_tiles.system_swap, model.system.swap);
+    dirty |= set_label(g_tiles.system_swap, model.system.temp);
     if (dirty) {
         dirty_mask |= page_dirty_bit(2);
     }
