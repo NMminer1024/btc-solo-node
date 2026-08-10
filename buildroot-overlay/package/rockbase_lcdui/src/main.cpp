@@ -37,10 +37,9 @@ constexpr uint32_t kBacklightFadeMs = 1000;
 constexpr uint32_t kBootLogoHoldMs = 3000;
 constexpr uint32_t kDashboardFadeMs = 500;
 constexpr uint32_t kTouchReadPeriodMs = 1;
-constexpr uint32_t kTileAnimMs = 75;
+constexpr uint32_t kPagerSnapAnimMs = 300;
 constexpr uint32_t kMaxLvSleepUs = 2000;
 constexpr uint32_t kMinLvSleepUs = 500;
-constexpr uint32_t kReleaseRedrawBoostMs = 220;
 constexpr uint32_t kDisplayRefrPeriodMs = 10;
 constexpr uint32_t kPresentIntervalMs = 20;
 constexpr const char* kBootLogoRawPath = "/usr/share/rockbase-lcdui/boot-logo-800x480.argb";
@@ -90,9 +89,8 @@ struct TileRuntime {
     lv_obj_t* bitcoin_height = nullptr;
     lv_obj_t* bitcoin_peers = nullptr;
     lv_obj_t* bitcoin_block_date_title = nullptr;
-    lv_obj_t* bitcoin_block_date_meta = nullptr;
-    lv_obj_t* bitcoin_block_time_meta = nullptr;
     lv_obj_t* bitcoin_block_date = nullptr;
+    lv_obj_t* bitcoin_block_time = nullptr;
     lv_obj_t* stratum_state = nullptr;
     lv_obj_t* stratum_url = nullptr;
     lv_obj_t* stratum_user = nullptr;
@@ -158,8 +156,64 @@ struct DashboardData {
     std::string stratum_reach = "-";
 };
 
+struct HeightCardModel {
+    std::string title = "Blocks / Header";
+    std::string value = "--";
+    bool split_pair = false;
+};
+
+struct BitcoinPageModel {
+    uint32_t stage_index = 0;
+    std::string progress = "--";
+    HeightCardModel height;
+    std::string peers = "--";
+    std::string block_date = "--";
+    std::string block_time;
+    std::string ip_addr = "--";
+    std::string log_sync_key = "-";
+    std::string log_blocks = "-";
+    std::string log_headers = "-";
+};
+
+struct StratumPageModel {
+    std::string state = "--";
+    std::string url = "--";
+    std::string user = "--";
+    std::string mode = "--";
+};
+
+struct SystemPageModel {
+    std::string load = "--";
+    std::string mem = "--";
+    std::string disk = "--";
+    std::string temp = "--";
+    std::string uptime = "--";
+    std::string swap = "--";
+};
+
+struct NetworkPageModel {
+    std::string ip = "--";
+    std::string ssid = "--";
+    std::string rssi = "--";
+    std::string ntp = "--";
+    std::string mac = "--";
+    std::string reach = "--";
+};
+
+struct UiModel {
+    bool status_available = false;
+    BitcoinPageModel bitcoin;
+    StratumPageModel stratum;
+    SystemPageModel system;
+    NetworkPageModel network;
+};
+
+constexpr uint32_t page_dirty_bit(uint32_t page) {
+    return 1U << page;
+}
+
 constexpr TileSpec kTiles[kTileCount] = {
-    {"Bitcoind", "Local Bitcoin node overview", 0x0a141b, 0xf0b44c, true},
+    {"Bitcoind", "Local Bitcoin solo node overview", 0x0a141b, 0xf0b44c, true},
     {"Stratum", "Pool and miner session placeholder", 0x101418, 0x51c7a3, true},
     {"System", "CPU, memory, disk and process placeholder", 0x13151e, 0x8fb7ff, true},
     {"Network", "WiFi, LAN and peer status placeholder", 0x101719, 0xff8c64, true},
@@ -186,26 +240,39 @@ TouchInput g_touch;
 TileRuntime g_tiles;
 RawImage g_boot_logo;
 RawImage g_page_bg[kTileCount];
-bool g_tile_snap_pending = false;
 static uint32_t* g_tile_cache[kTileCount] = {};  // pre-rendered physical frames per tile
-bool g_scroll_blend_active = false;
+bool g_custom_frame_presenting = false;
 uint32_t g_active_page = 0;
 uint32_t g_swipe_start_page = 0;
 uint32_t g_release_page = 0;
 int32_t g_swipe_start_x = 0;
 int32_t g_swipe_current_x = 0;
-uint32_t g_force_redraw_until_ms = 0;
+int32_t g_visual_scroll_x = 0;
+bool g_pager_anim_active = false;
+uint32_t g_pager_anim_start_ms = 0;
+int32_t g_pager_anim_from_x = 0;
+int32_t g_pager_anim_to_x = 0;
 bool g_page_cache_dirty[kTileCount] {};
 uint32_t g_last_page_cache_refresh_ms = 0;
 uint32_t g_fps_window_start_ms = 0;
 uint32_t g_fps_frame_count = 0;
+bool g_clock_refresh_pending = false;
+bool g_status_refresh_pending = false;
 
 void set_active_page(uint32_t page);
+void refresh_clock_cb(lv_timer_t*);
+void refresh_status_cb(lv_timer_t*);
+int present_display_buffer();
 
 uint32_t tick_ms() {
     timespec ts {};
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return static_cast<uint32_t>(ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL);
+}
+
+bool ui_interacting(uint32_t now_ms = tick_ms()) {
+    (void)now_ms;
+    return g_touch.down || g_pager_anim_active;
 }
 
 void handle_signal(int) {
@@ -286,19 +353,9 @@ void fade_backlight_in() {
 void run_lv_for(uint32_t ms) {
     const uint32_t end = tick_ms() + ms;
     while (!g_stop && static_cast<int32_t>(end - tick_ms()) > 0) {
-        const uint32_t now_ms = tick_ms();
-        const bool interacting = g_touch.down || g_tile_snap_pending ||
-                                 static_cast<int32_t>(g_force_redraw_until_ms - now_ms) > 0;
-        if (g_tiles.tileview != nullptr && interacting) {
-            lv_obj_invalidate(g_tiles.tileview);
-        }
-
         uint32_t next_ms = lv_timer_handler();
-        if (g_tile_snap_pending && g_tiles.tileview != nullptr) {
-            lv_tileview_set_tile_by_index(g_tiles.tileview, static_cast<uint8_t>(g_release_page), 0, LV_ANIM_ON);
-            g_tile_snap_pending = false;
-        }
-        if (interacting) {
+        const uint32_t now_ms = tick_ms();
+        if (ui_interacting(now_ms)) {
             next_ms = 0;
         }
         uint32_t sleep_us = next_ms * 1000U;
@@ -337,7 +394,7 @@ void draw_cached_indicator(uint32_t* dst, uint32_t stride_px) {
     }
 }
 
-bool blend_tile_caches(int32_t scroll_x) {
+bool compose_page_caches(int32_t scroll_x) {
     if (g_buffer == nullptr) return false;
     if (scroll_x < 0) scroll_x = 0;
     const int32_t a = scroll_x / static_cast<int32_t>(kUiWidth);
@@ -355,6 +412,93 @@ bool blend_tile_caches(int32_t scroll_x) {
                 static_cast<uint32_t>(off) * row_px * sizeof(uint32_t));
     draw_cached_indicator(dst, g_buffer->stride / sizeof(uint32_t));
     return true;
+}
+
+int32_t clamp_scroll_x(int32_t scroll_x) {
+    const int32_t max_scroll = static_cast<int32_t>((kTileCount - 1U) * kUiWidth);
+    if (scroll_x < 0) {
+        return 0;
+    }
+    if (scroll_x > max_scroll) {
+        return max_scroll;
+    }
+    return scroll_x;
+}
+
+int32_t visual_scroll_x_from_touch() {
+    const int32_t base = static_cast<int32_t>(g_swipe_start_page * kUiWidth);
+    const int32_t dx = g_swipe_current_x - g_swipe_start_x;
+    const int32_t target = clamp_scroll_x(base - dx);
+    if (std::abs(target - g_visual_scroll_x) <= 1) {
+        return g_visual_scroll_x;
+    }
+    g_visual_scroll_x = target;
+    return g_visual_scroll_x;
+}
+
+bool present_cached_page(uint32_t page) {
+    if (page >= kTileCount || g_buffer == nullptr || g_buffer->map == nullptr ||
+        g_tile_cache[page] == nullptr) {
+        return false;
+    }
+
+    auto* dst = static_cast<uint32_t*>(g_buffer->map);
+    std::memcpy(dst, g_tile_cache[page], kUiHeight * kUiWidth * sizeof(uint32_t));
+    draw_cached_indicator(dst, g_buffer->stride / sizeof(uint32_t));
+    return present_display_buffer() == 0;
+}
+
+bool present_pager_frame(int32_t scroll_x) {
+    scroll_x = clamp_scroll_x(scroll_x);
+    const uint32_t page = static_cast<uint32_t>(scroll_x) / kUiWidth;
+    const uint32_t off = static_cast<uint32_t>(scroll_x) % kUiWidth;
+    if (off == 0) {
+        return present_cached_page(page);
+    }
+    if (compose_page_caches(scroll_x)) {
+        return present_display_buffer() == 0;
+    }
+    return false;
+}
+
+uint32_t ease_out_cubic_permille(uint32_t t_permille) {
+    if (t_permille >= 1000U) {
+        return 1000U;
+    }
+    const uint32_t inv = 1000U - t_permille;
+    return 1000U - (inv * inv * inv) / 1000000U;
+}
+
+void start_pager_snap_anim(int32_t from_x, uint32_t target_page) {
+    g_pager_anim_active = true;
+    g_pager_anim_start_ms = tick_ms();
+    g_pager_anim_from_x = clamp_scroll_x(from_x);
+    g_pager_anim_to_x = static_cast<int32_t>(target_page * kUiWidth);
+    g_visual_scroll_x = g_pager_anim_from_x;
+}
+
+bool present_pager_snap_anim(uint32_t now_ms) {
+    if (!g_pager_anim_active) {
+        return false;
+    }
+
+    const uint32_t elapsed = now_ms - g_pager_anim_start_ms;
+    const uint32_t t = elapsed >= kPagerSnapAnimMs ? 1000U : (elapsed * 1000U) / kPagerSnapAnimMs;
+    const uint32_t eased = ease_out_cubic_permille(t);
+    const int32_t delta = g_pager_anim_to_x - g_pager_anim_from_x;
+    const int32_t sx = g_pager_anim_from_x + static_cast<int32_t>((static_cast<int64_t>(delta) * eased) / 1000);
+    g_visual_scroll_x = sx;
+
+    const bool presented = present_pager_frame(sx);
+    if (t >= 1000U) {
+        if (g_tiles.tileview != nullptr) {
+            lv_tileview_set_tile_by_index(g_tiles.tileview, static_cast<uint8_t>(g_release_page), 0, LV_ANIM_OFF);
+            present_cached_page(g_release_page);
+        }
+        g_pager_anim_active = false;
+        g_visual_scroll_x = g_pager_anim_to_x;
+    }
+    return presented;
 }
 
 bool build_tile_cache_from_snapshot(uint32_t index) {
@@ -448,9 +592,7 @@ bool refresh_page_cache(uint32_t index) {
 
 void refresh_one_dirty_page_if_idle() {
     const uint32_t now_ms = tick_ms();
-    if (g_touch.down || g_tile_snap_pending ||
-        static_cast<int32_t>(g_force_redraw_until_ms - now_ms) > 0 ||
-        now_ms - g_last_page_cache_refresh_ms < 150U) {
+    if (ui_interacting(now_ms) || now_ms - g_last_page_cache_refresh_ms < 150U) {
         return;
     }
 
@@ -470,6 +612,20 @@ void refresh_one_dirty_page_if_idle() {
     if (refresh_page_cache(page)) {
         g_page_cache_dirty[page] = false;
         g_last_page_cache_refresh_ms = now_ms;
+    }
+}
+
+void process_deferred_refreshes_if_idle() {
+    if (ui_interacting()) {
+        return;
+    }
+    if (g_clock_refresh_pending) {
+        g_clock_refresh_pending = false;
+        refresh_clock_cb(nullptr);
+    }
+    if (g_status_refresh_pending) {
+        g_status_refresh_pending = false;
+        refresh_status_cb(nullptr);
     }
 }
 
@@ -496,7 +652,7 @@ void flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
         return;
     }
 
-    if (g_scroll_blend_active) {
+    if (g_custom_frame_presenting) {
         lv_display_flush_ready(disp);
         return;
     }
@@ -572,24 +728,6 @@ void flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
         std::fflush(stdout);
     }
 
-    // Lazily populate tile cache when the display is at an aligned tile position
-    if (g_tiles.tileview != nullptr) {
-        const int32_t sx = lv_obj_get_scroll_x(g_tiles.tileview);
-        if (sx >= 0 && sx % static_cast<int32_t>(kUiWidth) == 0) {
-            const uint32_t idx = static_cast<uint32_t>(sx) / kUiWidth;
-            if (idx < kTileCount) {
-                if (g_tile_cache[idx] == nullptr) {
-                    g_tile_cache[idx] = static_cast<uint32_t*>(
-                        std::malloc(kUiHeight * kUiWidth * sizeof(uint32_t)));
-                    if (g_tile_cache[idx] != nullptr) {
-                        std::memcpy(g_tile_cache[idx], g_buffer->map,
-                                    kUiHeight * kUiWidth * sizeof(uint32_t));
-                    }
-                }
-            }
-        }
-    }
-
     const uint32_t now_ms = tick_ms();
     if (g_fps_window_start_ms == 0) {
         g_fps_window_start_ms = now_ms;
@@ -598,8 +736,7 @@ void flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
     const uint32_t elapsed = now_ms - g_fps_window_start_ms;
     if (elapsed >= 1000U) {
         const uint32_t fps = (g_fps_frame_count * 1000U) / elapsed;
-        const bool in_interaction = g_touch.down || g_tile_snap_pending ||
-                                    static_cast<int32_t>(g_force_redraw_until_ms - now_ms) > 0;
+        const bool in_interaction = ui_interacting(now_ms);
         std::printf("rockbase-lcdui: fps=%u window_ms=%u interaction=%u\n",
                     fps, elapsed, in_interaction ? 1U : 0U);
         std::fflush(stdout);
@@ -926,37 +1063,6 @@ void split_pair_value(const std::string& value, std::string& left_part, std::str
     right_part = value.substr(split + 3);
 }
 
-std::string sync_label(const std::string& key) {
-    if (key == "pre_headers") return "Header";
-    if (key == "sync_headers") return "Header";
-    if (key == "sync_blocks") return "Synchronizing blocks";
-    if (key == "loading_index") return "Loading block index";
-    if (key == "loading_blocks") return "Loading block files";
-    if (key == "verifying_blocks") return "Verifying blocks";
-    if (key == "rewinding_blocks") return "Rewinding blocks";
-    if (key == "pruning") return "Pruning blocks";
-    if (key == "synced") return "Synced";
-    if (key == "btc_not_running") return "Not Running";
-    return "IBD Syncing";
-}
-
-std::string bitcoin_phase_label(const DashboardData& data) {
-    const std::string key = data.ibd_stage_key != "-" ? data.ibd_stage_key : data.sync_key;
-    if (data.sync_key == "btc_not_running") return "Not Running";
-    if (data.sync_key == "synced" || key == "synced") return "Synced";
-    if (key == "pre_headers") return "Header";
-    if (key == "sync_headers") return "Header";
-    if (key == "sync_blocks") return "Block Sync";
-    if (key == "loading_index") return "Load Index";
-    if (key == "loading_blocks") return "Load Blocks";
-    if (key == "verifying_blocks") return "Verify Chain";
-    if (key == "rewinding_blocks") return "Rewind Chain";
-    if (key == "pruning") return "Pruning";
-    if (key == "syncing") return "IBD Syncing";
-    if (parse_leading_int(data.connections, -1) == 0) return "Connecting";
-    return sync_label(data.sync_key);
-}
-
 std::string ntp_label(const std::string& key) {
     if (key == "running") {
         return "NTP Ready";
@@ -1233,20 +1339,20 @@ void touch_read_cb(lv_indev_t*, lv_indev_data_t* data) {
 
     data->point.x = clamp_int(phys_y, 0, static_cast<int>(kUiWidth - 1U));
     data->point.y = clamp_int(static_cast<int>(kUiHeight - 1U) - phys_x, 0, static_cast<int>(kUiHeight - 1U));
-    data->state = g_touch.down ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+    // Phase 2 pager owns swiping. Keep LVGL from applying its own tileview drag.
+    data->state = LV_INDEV_STATE_RELEASED;
     g_swipe_current_x = data->point.x;
 
     static bool was_down = false;
     if (!was_down && g_touch.down) {
         g_swipe_start_x = data->point.x;
         g_swipe_start_page = g_active_page;
-    }
-    if (g_touch.down) {
-        g_force_redraw_until_ms = tick_ms() + kReleaseRedrawBoostMs;
+        g_visual_scroll_x = static_cast<int32_t>(g_swipe_start_page * kUiWidth);
     }
     if (was_down && !g_touch.down) {
         g_release_page = g_swipe_start_page;
         const int32_t swipe_dx = data->point.x - g_swipe_start_x;
+        const int32_t release_scroll_x = visual_scroll_x_from_touch();
         if (swipe_dx <= -static_cast<int32_t>(kPageSwitchThresholdPx) &&
             g_release_page + 1U < kTileCount) {
             ++g_release_page;
@@ -1255,8 +1361,7 @@ void touch_read_cb(lv_indev_t*, lv_indev_data_t* data) {
             --g_release_page;
         }
         set_active_page(g_release_page);
-        g_tile_snap_pending = true;
-        g_force_redraw_until_ms = tick_ms() + kReleaseRedrawBoostMs;
+        start_pager_snap_anim(release_scroll_x, g_release_page);
     }
     was_down = g_touch.down;
 }
@@ -1273,8 +1378,6 @@ void init_touch_input(lv_display_t* disp) {
     lv_indev_set_display(indev, disp);
     lv_indev_set_read_cb(indev, touch_read_cb);
     lv_timer_set_period(lv_indev_get_read_timer(indev), kTouchReadPeriodMs);
-    lv_indev_set_scroll_limit(indev, 6);
-    lv_indev_set_scroll_throw(indev, 22);
 }
 
 lv_obj_t* add_label(lv_obj_t* parent, const char* text, int32_t x, int32_t y,
@@ -1323,22 +1426,62 @@ lv_obj_t* create_card(lv_obj_t* parent, int32_t x, int32_t y, int32_t w, int32_t
     if (title_label != nullptr) {
         *title_label = title_obj;
     }
-    lv_obj_t* value_label = add_label(card, value, 0, 34, &lv_font_montserrat_22, lv_color_hex(0xf4efe2));
-    lv_obj_set_width(value_label, w - 32);
-    lv_label_set_long_mode(value_label, LV_LABEL_LONG_MODE_DOTS);
-    return value_label;
+    if (value != nullptr && value[0] != '\0') {
+        lv_obj_t* value_label = add_label(card, value, 0, 34, &lv_font_montserrat_22, lv_color_hex(0xf4efe2));
+        lv_obj_set_width(value_label, w - 32);
+        lv_label_set_long_mode(value_label, LV_LABEL_LONG_MODE_DOTS);
+        return value_label;
+    }
+    return nullptr;
 }
 
-void set_label(lv_obj_t* label, const std::string& value) {
-    if (label != nullptr) {
-        lv_label_set_text(label, value.c_str());
+lv_obj_t* create_card_frame(lv_obj_t* parent, int32_t x, int32_t y, int32_t w, int32_t h,
+                            const char* title, lv_color_t accent, lv_obj_t** title_label = nullptr) {
+    lv_obj_t* card = lv_obj_create(parent);
+    make_static(card);
+    lv_obj_set_pos(card, x, y);
+    lv_obj_set_size(card, w, h);
+    lv_obj_set_style_radius(card, 18, 0);
+    lv_obj_set_style_bg_color(card, lv_color_hex(0x101820), 0);
+    lv_obj_set_style_bg_opa(card, LV_OPA_80, 0);
+    lv_obj_set_style_border_width(card, 1, 0);
+    lv_obj_set_style_border_color(card, accent, 0);
+    lv_obj_set_style_pad_all(card, 16, 0);
+
+    lv_obj_t* title_obj = add_label(card, title, 0, 0, &lv_font_montserrat_16, lv_color_hex(0x9aa6ac));
+    if (title_label != nullptr) {
+        *title_label = title_obj;
     }
+    return card;
 }
 
-void set_label_fmt(lv_obj_t* label, const char* fmt, const std::string& value) {
-    if (label != nullptr) {
-        lv_label_set_text_fmt(label, fmt, value.c_str());
+bool set_label(lv_obj_t* label, const std::string& value) {
+    if (label == nullptr) {
+        return false;
     }
+    const char* current = lv_label_get_text(label);
+    if (current != nullptr && value == current) {
+        return false;
+    }
+    lv_label_set_text(label, value.c_str());
+    return true;
+}
+
+bool set_hidden(lv_obj_t* obj, bool hidden) {
+    if (obj == nullptr) {
+        return false;
+    }
+    const bool was_hidden = lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    if (was_hidden == hidden) {
+        return false;
+    }
+    if (hidden) {
+        lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    }
+    else {
+        lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    }
+    return true;
 }
 
 uint32_t bitcoin_stage_index(const DashboardData& data) {
@@ -1368,7 +1511,91 @@ uint32_t bitcoin_stage_index(const DashboardData& data) {
     return 0;
 }
 
-void update_bitcoin_stage_list(uint32_t active_stage) {
+HeightCardModel make_height_card_model(const DashboardData& data, const std::string& blocks) {
+    HeightCardModel card;
+    card.title = "Blocks / Header";
+    card.value = blocks;
+    card.split_pair = false;
+
+    if (data.ibd_stage_key == "pre_headers" || data.ibd_stage_key == "sync_headers") {
+        card.title = "Header";
+        const std::string height = has_value(data.ibd_stage_height) ? data.ibd_stage_height : data.headers_fmt;
+        card.value = join_value(height, " / ", data.headers_fmt);
+        card.split_pair = true;
+    }
+    else if (data.ibd_stage_key == "sync_blocks") {
+        card.title = "Block Sync";
+    }
+    else if (data.ibd_stage_key == "loading_index") {
+        card.title = "Block Index";
+        card.value = "Preparing chain";
+    }
+    else if (data.ibd_stage_key == "loading_blocks") {
+        card.title = "Block Files";
+        card.value = "Loading blocks";
+    }
+    else if (data.ibd_stage_key == "verifying_blocks") {
+        card.title = "Verifying";
+        card.value = "Chain state";
+    }
+    else if (data.ibd_stage_key == "rewinding_blocks") {
+        card.title = "Rewinding";
+        card.value = "Chain state";
+    }
+    else if (data.ibd_stage_key == "pruning") {
+        card.title = "Pruning";
+        card.value = "Block files";
+    }
+
+    return card;
+}
+
+bool build_ui_model(UiModel& model) {
+    DashboardData data;
+    if (!load_dashboard_data(data)) {
+        model.status_available = false;
+        return false;
+    }
+
+    const std::string blocks = join_value(data.blocks_fmt, " / ", data.headers_fmt);
+    std::string block_date;
+    std::string block_time;
+    split_date_time(data.best_block_date, block_date, block_time);
+
+    model.status_available = true;
+    model.bitcoin.stage_index = bitcoin_stage_index(data);
+    model.bitcoin.progress = format_progress_percent(data.progress_ring, lv_obj_get_width(g_tiles.bitcoin_progress));
+    model.bitcoin.height = make_height_card_model(data, blocks);
+    model.bitcoin.peers = data.connections;
+    model.bitcoin.block_date = block_date;
+    model.bitcoin.block_time = block_time;
+    model.bitcoin.ip_addr = data.ip_addr;
+    model.bitcoin.log_sync_key = data.sync_key;
+    model.bitcoin.log_blocks = data.blocks_fmt;
+    model.bitcoin.log_headers = data.headers_fmt;
+
+    model.stratum.state = data.ckpool_state;
+    model.stratum.url = data.stratum_url;
+    model.stratum.user = data.btc_address != "-" ? data.btc_address : data.user_hint;
+    model.stratum.mode = data.recommended_mode;
+
+    model.system.load = join_value(data.load_display, " | ", data.load_avg_display);
+    model.system.mem = join_value(data.mem_used_display, " / ", data.mem_total_display);
+    model.system.disk = data.disk_size_info;
+    model.system.temp = data.temp;
+    model.system.uptime = data.uptime;
+    model.system.swap = join_value(data.swap_used_display, " / ", data.swap_total_display);
+
+    model.network.ip = data.ip_addr;
+    model.network.ssid = data.wifi_ssid;
+    model.network.rssi = data.rssi_display;
+    model.network.ntp = ntp_label(data.ntp_key);
+    model.network.mac = data.mac_addr;
+    model.network.reach = data.stratum_reach;
+    return true;
+}
+
+bool update_bitcoin_stage_list(uint32_t active_stage) {
     constexpr uint32_t kDoneDot = 0x2f7d5d;
     constexpr uint32_t kActiveDot = 0x37e88b;
     constexpr uint32_t kPendingDot = 0x46515a;
@@ -1379,6 +1606,12 @@ void update_bitcoin_stage_list(uint32_t active_stage) {
     if (active_stage >= kBitcoinStageCount) {
         active_stage = 0;
     }
+
+    static uint32_t last_active_stage = UINT32_MAX;
+    if (last_active_stage == active_stage) {
+        return false;
+    }
+    last_active_stage = active_stage;
 
     for (uint32_t index = 0; index < kBitcoinStageCount; ++index) {
         const bool done = index < active_stage;
@@ -1395,6 +1628,7 @@ void update_bitcoin_stage_list(uint32_t active_stage) {
             lv_obj_set_style_text_color(g_tiles.bitcoin_stage_label[index], lv_color_hex(text_color), 0);
         }
     }
+    return true;
 }
 
 void style_tile(lv_obj_t* tile, lv_color_t bg, lv_color_t /*accent*/) {
@@ -1494,19 +1728,19 @@ void build_bitcoin_tile(lv_obj_t* tv) {
     lv_obj_add_flag(g_tiles.bitcoin_height_current, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(g_tiles.bitcoin_height_sep, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(g_tiles.bitcoin_height_total, LV_OBJ_FLAG_HIDDEN);
-    g_tiles.bitcoin_block_date = create_card(tile, 300, 372, 456, 58, "Block Time", "", accent,
-                                             &g_tiles.bitcoin_block_date_title);
-    lv_obj_set_width(g_tiles.bitcoin_block_date_title, 126);
-    g_tiles.bitcoin_block_date_meta = add_label(lv_obj_get_parent(g_tiles.bitcoin_block_date), "--", 152, 0,
-                                                &lv_font_montserrat_16, lv_color_hex(0xf4efe2));
-    lv_obj_set_width(g_tiles.bitcoin_block_date_meta, 108);
-    lv_obj_set_style_text_align(g_tiles.bitcoin_block_date_meta, LV_TEXT_ALIGN_LEFT, 0);
-    lv_label_set_long_mode(g_tiles.bitcoin_block_date_meta, LV_LABEL_LONG_MODE_CLIP);
-    g_tiles.bitcoin_block_time_meta = add_label(lv_obj_get_parent(g_tiles.bitcoin_block_date), "", 258, 0,
-                                                &lv_font_montserrat_16, lv_color_hex(0x78848b));
-    lv_obj_set_width(g_tiles.bitcoin_block_time_meta, 140);
-    lv_obj_set_style_text_align(g_tiles.bitcoin_block_time_meta, LV_TEXT_ALIGN_LEFT, 0);
-    lv_label_set_long_mode(g_tiles.bitcoin_block_time_meta, LV_LABEL_LONG_MODE_CLIP);
+    lv_obj_t* block_time_card = create_card_frame(tile, 300, 372, 456, 58, "Block Time", accent,
+                                                  &g_tiles.bitcoin_block_date_title);
+    lv_obj_set_width(g_tiles.bitcoin_block_date_title, 112);
+    lv_obj_set_y(g_tiles.bitcoin_block_date_title, 10);
+    lv_label_set_long_mode(g_tiles.bitcoin_block_date_title, LV_LABEL_LONG_MODE_CLIP);
+    g_tiles.bitcoin_block_date = add_label(block_time_card, "--", 118, 10, &lv_font_montserrat_16,
+                                           lv_color_hex(0xf4efe2));
+    lv_obj_set_width(g_tiles.bitcoin_block_date, 84);
+    lv_label_set_long_mode(g_tiles.bitcoin_block_date, LV_LABEL_LONG_MODE_DOTS);
+    g_tiles.bitcoin_block_time = add_label(block_time_card, "", 208, 10, &lv_font_montserrat_16,
+                                           lv_color_hex(0x78848b));
+    lv_obj_set_width(g_tiles.bitcoin_block_time, 128);
+    lv_label_set_long_mode(g_tiles.bitcoin_block_time, LV_LABEL_LONG_MODE_DOTS);
 }
 
 void build_stratum_tile(lv_obj_t* tv) {
@@ -1554,133 +1788,139 @@ void set_active_page(uint32_t page) {
 }
 
 void refresh_clock_cb(lv_timer_t*) {
+    if (ui_interacting()) {
+        g_clock_refresh_pending = true;
+        return;
+    }
+
     const std::string time_text = current_time_text("%H:%M:%S");
     const std::string date_text = current_time_text("%Y-%m-%d");
-    set_label(g_tiles.clock_time_label, time_text);
-    set_label(g_tiles.clock_date_label, date_text);
-    g_page_cache_dirty[0] = true;
+    bool dirty = false;
+    dirty |= set_label(g_tiles.clock_time_label, time_text);
+    dirty |= set_label(g_tiles.clock_date_label, date_text);
+    if (dirty) {
+        g_page_cache_dirty[0] = true;
+    }
 }
 
-void update_ibd_stage_card(const DashboardData& data, const std::string& blocks) {
-    std::string title = "Blocks / Header";
-    std::string value = blocks;
-    bool split_header_pair = false;
+bool update_height_card(const HeightCardModel& card) {
+    bool dirty = false;
 
-    if (data.ibd_stage_key == "pre_headers" || data.ibd_stage_key == "sync_headers") {
-        title = "Header";
-        const std::string height = has_value(data.ibd_stage_height) ? data.ibd_stage_height : data.headers_fmt;
-        value = join_value(height, " / ", data.headers_fmt);
-        split_header_pair = true;
-    }
-    else if (data.ibd_stage_key == "sync_blocks") {
-        title = "Block Sync";
-    }
-    else if (data.ibd_stage_key == "loading_index") {
-        title = "Block Index";
-        value = "Preparing chain";
-    }
-    else if (data.ibd_stage_key == "loading_blocks") {
-        title = "Block Files";
-        value = "Loading blocks";
-    }
-    else if (data.ibd_stage_key == "verifying_blocks") {
-        title = "Verifying";
-        value = "Chain state";
-    }
-    else if (data.ibd_stage_key == "rewinding_blocks") {
-        title = "Rewinding";
-        value = "Chain state";
-    }
-    else if (data.ibd_stage_key == "pruning") {
-        title = "Pruning";
-        value = "Block files";
-    }
-
-    set_label(g_tiles.bitcoin_height_title, title);
-    if (split_header_pair) {
+    dirty |= set_label(g_tiles.bitcoin_height_title, card.title);
+    if (card.split_pair) {
         std::string left_value;
         std::string right_value;
-        split_pair_value(value, left_value, right_value);
-        set_label(g_tiles.bitcoin_height_current, left_value);
-        set_label(g_tiles.bitcoin_height_sep, right_value.empty() ? "" : "/");
-        set_label(g_tiles.bitcoin_height_total, right_value);
-        lv_obj_add_flag(g_tiles.bitcoin_height, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(g_tiles.bitcoin_height_current, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(g_tiles.bitcoin_height_sep, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(g_tiles.bitcoin_height_total, LV_OBJ_FLAG_HIDDEN);
+        split_pair_value(card.value, left_value, right_value);
+        dirty |= set_label(g_tiles.bitcoin_height_current, left_value);
+        dirty |= set_label(g_tiles.bitcoin_height_sep, right_value.empty() ? "" : "/");
+        dirty |= set_label(g_tiles.bitcoin_height_total, right_value);
+        dirty |= set_hidden(g_tiles.bitcoin_height, true);
+        dirty |= set_hidden(g_tiles.bitcoin_height_current, false);
+        dirty |= set_hidden(g_tiles.bitcoin_height_sep, false);
+        dirty |= set_hidden(g_tiles.bitcoin_height_total, false);
     }
     else {
-        lv_obj_clear_flag(g_tiles.bitcoin_height, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(g_tiles.bitcoin_height_current, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(g_tiles.bitcoin_height_sep, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(g_tiles.bitcoin_height_total, LV_OBJ_FLAG_HIDDEN);
-        set_label(g_tiles.bitcoin_height, value);
+        dirty |= set_hidden(g_tiles.bitcoin_height, false);
+        dirty |= set_hidden(g_tiles.bitcoin_height_current, true);
+        dirty |= set_hidden(g_tiles.bitcoin_height_sep, true);
+        dirty |= set_hidden(g_tiles.bitcoin_height_total, true);
+        dirty |= set_label(g_tiles.bitcoin_height, card.value);
+    }
+    return dirty;
+}
+
+uint32_t apply_status_unavailable_model() {
+    bool dirty = false;
+    dirty |= set_label(g_tiles.bitcoin_progress, "No status");
+    dirty |= set_label(g_tiles.bitcoin_height_title, "Blocks / Header");
+    dirty |= set_label(g_tiles.bitcoin_height, "--");
+    dirty |= set_hidden(g_tiles.bitcoin_height, false);
+    dirty |= set_hidden(g_tiles.bitcoin_height_current, true);
+    dirty |= set_hidden(g_tiles.bitcoin_height_sep, true);
+    dirty |= set_hidden(g_tiles.bitcoin_height_total, true);
+    dirty |= set_label(g_tiles.bitcoin_block_date_title, "Block Time");
+    dirty |= set_label(g_tiles.bitcoin_block_date, "--");
+    dirty |= set_label(g_tiles.bitcoin_block_time, "");
+    return dirty ? page_dirty_bit(0) : 0;
+}
+
+uint32_t apply_ui_model(const UiModel& model) {
+    uint32_t dirty_mask = 0;
+    bool dirty = false;
+
+    dirty |= update_bitcoin_stage_list(model.bitcoin.stage_index);
+    dirty |= set_label(g_tiles.bitcoin_progress, model.bitcoin.progress);
+    dirty |= update_height_card(model.bitcoin.height);
+    dirty |= set_label(g_tiles.bitcoin_peers, model.bitcoin.peers);
+    dirty |= set_label(g_tiles.bitcoin_block_date_title, "Block Time");
+    dirty |= set_label(g_tiles.bitcoin_block_date, model.bitcoin.block_date);
+    dirty |= set_label(g_tiles.bitcoin_block_time, model.bitcoin.block_time);
+    dirty |= set_label(g_tiles.bitcoin_ip_label, model.bitcoin.ip_addr);
+    if (dirty) {
+        dirty_mask |= page_dirty_bit(0);
+    }
+
+    dirty = false;
+    dirty |= set_label(g_tiles.stratum_state, model.stratum.state);
+    dirty |= set_label(g_tiles.stratum_url, model.stratum.url);
+    dirty |= set_label(g_tiles.stratum_user, model.stratum.user);
+    dirty |= set_label(g_tiles.stratum_mode, model.stratum.mode);
+    if (dirty) {
+        dirty_mask |= page_dirty_bit(1);
+    }
+
+    dirty = false;
+    dirty |= set_label(g_tiles.system_load, model.system.load);
+    dirty |= set_label(g_tiles.system_mem, model.system.mem);
+    dirty |= set_label(g_tiles.system_disk, model.system.disk);
+    dirty |= set_label(g_tiles.system_temp, model.system.temp);
+    dirty |= set_label(g_tiles.system_uptime, model.system.uptime);
+    dirty |= set_label(g_tiles.system_swap, model.system.swap);
+    if (dirty) {
+        dirty_mask |= page_dirty_bit(2);
+    }
+
+    dirty = false;
+    dirty |= set_label(g_tiles.network_ip, model.network.ip);
+    dirty |= set_label(g_tiles.network_ssid, model.network.ssid);
+    dirty |= set_label(g_tiles.network_rssi, model.network.rssi);
+    dirty |= set_label(g_tiles.network_ntp, model.network.ntp);
+    dirty |= set_label(g_tiles.network_mac, model.network.mac);
+    dirty |= set_label(g_tiles.network_reach, model.network.reach);
+    if (dirty) {
+        dirty_mask |= page_dirty_bit(3);
+    }
+
+    return dirty_mask;
+}
+
+void mark_dirty_pages(uint32_t dirty_mask) {
+    for (uint32_t index = 0; index < kTileCount; ++index) {
+        if ((dirty_mask & page_dirty_bit(index)) != 0) {
+            g_page_cache_dirty[index] = true;
+        }
     }
 }
 
 void refresh_status_cb(lv_timer_t*) {
-    static bool logged_first_status = false;
-    DashboardData data;
-    if (!load_dashboard_data(data)) {
-        set_label(g_tiles.bitcoin_progress, "No status");
-        set_label(g_tiles.bitcoin_height_title, "Blocks / Header");
-        set_label(g_tiles.bitcoin_height, "--");
-        lv_obj_clear_flag(g_tiles.bitcoin_height, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(g_tiles.bitcoin_height_current, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(g_tiles.bitcoin_height_sep, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(g_tiles.bitcoin_height_total, LV_OBJ_FLAG_HIDDEN);
-        set_label(g_tiles.bitcoin_block_date_title, "Block Time");
-        set_label(g_tiles.bitcoin_block_date_meta, "--");
-        set_label(g_tiles.bitcoin_block_time_meta, "");
-        set_label(g_tiles.bitcoin_block_date, "");
+    if (ui_interacting()) {
+        g_status_refresh_pending = true;
         return;
     }
 
-    const std::string blocks = join_value(data.blocks_fmt, " / ", data.headers_fmt);
-    const std::string progress = format_progress_percent(data.progress_ring, lv_obj_get_width(g_tiles.bitcoin_progress));
-    const std::string mem = join_value(data.mem_used_display, " / ", data.mem_total_display);
-    const std::string swap = join_value(data.swap_used_display, " / ", data.swap_total_display);
-    const std::string load = join_value(data.load_display, " | ", data.load_avg_display);
-    std::string block_date;
-    std::string block_time;
-    split_date_time(data.best_block_date, block_date, block_time);
-
-    update_bitcoin_stage_list(bitcoin_stage_index(data));
-    set_label(g_tiles.bitcoin_progress, progress);
-    update_ibd_stage_card(data, blocks);
-    set_label(g_tiles.bitcoin_peers, data.connections);
-    set_label(g_tiles.bitcoin_block_date_title, "Block Time");
-    set_label(g_tiles.bitcoin_block_date_meta, block_date);
-    set_label(g_tiles.bitcoin_block_time_meta, block_time);
-    set_label(g_tiles.bitcoin_block_date, "");
-    set_label(g_tiles.bitcoin_ip_label, data.ip_addr);
-
-    set_label(g_tiles.stratum_state, data.ckpool_state);
-    set_label(g_tiles.stratum_url, data.stratum_url);
-    set_label(g_tiles.stratum_user, data.btc_address != "-" ? data.btc_address : data.user_hint);
-    set_label(g_tiles.stratum_mode, data.recommended_mode);
-
-    set_label(g_tiles.system_load, load);
-    set_label(g_tiles.system_mem, mem);
-    set_label(g_tiles.system_disk, data.disk_size_info);
-    set_label(g_tiles.system_temp, data.temp);
-    set_label(g_tiles.system_uptime, data.uptime);
-    set_label(g_tiles.system_swap, swap);
-
-    set_label(g_tiles.network_ip, data.ip_addr);
-    set_label(g_tiles.network_ssid, data.wifi_ssid);
-    set_label(g_tiles.network_rssi, data.rssi_display);
-    set_label(g_tiles.network_ntp, ntp_label(data.ntp_key));
-    set_label(g_tiles.network_mac, data.mac_addr);
-    set_label(g_tiles.network_reach, data.stratum_reach);
-
-    for (uint32_t index = 0; index < kTileCount; ++index) {
-        g_page_cache_dirty[index] = true;
+    static bool logged_first_status = false;
+    UiModel model;
+    if (!build_ui_model(model)) {
+        mark_dirty_pages(apply_status_unavailable_model());
+        return;
     }
+
+    mark_dirty_pages(apply_ui_model(model));
 
     if (!logged_first_status) {
         std::printf("rockbase-lcdui: status loaded ip=%s sync=%s blocks=%s headers=%s\n",
-                    data.ip_addr.c_str(), data.sync_key.c_str(), data.blocks_fmt.c_str(), data.headers_fmt.c_str());
+                    model.bitcoin.ip_addr.c_str(), model.bitcoin.log_sync_key.c_str(),
+                    model.bitcoin.log_blocks.c_str(), model.bitcoin.log_headers.c_str());
         std::fflush(stdout);
         logged_first_status = true;
     }
@@ -1720,7 +1960,6 @@ void build_tile_stage(lv_obj_t* screen) {
     lv_obj_t* tv = lv_tileview_create(screen);
     lv_obj_set_size(tv, kUiWidth, kUiHeight);
     lv_obj_set_pos(tv, 0, 0);
-    lv_obj_set_style_anim_time(tv, kTileAnimMs, LV_PART_MAIN);
     lv_obj_clear_flag(tv, LV_OBJ_FLAG_SCROLL_MOMENTUM);
     lv_obj_clear_flag(tv, LV_OBJ_FLAG_SCROLL_ELASTIC);
     lv_obj_set_scrollbar_mode(tv, LV_SCROLLBAR_MODE_OFF);
@@ -1827,33 +2066,21 @@ int main() {
 
     while (!g_stop) {
         const uint32_t now_ms = tick_ms();
-        const bool interacting = g_touch.down || g_tile_snap_pending ||
-                                 static_cast<int32_t>(g_force_redraw_until_ms - now_ms) > 0;
+        const bool interacting = ui_interacting(now_ms);
+        process_deferred_refreshes_if_idle();
         refresh_one_dirty_page_if_idle();
 
-        // Fast path: blend pre-rendered caches during mid-scroll (~1ms vs ~80ms LVGL render)
-        bool did_blend = false;
-        if (interacting && g_tiles.tileview != nullptr) {
-            const int32_t sx = lv_obj_get_scroll_x(g_tiles.tileview);
-            if (sx > 0 && sx % static_cast<int32_t>(kUiWidth) != 0) {
-                if (blend_tile_caches(sx)) {
-                    if (present_display_buffer() == 0) {
-                        did_blend = true;
-                    }
-                }
-            }
+        bool custom_present = false;
+        if (g_touch.down) {
+            custom_present = present_pager_frame(visual_scroll_x_from_touch());
+        }
+        else if (g_pager_anim_active) {
+            custom_present = present_pager_snap_anim(now_ms);
         }
 
-        if (g_tile_snap_pending && g_tiles.tileview != nullptr) {
-            lv_tileview_set_tile_by_index(g_tiles.tileview, static_cast<uint8_t>(g_release_page), 0, LV_ANIM_ON);
-            g_tile_snap_pending = false;
-        }
-        if (!did_blend && interacting && g_tiles.tileview != nullptr) {
-            lv_obj_invalidate(g_tiles.tileview);
-        }
-        g_scroll_blend_active = did_blend;
+        g_custom_frame_presenting = g_touch.down || custom_present;
         uint32_t next_ms = lv_timer_handler();
-        g_scroll_blend_active = false;
+        g_custom_frame_presenting = false;
         if (interacting) {
             next_ms = 0;
         }
