@@ -1,0 +1,575 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bitpony <bitpony@example.com>
+Date: Mon, 10 Aug 2026 14:40:00 +0800
+Subject: [PATCH] rtl8189fs: serialize SDIO bulk and IRQ via bus worker
+
+Route the high-risk SDIO CMD53 bulk read/write paths and SDIO IRQ DPC
+execution through a single driver-owned bus worker. The worker always takes
+the existing driver SDIO mutex before claiming the MMC host, so TX, command
+and deferred IRQ work no longer race the host claim path with mixed lock
+ordering.
+
+Keep the inner TX, RX, command, HISR and DPC logic unchanged. IRQ handling is
+only deferred to the bus worker with a pending-bit dedupe; if the worker is
+not available, the original direct IRQ handling path remains as fallback.
+
+Add an independent watchdog timer around the bus worker's active operation.
+If one SDIO bus operation remains stuck, the watchdog logs the owner and
+operation metadata, marks the primary adapter surprise-removed after a longer
+timeout, and fails queued bus requests so new work stops piling onto the
+stalled SDIO host.
+
+Signed-off-by: bitpony <bitpony@example.com>
+---
+--- a/include/drv_types.h
++++ b/include/drv_types.h
+@@ -1172,6 +1172,26 @@
+ #endif
+ #ifdef CONFIG_SDIO_HCI
+ 	_mutex sdio_claim_mutex;
++#ifdef PLATFORM_LINUX
++	_lock sdio_bus_req_lock;
++	_sema sdio_bus_req_sema;
++	_list sdio_bus_req_q;
++	_thread_hdl_ sdio_bus_thread;
++	_timer sdio_bus_watchdog_timer;
++	u8 sdio_bus_stopping;
++	u8 sdio_bus_fault;
++	u8 sdio_bus_irq_pending;
++	u32 sdio_bus_seq;
++	u32 sdio_bus_active_seq;
++	u32 sdio_bus_active_addr;
++	u32 sdio_bus_active_cnt;
++	u32 sdio_bus_active_submit_pid;
++	u8 sdio_bus_active_is_irq;
++	systime sdio_bus_active_start;
++	systime sdio_bus_last_watchdog;
++	const char *sdio_bus_active_name;
++	char sdio_bus_active_comm[TASK_COMM_LEN];
++#endif
+ #endif
+ 
+ 	/*-------- below is for USB INTERFACE --------*/
+--- a/include/sdio_ops.h
++++ b/include/sdio_ops.h
+@@ -35,6 +35,9 @@
+ u8 sdio_get_num_of_func(struct dvobj_priv *dvobj);
+ void rtw_sdio_bus_lock(struct dvobj_priv *dvobj);
+ void rtw_sdio_bus_unlock(struct dvobj_priv *dvobj);
++int rtw_sdio_bus_init(struct dvobj_priv *dvobj);
++void rtw_sdio_bus_deinit(struct dvobj_priv *dvobj);
++int rtw_sdio_bus_schedule_irq(struct dvobj_priv *dvobj);
+ 
+ #if 0
+ extern void sdio_func1cmd52_read(struct intf_hdl *pintfhdl, u32 addr, u32 cnt, u8 *rmem);
+--- a/os_dep/linux/os_intfs.c
++++ b/os_dep/linux/os_intfs.c
+@@ -2262,6 +2262,7 @@
+ 	_rtw_mutex_init(&pdvobj->ioctrl_mutex);
+ #ifdef CONFIG_SDIO_HCI
+ 	_rtw_mutex_init(&pdvobj->sdio_claim_mutex);
++	rtw_sdio_bus_init(pdvobj);
+ #endif
+ #ifdef CONFIG_SDIO_INDIRECT_ACCESS
+ 	_rtw_mutex_init(&pdvobj->sd_indirect_access_mutex);
+@@ -2359,6 +2360,7 @@
+ 	_rtw_mutex_free(&pdvobj->rf_read_reg_mutex);
+ 	_rtw_mutex_free(&pdvobj->ioctrl_mutex);
+ #ifdef CONFIG_SDIO_HCI
++	rtw_sdio_bus_deinit(pdvobj);
+ 	_rtw_mutex_free(&pdvobj->sdio_claim_mutex);
+ #endif
+ #ifdef CONFIG_SDIO_INDIRECT_ACCESS
+--- a/os_dep/linux/sdio_intf.c
++++ b/os_dep/linux/sdio_intf.c
+@@ -184,6 +184,14 @@
+ 		pr_warn("[rb8189-diag] sd_sync_int_hdl enter seq=%u pid=%d comm=%s func=%p\n",
+ 			 seq, current->pid, current->comm, func);
+ 
++	if (rtw_sdio_bus_schedule_irq(psdpriv) == 0) {
++		elapsed = rtw_get_passing_time_ms(start);
++		if (trace || elapsed >= 300)
++			pr_warn("[rb8189-diag] sd_sync_int_hdl queued seq=%u pid=%d comm=%s func=%p elapsed_ms=%u\n",
++				 seq, current->pid, current->comm, func, elapsed);
++		return;
++	}
++
+ 	rtw_sdio_set_irq_thd(psdpriv, current);
+ 	if (trace)
+ 		pr_warn("[rb8189-diag] sd_sync_int_hdl before_sd_int seq=%u pid=%d comm=%s func=%p\n",
+--- a/os_dep/linux/sdio_ops_linux.c
++++ b/os_dep/linux/sdio_ops_linux.c
+@@ -16,9 +16,15 @@
+ 
+ #include <drv_types.h>
+ #include <linux/atomic.h>
++#include <linux/completion.h>
++#include <linux/err.h>
++#include <linux/jiffies.h>
+ 
+ #define RB8189_DIAG_SLOW_SDIO_MS 200
+ #define RB8189_DIAG_PERIOD_MS 30000
++#define RB8189_BUS_WATCHDOG_PERIOD_MS 1000
++#define RB8189_BUS_STUCK_WARN_MS 3000
++#define RB8189_BUS_STUCK_RECOVER_MS 8000
+ static atomic_t rb8189_diag_sdio_seq = ATOMIC_INIT(0);
+ 
+ static bool rb8189_diag_ratelimit(systime *last, u32 period_ms)
+@@ -100,6 +106,335 @@
+ {
+ 	_exit_critical_mutex(&dvobj->sdio_claim_mutex, NULL);
+ }
++
++struct rtw_sdio_bus_req {
++	_list list;
++	int (*fn)(struct dvobj_priv *dvobj, void *ctx);
++	void *ctx;
++	const char *name;
++	u32 addr;
++	u32 cnt;
++	u32 seq;
++	u32 submit_pid;
++	char submit_comm[TASK_COMM_LEN];
++	int ret;
++	struct completion done;
++};
++
++static void rtw_sdio_bus_fail_queued(struct dvobj_priv *dvobj, int ret)
++{
++	struct rtw_sdio_bus_req *req, *tmp;
++	_list local;
++	_irqL irqL;
++
++	INIT_LIST_HEAD(&local);
++
++	_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
++	list_splice_init(&dvobj->sdio_bus_req_q, &local);
++	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
++
++	list_for_each_entry_safe(req, tmp, &local, list) {
++		list_del_init(&req->list);
++		req->ret = ret;
++		complete(&req->done);
++	}
++}
++
++static void rtw_sdio_bus_active_begin(struct dvobj_priv *dvobj,
++				      const char *name, u32 seq,
++				      u32 addr, u32 cnt,
++				      u32 submit_pid, const char *submit_comm,
++				      bool is_irq)
++{
++	_irqL irqL;
++
++	_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
++	dvobj->sdio_bus_active_name = name;
++	dvobj->sdio_bus_active_seq = seq;
++	dvobj->sdio_bus_active_addr = addr;
++	dvobj->sdio_bus_active_cnt = cnt;
++	dvobj->sdio_bus_active_submit_pid = submit_pid;
++	dvobj->sdio_bus_active_is_irq = is_irq ? 1 : 0;
++	dvobj->sdio_bus_active_start = rtw_get_current_time();
++	dvobj->sdio_bus_last_watchdog = 0;
++	snprintf(dvobj->sdio_bus_active_comm, TASK_COMM_LEN, "%s",
++		 submit_comm ? submit_comm : "-");
++	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
++}
++
++static void rtw_sdio_bus_active_end(struct dvobj_priv *dvobj)
++{
++	_irqL irqL;
++
++	_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
++	dvobj->sdio_bus_active_name = NULL;
++	dvobj->sdio_bus_active_seq = 0;
++	dvobj->sdio_bus_active_addr = 0;
++	dvobj->sdio_bus_active_cnt = 0;
++	dvobj->sdio_bus_active_submit_pid = 0;
++	dvobj->sdio_bus_active_is_irq = 0;
++	dvobj->sdio_bus_active_start = 0;
++	dvobj->sdio_bus_last_watchdog = 0;
++	dvobj->sdio_bus_active_comm[0] = '\0';
++	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
++}
++
++static void rtw_sdio_bus_watchdog_hdl(void *ctx)
++{
++	struct dvobj_priv *dvobj = ctx;
++	PADAPTER padapter;
++	const char *name = NULL;
++	char comm[TASK_COMM_LEN];
++	u32 seq = 0, addr = 0, cnt = 0, submit_pid = 0, elapsed = 0;
++	u8 is_irq = 0, irq_pending = 0, recover = 0, stopping = 0;
++	bool warn = false;
++	_irqL irqL;
++
++	if (!dvobj || !dvobj->sdio_bus_thread)
++		return;
++
++	comm[0] = '\0';
++
++	_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
++	stopping = dvobj->sdio_bus_stopping;
++	if (dvobj->sdio_bus_active_start) {
++		elapsed = rtw_get_passing_time_ms(dvobj->sdio_bus_active_start);
++		if (elapsed >= RB8189_BUS_STUCK_WARN_MS &&
++		    (!dvobj->sdio_bus_last_watchdog ||
++		     rtw_get_passing_time_ms(dvobj->sdio_bus_last_watchdog) >= RB8189_BUS_WATCHDOG_PERIOD_MS)) {
++			name = dvobj->sdio_bus_active_name;
++			seq = dvobj->sdio_bus_active_seq;
++			addr = dvobj->sdio_bus_active_addr;
++			cnt = dvobj->sdio_bus_active_cnt;
++			submit_pid = dvobj->sdio_bus_active_submit_pid;
++			is_irq = dvobj->sdio_bus_active_is_irq;
++			irq_pending = dvobj->sdio_bus_irq_pending;
++			snprintf(comm, TASK_COMM_LEN, "%s", dvobj->sdio_bus_active_comm);
++			dvobj->sdio_bus_last_watchdog = rtw_get_current_time();
++			warn = true;
++		}
++		if (elapsed >= RB8189_BUS_STUCK_RECOVER_MS && !dvobj->sdio_bus_fault) {
++			dvobj->sdio_bus_fault = 1;
++			recover = 1;
++		}
++	}
++	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
++
++	if (warn)
++		pr_warn("[rb8189-bus] watchdog op=%s seq=%u submit=%u/%s irq=%u addr=0x%05x cnt=%u elapsed_ms=%u irq_pending=%u\n",
++			name ? name : "-", seq, submit_pid, comm, is_irq,
++			addr, cnt, elapsed, irq_pending);
++
++	if (recover) {
++		pr_warn("[rb8189-bus] watchdog recovery: mark surprise_removed and fail queued SDIO bus requests\n");
++		padapter = dvobj_get_primary_adapter(dvobj);
++		if (padapter)
++			rtw_set_surprise_removed(padapter);
++		rtw_sdio_bus_fail_queued(dvobj, -ETIMEDOUT);
++	}
++
++	if (!stopping)
++		_set_timer(&dvobj->sdio_bus_watchdog_timer, RB8189_BUS_WATCHDOG_PERIOD_MS);
++}
++
++static int rtw_sdio_bus_call(struct dvobj_priv *dvobj, const char *name,
++			     u32 addr, u32 cnt,
++			     int (*fn)(struct dvobj_priv *dvobj, void *ctx),
++			     void *ctx)
++{
++	struct rtw_sdio_bus_req req;
++	int ret = 0;
++	_irqL irqL;
++
++	if (!dvobj->sdio_bus_thread || dvobj->sdio_bus_thread == current)
++		return -EOPNOTSUPP;
++
++	INIT_LIST_HEAD(&req.list);
++	init_completion(&req.done);
++	req.fn = fn;
++	req.ctx = ctx;
++	req.name = name;
++	req.addr = addr;
++	req.cnt = cnt;
++	req.submit_pid = current->pid;
++	snprintf(req.submit_comm, TASK_COMM_LEN, "%s", current->comm);
++	req.ret = -EINPROGRESS;
++
++	_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
++	if (dvobj->sdio_bus_stopping || dvobj->sdio_bus_fault) {
++		ret = -ESHUTDOWN;
++	} else {
++		req.seq = ++dvobj->sdio_bus_seq;
++		list_add_tail(&req.list, &dvobj->sdio_bus_req_q);
++	}
++	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
++
++	if (ret)
++		return ret;
++
++	_rtw_up_sema(&dvobj->sdio_bus_req_sema);
++	wait_for_completion(&req.done);
++
++	return req.ret;
++}
++
++static void rtw_sdio_bus_run_irq(struct dvobj_priv *dvobj)
++{
++	struct sdio_func *func = dvobj_to_sdio_func(dvobj);
++	PADAPTER padapter = dvobj_get_primary_adapter(dvobj);
++	systime start;
++	u32 elapsed, seq;
++	_irqL irqL;
++
++	if (!func || !padapter)
++		return;
++
++	_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
++	seq = ++dvobj->sdio_bus_seq;
++	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
++
++	start = rtw_get_current_time();
++	rtw_sdio_bus_active_begin(dvobj, "sdio_irq", seq, 0, 0, 0, "sdio_irq", true);
++	rtw_sdio_bus_lock(dvobj);
++	sdio_claim_host(func);
++	rtw_sdio_set_irq_thd(dvobj, current);
++	sd_int_hdl(padapter);
++	rtw_sdio_set_irq_thd(dvobj, NULL);
++	sdio_release_host(func);
++	rtw_sdio_bus_unlock(dvobj);
++	rtw_sdio_bus_active_end(dvobj);
++
++	elapsed = rtw_get_passing_time_ms(start);
++	if (elapsed >= RB8189_DIAG_SLOW_SDIO_MS)
++		pr_warn("[rb8189-bus] irq done seq=%u pid=%d comm=%s elapsed_ms=%u\n",
++			seq, current->pid, current->comm, elapsed);
++}
++
++static int rtw_sdio_bus_thread(void *ctx)
++{
++	struct dvobj_priv *dvobj = ctx;
++
++	thread_enter("RTW_SDIO_BUS");
++
++	while (!kthread_should_stop()) {
++		if (_rtw_down_sema(&dvobj->sdio_bus_req_sema) == _FAIL) {
++			if (kthread_should_stop())
++				break;
++			continue;
++		}
++
++		while (!kthread_should_stop()) {
++			struct rtw_sdio_bus_req *req = NULL;
++			bool run_irq = false;
++			_irqL irqL;
++
++			_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
++			if (dvobj->sdio_bus_irq_pending) {
++				dvobj->sdio_bus_irq_pending = 0;
++				run_irq = true;
++			} else if (!list_empty(&dvobj->sdio_bus_req_q)) {
++				req = list_first_entry(&dvobj->sdio_bus_req_q,
++						       struct rtw_sdio_bus_req, list);
++				list_del_init(&req->list);
++			}
++			_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
++
++			if (run_irq) {
++				rtw_sdio_bus_run_irq(dvobj);
++				continue;
++			}
++			if (!req)
++				break;
++
++			rtw_sdio_bus_active_begin(dvobj, req->name, req->seq,
++						  req->addr, req->cnt,
++						  req->submit_pid, req->submit_comm, false);
++			req->ret = req->fn(dvobj, req->ctx);
++			rtw_sdio_bus_active_end(dvobj);
++			complete(&req->done);
++		}
++	}
++
++	rtw_sdio_bus_fail_queued(dvobj, -ESHUTDOWN);
++	rtw_thread_wait_stop();
++	return 0;
++}
++
++int rtw_sdio_bus_init(struct dvobj_priv *dvobj)
++{
++	if (!dvobj)
++		return -EINVAL;
++
++	_rtw_spinlock_init(&dvobj->sdio_bus_req_lock);
++	_rtw_init_sema(&dvobj->sdio_bus_req_sema, 0);
++	INIT_LIST_HEAD(&dvobj->sdio_bus_req_q);
++	_init_timer(&dvobj->sdio_bus_watchdog_timer, NULL,
++		    rtw_sdio_bus_watchdog_hdl, dvobj);
++	dvobj->sdio_bus_stopping = 0;
++	dvobj->sdio_bus_fault = 0;
++	dvobj->sdio_bus_irq_pending = 0;
++	dvobj->sdio_bus_seq = 0;
++	dvobj->sdio_bus_thread = kthread_run(rtw_sdio_bus_thread, dvobj,
++					     "RTW_SDIO_BUS");
++	if (IS_ERR(dvobj->sdio_bus_thread)) {
++		pr_warn("[rb8189-bus] failed to start SDIO bus worker err=%ld; fallback to direct SDIO path\n",
++			PTR_ERR(dvobj->sdio_bus_thread));
++		dvobj->sdio_bus_thread = NULL;
++		_rtw_free_sema(&dvobj->sdio_bus_req_sema);
++		_rtw_spinlock_free(&dvobj->sdio_bus_req_lock);
++		return -ENOMEM;
++	}
++
++	_set_timer(&dvobj->sdio_bus_watchdog_timer, RB8189_BUS_WATCHDOG_PERIOD_MS);
++	pr_warn("[rb8189-bus] SDIO bus worker started\n");
++	return 0;
++}
++
++void rtw_sdio_bus_deinit(struct dvobj_priv *dvobj)
++{
++	u8 cancelled = 0;
++	_irqL irqL;
++
++	if (!dvobj || !dvobj->sdio_bus_thread)
++		return;
++
++	_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
++	dvobj->sdio_bus_stopping = 1;
++	dvobj->sdio_bus_irq_pending = 0;
++	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
++
++	_cancel_timer(&dvobj->sdio_bus_watchdog_timer, &cancelled);
++	rtw_sdio_bus_fail_queued(dvobj, -ESHUTDOWN);
++	_rtw_up_sema(&dvobj->sdio_bus_req_sema);
++	kthread_stop((struct task_struct *)dvobj->sdio_bus_thread);
++	dvobj->sdio_bus_thread = NULL;
++	_rtw_free_sema(&dvobj->sdio_bus_req_sema);
++	_rtw_spinlock_free(&dvobj->sdio_bus_req_lock);
++}
++
++int rtw_sdio_bus_schedule_irq(struct dvobj_priv *dvobj)
++{
++	bool wake = false;
++	int ret = 0;
++	_irqL irqL;
++
++	if (!dvobj || !dvobj->sdio_bus_thread)
++		return -EOPNOTSUPP;
++
++	_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
++	if (dvobj->sdio_bus_stopping || dvobj->sdio_bus_fault) {
++		ret = 0;
++	} else if (!dvobj->sdio_bus_irq_pending) {
++		dvobj->sdio_bus_irq_pending = 1;
++		wake = true;
++	}
++	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
++
++	if (wake)
++		_rtw_up_sema(&dvobj->sdio_bus_req_sema);
++
++	return ret;
++}
+ #ifndef RTW_HALMAC
+ u8 sd_f0_read8(struct intf_hdl *pintfhdl, u32 addr, s32 *err)
+ {
+@@ -834,6 +1169,53 @@
+ 	return err;
+ }
+ 
++struct rtw_sdio_bus_rw_ctx {
++	struct intf_hdl *pintfhdl;
++	struct sdio_func *func;
++	const char *op;
++	u32 addr;
++	u32 cnt;
++	void *pdata;
++	u32 seq;
++	bool trace;
++	bool write;
++};
++
++static int rtw_sdio_bus_rw_fn(struct dvobj_priv *dvobj, void *priv)
++{
++	struct rtw_sdio_bus_rw_ctx *ctx = priv;
++	s32 err;
++
++	rtw_sdio_bus_lock(dvobj);
++	if (ctx->trace)
++		rb8189_diag_sdio_mark(ctx->op, "before_claim", ctx->seq,
++				      ctx->addr, ctx->cnt, true);
++	sdio_claim_host(ctx->func);
++	if (ctx->trace)
++		rb8189_diag_sdio_mark(ctx->op, "claim_acquired", ctx->seq,
++				      ctx->addr, ctx->cnt, true);
++	if (ctx->trace)
++		rb8189_diag_sdio_mark(ctx->op, "before_inner", ctx->seq,
++				      ctx->addr, ctx->cnt, true);
++	if (ctx->write)
++		err = _sd_write(ctx->pintfhdl, ctx->addr, ctx->cnt, ctx->pdata);
++	else
++		err = _sd_read(ctx->pintfhdl, ctx->addr, ctx->cnt, ctx->pdata);
++	if (ctx->trace)
++		rb8189_diag_sdio_mark(ctx->op, "after_inner", ctx->seq,
++				      ctx->addr, ctx->cnt, true);
++	if (ctx->trace)
++		rb8189_diag_sdio_mark(ctx->op, "before_release", ctx->seq,
++				      ctx->addr, ctx->cnt, true);
++	sdio_release_host(ctx->func);
++	if (ctx->trace)
++		rb8189_diag_sdio_mark(ctx->op, "release_done", ctx->seq,
++				      ctx->addr, ctx->cnt, true);
++	rtw_sdio_bus_unlock(dvobj);
++
++	return err;
++}
++
+ /*
+  * Use CMD53 to read data from SDIO device.
+  *
+@@ -873,6 +1255,33 @@
+ 	start = rtw_get_current_time();
+ 	trace = rb8189_diag_sdio_enter("sd_read", addr, cnt, claim_needed, &seq);
+ 
++	if (claim_needed) {
++		struct rtw_sdio_bus_rw_ctx bus_ctx = {
++			.pintfhdl = pintfhdl,
++			.func = func,
++			.op = "sd_read",
++			.addr = addr,
++			.cnt = cnt,
++			.pdata = pdata,
++			.seq = seq,
++			.trace = trace,
++			.write = false,
++		};
++		int bus_ret;
++
++		if (trace)
++			rb8189_diag_sdio_mark("sd_read", "queue_bus", seq, addr, cnt, claim_needed);
++		bus_ret = rtw_sdio_bus_call(psdiodev, "sd_read", addr, cnt,
++					    rtw_sdio_bus_rw_fn, &bus_ctx);
++		if (bus_ret != -EOPNOTSUPP) {
++			err = bus_ret;
++			if (trace)
++				rb8189_diag_sdio_mark("sd_read", "bus_done", seq, addr, cnt, claim_needed);
++			rb8189_diag_sdio_done("sd_read", seq, addr, cnt, claim_needed, trace, err, start);
++			return err;
++		}
++	}
++
+ 	if (claim_needed)
+ 		rtw_sdio_bus_lock(psdiodev);
+ 	if (claim_needed && trace)
+@@ -1013,6 +1422,33 @@
+ 	start = rtw_get_current_time();
+ 	trace = rb8189_diag_sdio_enter("sd_write", addr, cnt, claim_needed, &seq);
+ 
++	if (claim_needed) {
++		struct rtw_sdio_bus_rw_ctx bus_ctx = {
++			.pintfhdl = pintfhdl,
++			.func = func,
++			.op = "sd_write",
++			.addr = addr,
++			.cnt = cnt,
++			.pdata = pdata,
++			.seq = seq,
++			.trace = trace,
++			.write = true,
++		};
++		int bus_ret;
++
++		if (trace)
++			rb8189_diag_sdio_mark("sd_write", "queue_bus", seq, addr, cnt, claim_needed);
++		bus_ret = rtw_sdio_bus_call(psdiodev, "sd_write", addr, cnt,
++					    rtw_sdio_bus_rw_fn, &bus_ctx);
++		if (bus_ret != -EOPNOTSUPP) {
++			err = bus_ret;
++			if (trace)
++				rb8189_diag_sdio_mark("sd_write", "bus_done", seq, addr, cnt, claim_needed);
++			rb8189_diag_sdio_done("sd_write", seq, addr, cnt, claim_needed, trace, err, start);
++			return err;
++		}
++	}
++
+ 	if (claim_needed)
+ 		rtw_sdio_bus_lock(psdiodev);
+ 	if (claim_needed && trace)
