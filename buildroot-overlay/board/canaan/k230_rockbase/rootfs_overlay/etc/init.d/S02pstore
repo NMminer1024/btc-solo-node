@@ -1,0 +1,75 @@
+#!/bin/sh
+#
+# S02pstore - mount pstore early and archive ramoops records from the last boot.
+#
+
+PSTORE_MNT=/sys/fs/pstore
+LOG_DIR=/root/log/pstore
+ARCHIVE_ROOT=/root/log/pstore-archive
+
+timestamp_utc() {
+    date -u +"%Y%m%dT%H%M%SZ"
+}
+
+mount_pstore() {
+    mkdir -p "${PSTORE_MNT}"
+
+    if grep -qs "[[:space:]]${PSTORE_MNT}[[:space:]]pstore[[:space:]]" /proc/mounts; then
+        return 0
+    fi
+
+    mount -t pstore pstore "${PSTORE_MNT}" 2>/dev/null || return 1
+}
+
+archive_pstore() {
+    [ -d "${PSTORE_MNT}" ] || return 0
+    set -- "${PSTORE_MNT}"/*
+    [ -e "$1" ] || return 0
+
+    stamp="$(timestamp_utc)"
+    dest="${ARCHIVE_ROOT}/${stamp}"
+    mkdir -p "${dest}" "${LOG_DIR}"
+
+    for f in "${PSTORE_MNT}"/*; do
+        [ -f "${f}" ] || continue
+        base="${f##*/}"
+        cp -f "${f}" "${dest}/${base}" 2>/dev/null || true
+    done
+
+    {
+        printf '%s archived pstore records to %s\n' "${stamp}" "${dest}"
+        ls -l "${dest}" 2>/dev/null
+    } >> "${LOG_DIR}/pstore.log"
+
+    ln -sfn "${dest}" "${ARCHIVE_ROOT}/latest" 2>/dev/null || true
+    sync "${dest}" "${LOG_DIR}/pstore.log" 2>/dev/null || sync 2>/dev/null || true
+
+    # Clear records after archiving so the next boot only reports new failures.
+    for f in "${PSTORE_MNT}"/*; do
+        [ -f "${f}" ] || continue
+        rm -f "${f}" 2>/dev/null || true
+    done
+}
+
+case "$1" in
+    start)
+        printf "Mounting pstore: "
+        if mount_pstore; then
+            archive_pstore
+            echo "OK"
+        else
+            echo "SKIP"
+        fi
+        ;;
+    stop)
+        ;;
+    restart|reload)
+        "$0" start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac
+
+exit 0
