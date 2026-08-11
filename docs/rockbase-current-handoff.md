@@ -21,14 +21,14 @@
 
 - 板子：`192.168.124.28`
 - 版本：`sdk:v1.2-20260811-104352-bitpony-DESKTOP-KC5S6JM-1f7ef1ae-nncase0.0.0`
-- 预期大小：约 `6.4G`
+- 预期大小：约 `2.4G ~ 2.6G`（rootfs 2G 基线）
 - pstore 地址：`ramoops@3fc00000`
 
 2G 镜像：
 
 - 板子：`192.168.124.23`
 - 版本：`sdk:v1.2-20260811-104909-bitpony-DESKTOP-KC5S6JM-1f7ef1ae-nncase0.0.0`
-- 预期大小：约 `6.4G`
+- 预期大小：约 `2.4G ~ 2.6G`（rootfs 2G 基线）
 - pstore 地址：`ramoops@7fc00000`
 
 ## 已经证明的事实
@@ -96,7 +96,7 @@ ssh root@192.168.124.23 'cat /root/log/pstore-archive/latest/*' > pstore-124.23.
 ## 不要忘记
 
 - 默认构建不带 seed。
-- 非 seed 镜像约 `6.4G`。
+- 非 seed 镜像约 `2.4G ~ 2.6G`（rootfs 2G 基线）。
 - 使用 `K230_BLOCKDATA_SIZE=256M`。
 - 不要只凭沙箱里的 `/mnt/d` 只读现象下结论，必要时提权做真实写测试。
 - UI/业务改动先热部署验证，再固化进镜像。

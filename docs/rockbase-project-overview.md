@@ -34,6 +34,10 @@ Rockbase 是基于 K230 的 Bitcoin 剪枝验证节点与本地 Stratum/solo min
 - 1G：`k230_rockbase_defconfig`
 - 2G：`k230_rockbase_2g_defconfig`
 
+rootfs 容量基线：
+
+- `BR2_TARGET_ROOTFS_EXT2_SIZE="2G"`（1G/2G 两个 Rockbase defconfig 已统一）
+
 主要源码路径：
 
 - Rootfs overlay：`buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay`
@@ -59,7 +63,7 @@ K230_IMAGE_GZIP=0
 
 非 seed 镜像预期：
 
-- 总镜像约 `6.4G`。
+- 总镜像约 `2.4G ~ 2.6G`（rootfs 2G + blockdata 256M + boot/分区开销）。
 - `blockdata.ext4` 应为 `256M`。
 
 如果镜像约 `32G`，通常说明走到了默认 `24G` blockdata 或类似 seed 路径，需要用 `K230_BLOCKDATA_SIZE=256M` 重新构建。

@@ -96,7 +96,7 @@ make CONF=k230_rockbase_2g_defconfig buildroot \
 
 - `block seed: skip (directory is empty: /tmp/rockbase-empty-seed)`
 - `blockdata: generating empty ... (256M)`
-- 导出的 `sysimage-sdcard.img` 约 `6.4G`
+- 导出的 `sysimage-sdcard.img` 约 `2.4G ~ 2.6G`（rootfs 2G 基线）
 
 ## 带 seed 镜像
 
