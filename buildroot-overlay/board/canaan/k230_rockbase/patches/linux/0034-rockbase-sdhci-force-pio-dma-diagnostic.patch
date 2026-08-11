@@ -29,9 +29,7 @@ diff --git a/drivers/mmc/host/sdhci-of-kendryte.c b/drivers/mmc/host/sdhci-of-ke
 index 1111111..2222222 100644
 --- a/drivers/mmc/host/sdhci-of-kendryte.c
 +++ b/drivers/mmc/host/sdhci-of-kendryte.c
-@@ -293,9 +293,18 @@ static const struct sdhci_ops sdhci_dwcmshc_kendryte_ops = {
- 	.voltage_switch = dwcmshc_phy_1_8v_init,
- };
+@@ -295,7 +295,16 @@ static const struct sdhci_pltfm_data sdhci_dwcmshc_kendryte_pdata = {
  
  static const struct sdhci_pltfm_data sdhci_dwcmshc_kendryte_pdata = {
  	.ops = &sdhci_dwcmshc_kendryte_ops,
