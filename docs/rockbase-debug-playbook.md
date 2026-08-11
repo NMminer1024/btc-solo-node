@@ -172,6 +172,98 @@ SD 卡写回可能是触发器或放大器，但多次尾部现场显示 dirty/w
 - 不建议继续把 WiFi 低功耗当成唯一主因，禁用低功耗后已经复现过。
 - 不建议恢复高频 `rb-mmc-diag claim wait begin waited_ms=0` 打印，这类日志会放大单核系统调度压力。
 
+## 静默硬 lockup 专项方案（可落地修复 / 调试顺序）
+
+背景结论见 `docs/rockbase-freeze-milestones.md` 的“2026-08-11：静默卡死的结构性复盘”。要点：本问题很可能是**单核 + 无硬 lockup 检测**下的**硬 lockup（关中断/总线 stall，定时器都停）**，现有 panic 抓手结构性看不到；且 1G/2G 的 SDIO WiFi 走**不同控制器、不同 PHY 路径**，不保证同一根因。
+
+### 关于看门狗的定位价值（重要，先读这段）
+
+**看门狗的 reset 不帮助定位问题，只帮助恢复可用性。** 因此生产环境不应依赖看门狗复位，这里只把它当**临时诊断辅助**，且**只进 debug 镜像，生产必须关闭**。
+
+必须诚实认识它的盲区：
+
+- 现跑的 `0006` 驱动**已经内置了一个 60s 的“SDIO op 卡死就 `panic()`”看门狗**（`RB8189_BUS_STUCK_PANIC_MS=60000`）。但现场 pstore **从未出现 `rb8189 SDIO bus op stuck`**。
+- 那个 panic 挂在**软件定时器**（`timer_list` / timer softirq）上。单核一旦进入关中断硬 lockup，softirq/定时器全停 → 该 panic 没机会执行。**它没生效，本身就是“定时器被打死”的强证据。**
+- **WDT 的 pretimeout 也是普通中断，会被同样的关中断状态挡住**；同理，任何“基于软件定时器周期性检查再 `panic()` 的活性探针”（即上一版提的 A3）也有**完全相同的盲区**。所以对真硬 lockup，软件侧再加 panic 基本无效。
+
+结论：**真正能定位硬 lockup 的是 JTAG（见轨道 A）**。看门狗剩下的价值只有两点，且都属于 debug-only：
+
+1. **硬 vs 软判别器**：下次卡死后看“WDT 是否 reset 了、pretimeout panic 是否落盘了”。WDT reset 了但 pretimeout panic 没落盘 → 坐实关中断硬 lockup（软件无解，必须 JTAG）；pretimeout panic 落盘了 → 是软 hang，栈已到手。
+2. **无人值守泡机的兜底恢复**：让泡机不用守着断电。
+
+下面四条轨道有先后。每条都遵循本仓库规则：内核/驱动/DTS 改动无法热部署，必须重编内核并重烧；改前先 `git` 记录，改后按 freeze 记录清单验证。
+
+### 轨道 A：JTAG 硬件取证（定位硬 lockup 的唯一确定手段，主力）
+
+当证据指向关中断硬 lockup（软件 panic 全部失效）时，软件侧已无法自己抓现场，必须上硬件。这是本问题的主力定位手段，不是最后手段。
+
+A1. 接 JTAG（K230 RISC-V 大核），卡死复现时 halt 目标 hart，读 PC、`ra`、调用栈，以及 SDHCI（`0x91580000`/`0x91581000`）与 PHY 寄存器快照。
+A2. 重点确认卡死 PC 是否落在：
+- SDHCI/PHY 寄存器忙等自旋。`sdhci-of-kendryte.c` 的 `dwcmshc_phy_init` 有一段最多 15000 次的 `PHY_PWRGOOD` 忙等 `while(1)`；若卡在这类忙等且条件永不满足，就是关中断硬死的典型现场。
+- 总线访问指令上不返回（提示 AXI/时钟 stall，偏硬件/电气）。
+A3. 若拿不到 JTAG，退而用 K230 第二个 RISC-V 小核 / OpenSBI 侧做“对端观察”：由不参与卡死的执行体周期性读大核状态或 SDHCI 寄存器，卡死时 dump。属进阶手段。
+
+### 轨道 A'：看门狗（debug-only 判别器 + 泡机兜底，生产必关）
+
+仅在需要“无人值守泡机”或“判别硬/软 lockup”时启用，**不得进生产镜像**。
+
+A'1. 用**独立的 debug fragment**启用，避免混进生产 defconfig。新增 `board/canaan/k230_rockbase/fragment/linux_wdt_debug.fragment`：
+
+  ```text
+  CONFIG_DW_WDT=y
+  CONFIG_WATCHDOG_PRETIMEOUT_GOV=y
+  CONFIG_WATCHDOG_PRETIMEOUT_GOV_PANIC=y
+  CONFIG_WATCHDOG_PRETIMEOUT_DEFAULT_GOV_PANIC=y
+  ```
+
+  只在 debug 构建的 `BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES` 里追加这个 fragment；生产 defconfig 不引用它，`CONFIG_DW_WDT` 保持未编译。
+- DTS 里 `wdt1@91106800`（`snps,dw-wdt`）已存在，确认 `status` 为 okay。
+- 喂狗方：`CONFIG_WATCHDOG_HANDLE_BOOT_ENABLED=y` 已在；用 busybox `watchdog -t <喂狗间隔> -T <超时> /dev/watchdog`，超时给宽（如 60s）避免误触发。
+- 判别用法：pretimeout 先触发 → 软 hang，`panic()` 落盘拿栈；pretimeout 不触发只发生 reset → 关中断硬 lockup，转轨道 A（JTAG）。
+
+A'2. 复位后建立 reset-reason：读 `dmesg | grep -i "dw_wdt\|watchdog"` 与 SoC 复位原因寄存器（`sysctl_boot@91102000` 附近，对照 K230 手册确认位定义），在 `S02pstore`/`boot_audit` 记录“上次是否 WDT reset / 是否 pretimeout panic”，并入 freeze 记录清单。
+
+A'3.（可选，同样有软件定时器盲区）若想多覆盖“软 hang 子集”，可在 `0006` 现有 `RB8189_BUS_STUCK_PANIC_MS` 基础上，补一个“`queued>0` 且 `oldest_wait_ms` 持续增长但 worker 在 `wait_sema`”的丢唤醒判据也 `panic()`。注意它只对定时器还活着的软 hang 有效，对硬 lockup 无效——不要指望它兜住主问题。
+
+### 轨道 B：共因判别实验（两板同做，一次一个变量，比对 MTBF）
+
+前提修正（2026-08-11 用户反馈）：1G/2G **卡死频率相近且随机**，因此根因是**两板共有**，不是 2G 专属的 PHY 差异。所有实验都要**两板同时做、同口径对比 MTBF**，不要只在 2G 上做。目标是快速判别“共用 DMA/缓存一致性路径” vs “共用软件并发” vs “共用电气/时钟裕度”。
+
+B1. 强制关 DMA 回退 PIO（判别 `dma-noncoherent` ADMA 缓存竞态，最高判别价值）：
+
+- 依据：两个控制器都 `dma-noncoherent` + ADMA，是货真价实的共用代码路径；随机、与负载弱关联，符合缓存一致性/竞态特征。
+- 改法：在 `sdhci-of-kendryte.c` 的 `sdhci_dwcmshc_kendryte_pdata.quirks` 里加 `SDHCI_QUIRK_BROKEN_ADMA | SDHCI_QUIRK_BROKEN_DMA`（core 在 `sdhci_setup_host` 会据此回退 PIO；确切位名以本树 `drivers/mmc/host/sdhci.c` 4270~4295 行为准）。
+- 判读：两板强制 PIO 泡机后**都不再卡** → 坐实 `dma-noncoherent` ADMA/缓存一致性 bug，进而查 DMA 映射/cache flush 或 `dma-noncoherent` 属性是否与硬件实际一致；**照卡** → 排除 DMA 一致性，转 B2/B3。
+- 代价：PIO 慢且吃 CPU（单核），只作诊断泡机，不作产品形态。可先只加 `SDHCI_QUIRK_BROKEN_ADMA`（退 SDMA 单缓冲）区分是 ADMA 描述符路径还是整个 DMA。
+
+B2. 降 SDIO 时钟上限（判别共用电气/时钟裕度）：
+
+- 两板都给各自 WiFi 控制器节点显式设较低 `max-frequency`（如 50→25MHz，1G 是 `&mmc_sd0`、2G 是 `&mmc_sd1`）。
+- 判读：两板卡死频率**同时显著下降** → 共性电气/时序裕度问题（含 clock/PHY 默认值）；**无变化** → 与时钟无关。
+
+B3. 收敛传输模式：
+
+- 两板 WiFi 节点只跑 `cap-sd-highspeed`，不开 UHS/DDR/tuning。必要时 `/delete-property/ cap-sd-highspeed;` 退到 default speed（25MHz、单沿）做“最保守能不能不死”的判据。
+
+B4.（已降级）PHY 校准差异：
+
+- 频率相近已基本排除“2G 无 PHY 校准”为主因。仅当 B1/B2 之后仍怀疑 2G 有额外第二故障模式，才回头看 `91581000` 的 `mshc_ctrl_r`/切到有 PHY 校准控制器。不作为首要方向。
+
+### 轨道 D：驱动去风险（仅在证据指向 0006 时）
+
+- 目前分析：`0006` bus worker 的提交方是不可中断 `wait_for_completion`，若 worker 卡住有队列时会被 hung_task 抓到；实际没抓到，所以 worker 大概率不是静默死主凶。
+- 因此**先不要盲目回退 `0005`/`0006`/`0007`**。只有当轨道 A'3 的丢唤醒探针明确抓到“worker 在 `wait_sema` 而 `queued>0` 且 `oldest_wait_ms` 一直涨”的软 hang 现场（注意该探针对硬 lockup 无效），才针对性地：
+  - 用 completion/无锁队列 + `smp_mb()` 复核 `sdio_bus_req_sema` 的 up/down 与队列可见性；
+  - 或评估直接依赖 MMC 核心的 `sdio_claim_host()` 天然互斥、移除自研 bus worker 这一层，减少手写并发面。
+
+### 建议的落地顺序（一句话版）
+
+1. **轨道 B1（强制 PIO 关 DMA，两板同做）**先做：最高判别价值、纯驱动 quirk 可逆、无需硬件。两板都不再卡 → 坐实 `dma-noncoherent` ADMA 缓存竞态；照卡 → 排除 DMA，做 B2（两板降 SDIO 时钟）。
+2. **轨道 A'（debug-only 看门狗）**并行：仅用于判别“硬 vs 软 lockup”和无人值守泡机兜底，**不进生产**。看它下次是 pretimeout panic 落盘（软 hang，栈到手）还是只 reset（硬 lockup）。
+3. 若 A' 判定为硬 lockup 且 B 未消除，上**轨道 A（JTAG）**——这是定位硬 lockup 的唯一确定手段。
+4. 只有 A'3 软 hang 探针抓到 `0006` 丢唤醒时，才上**轨道 D**改驱动。
+5. 生产镜像发布前，务必移除 A' 的看门狗 fragment，`CONFIG_DW_WDT` 保持未编译。
+
 ## 重新烧录后的 SSH host key
 
 重新烧录镜像后，SSH host key 会变化。一次性检查时可用：

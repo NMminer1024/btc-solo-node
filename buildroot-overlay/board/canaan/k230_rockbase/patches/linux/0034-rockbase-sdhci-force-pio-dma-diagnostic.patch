@@ -1,0 +1,53 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bitpony <bitpony@example.com>
+Date: Tue, 11 Aug 2026 19:10:00 +0800
+Subject: [PATCH] rockbase: sdhci-of-kendryte force PIO (disable ADMA+SDMA)
+ diagnostic
+
+Rockbase silent hard-lockup diagnostic. Both the SD card and the RTL8189FS
+SDIO WiFi on the 1G and 2G boards are driven by this same kendryte SDHCI
+controller, and both controllers are dma-noncoherent and use ADMA. Field
+reports show 1G and 2G freeze at a similar, random rate with no panic/oops
+(single-core, no hardlockup detector), which is consistent with a shared
+DMA cache-coherency race on the dma-noncoherent ADMA path.
+
+Force PIO by disabling both ADMA and SDMA. SDHCI core clears
+SDHCI_USE_SDMA on SDHCI_QUIRK_BROKEN_DMA and SDHCI_USE_ADMA on
+SDHCI_QUIRK_BROKEN_ADMA, leaving PIO only. If the freeze disappears on
+both boards under PIO, the root cause is the DMA/cache-coherency path; if
+it persists, DMA coherency is ruled out.
+
+DEBUG ONLY. PIO is slow and CPU-heavy on this single core; this patch must
+be reverted for production images.
+
+Signed-off-by: bitpony <bitpony@example.com>
+---
+ drivers/mmc/host/sdhci-of-kendryte.c | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/mmc/host/sdhci-of-kendryte.c b/drivers/mmc/host/sdhci-of-kendryte.c
+index 1111111..2222222 100644
+--- a/drivers/mmc/host/sdhci-of-kendryte.c
++++ b/drivers/mmc/host/sdhci-of-kendryte.c
+@@ -293,9 +293,18 @@ static const struct sdhci_ops sdhci_dwcmshc_kendryte_ops = {
+ 	.voltage_switch = dwcmshc_phy_1_8v_init,
+ };
+ 
+ static const struct sdhci_pltfm_data sdhci_dwcmshc_kendryte_pdata = {
+ 	.ops = &sdhci_dwcmshc_kendryte_ops,
+-	.quirks = SDHCI_QUIRK_CAP_CLOCK_BASE_BROKEN,
++	/*
++	 * rockbase freeze diagnostic (DEBUG ONLY, revert for production):
++	 * force PIO by disabling both ADMA and SDMA so the dma-noncoherent
++	 * ADMA path (shared by SD card and RTL8189FS SDIO on 1G/2G) is
++	 * removed. Used to test whether the random silent hard-lockup is a
++	 * DMA cache-coherency race. PIO is slow and CPU-heavy on this single
++	 * core.
++	 */
++	.quirks = SDHCI_QUIRK_CAP_CLOCK_BASE_BROKEN |
++		  SDHCI_QUIRK_BROKEN_ADMA | SDHCI_QUIRK_BROKEN_DMA,
+ };
+ 
+ static unsigned int slot_index;
+-- 
+2.34.1

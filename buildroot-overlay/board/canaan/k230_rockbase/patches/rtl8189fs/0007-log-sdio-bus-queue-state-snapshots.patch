@@ -1,0 +1,368 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bitpony <bitpony@example.com>
+Date: Tue, 11 Aug 2026 16:05:00 +0800
+Subject: [PATCH] rtl8189fs: log SDIO bus queue state snapshots
+
+Record low-frequency SDIO bus worker state so hard-freeze logs can
+distinguish a normal semaphore sleep from a lost queue wakeup or an
+uncovered SDIO caller. Also log submitters that wait longer than 10s for
+bus completion without changing the actual SDIO operation ordering.
+
+Signed-off-by: bitpony <bitpony@example.com>
+---
+--- a/include/drv_types.h
++++ b/include/drv_types.h
+@@ -1191,6 +1191,22 @@
+ 	systime sdio_bus_last_watchdog;
+ 	const char *sdio_bus_active_name;
+ 	char sdio_bus_active_comm[TASK_COMM_LEN];
++	const char *sdio_bus_worker_state;
++	systime sdio_bus_worker_state_since;
++	systime sdio_bus_last_state_log;
++	u32 sdio_bus_total_queued;
++	u32 sdio_bus_total_completed;
++	u32 sdio_bus_total_irq_queued;
++	u32 sdio_bus_total_irq_run;
++	u32 sdio_bus_max_queue_depth;
++	u32 sdio_bus_last_seq;
++	u32 sdio_bus_last_addr;
++	u32 sdio_bus_last_cnt;
++	u32 sdio_bus_last_submit_pid;
++	u32 sdio_bus_last_elapsed_ms;
++	s32 sdio_bus_last_ret;
++	const char *sdio_bus_last_name;
++	char sdio_bus_last_comm[TASK_COMM_LEN];
+ #endif
+ #endif
+ 
+--- a/os_dep/linux/sdio_ops_linux.c
++++ b/os_dep/linux/sdio_ops_linux.c
+@@ -26,6 +26,8 @@
+ #define RB8189_BUS_WATCHDOG_PERIOD_MS 1000
+ #define RB8189_BUS_STUCK_WARN_MS 10000
+ #define RB8189_BUS_STUCK_PANIC_MS 60000
++#define RB8189_BUS_STATE_LOG_MS 30000
++#define RB8189_BUS_SUBMIT_WAIT_WARN_MS 10000
+ static atomic_t rb8189_diag_sdio_seq = ATOMIC_INIT(0);
+ 
+ static bool rb8189_diag_ratelimit(systime *last, u32 period_ms)
+@@ -117,11 +119,43 @@
+ 	u32 cnt;
+ 	u32 seq;
+ 	u32 submit_pid;
++	systime submit_time;
+ 	char submit_comm[TASK_COMM_LEN];
+ 	int ret;
+ 	struct completion done;
+ };
+ 
++static u32 rtw_sdio_bus_queue_depth_locked(struct dvobj_priv *dvobj)
++{
++	struct rtw_sdio_bus_req *req;
++	u32 queued = 0;
++
++	list_for_each_entry(req, &dvobj->sdio_bus_req_q, list)
++		queued++;
++
++	return queued;
++}
++
++static struct rtw_sdio_bus_req *rtw_sdio_bus_oldest_req_locked(struct dvobj_priv *dvobj)
++{
++	if (list_empty(&dvobj->sdio_bus_req_q))
++		return NULL;
++
++	return list_first_entry(&dvobj->sdio_bus_req_q, struct rtw_sdio_bus_req, list);
++}
++
++static void rtw_sdio_bus_set_state(struct dvobj_priv *dvobj, const char *state)
++{
++	_irqL irqL;
++
++	_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
++	if (dvobj->sdio_bus_worker_state != state) {
++		dvobj->sdio_bus_worker_state = state;
++		dvobj->sdio_bus_worker_state_since = rtw_get_current_time();
++	}
++	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
++}
++
+ static void rtw_sdio_bus_fail_queued(struct dvobj_priv *dvobj, int ret)
+ {
+ 	struct rtw_sdio_bus_req *req, *tmp;
+@@ -163,11 +197,27 @@
+ 	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
+ }
+ 
+-static void rtw_sdio_bus_active_end(struct dvobj_priv *dvobj)
++static void rtw_sdio_bus_active_end(struct dvobj_priv *dvobj, int ret)
+ {
+ 	_irqL irqL;
++	u32 elapsed = 0;
+ 
+ 	_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
++	if (dvobj->sdio_bus_active_start)
++		elapsed = rtw_get_passing_time_ms(dvobj->sdio_bus_active_start);
++	dvobj->sdio_bus_last_name = dvobj->sdio_bus_active_name;
++	dvobj->sdio_bus_last_seq = dvobj->sdio_bus_active_seq;
++	dvobj->sdio_bus_last_addr = dvobj->sdio_bus_active_addr;
++	dvobj->sdio_bus_last_cnt = dvobj->sdio_bus_active_cnt;
++	dvobj->sdio_bus_last_submit_pid = dvobj->sdio_bus_active_submit_pid;
++	dvobj->sdio_bus_last_elapsed_ms = elapsed;
++	dvobj->sdio_bus_last_ret = ret;
++	snprintf(dvobj->sdio_bus_last_comm, TASK_COMM_LEN, "%s",
++		 dvobj->sdio_bus_active_comm);
++	if (dvobj->sdio_bus_active_is_irq)
++		dvobj->sdio_bus_total_irq_run++;
++	else
++		dvobj->sdio_bus_total_completed++;
+ 	dvobj->sdio_bus_active_name = NULL;
+ 	dvobj->sdio_bus_active_seq = 0;
+ 	dvobj->sdio_bus_active_addr = 0;
+@@ -177,6 +227,8 @@
+ 	dvobj->sdio_bus_active_start = 0;
+ 	dvobj->sdio_bus_last_watchdog = 0;
+ 	dvobj->sdio_bus_active_comm[0] = '\0';
++	dvobj->sdio_bus_worker_state = "drain";
++	dvobj->sdio_bus_worker_state_since = rtw_get_current_time();
+ 	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
+ }
+ 
+@@ -209,10 +261,20 @@
+ {
+ 	struct dvobj_priv *dvobj = ctx;
+ 	const char *name = NULL;
++	const char *worker_state = NULL;
++	const char *oldest_name = NULL;
++	const char *last_name = NULL;
+ 	char comm[TASK_COMM_LEN];
++	char oldest_comm[TASK_COMM_LEN];
++	char last_comm[TASK_COMM_LEN];
+ 	u32 seq = 0, addr = 0, cnt = 0, submit_pid = 0, elapsed = 0, queued = 0;
++	u32 worker_state_ms = 0, oldest_seq = 0, oldest_submit_pid = 0, oldest_wait_ms = 0;
++	u32 total_queued = 0, total_completed = 0, total_irq_queued = 0, total_irq_run = 0;
++	u32 max_queue_depth = 0, last_seq = 0, last_addr = 0, last_cnt = 0;
++	u32 last_submit_pid = 0, last_elapsed_ms = 0;
++	s32 last_ret = 0;
+ 	u8 is_irq = 0, irq_pending = 0, panic_bus = 0, stopping = 0;
+-	bool warn = false;
++	bool warn = false, state_log = false;
+ 	struct rtw_sdio_bus_req *req;
+ 	_irqL irqL;
+ 
+@@ -220,40 +282,63 @@
+ 		return;
+ 
+ 	comm[0] = '\0';
++	oldest_comm[0] = '\0';
++	last_comm[0] = '\0';
+ 
+ 	_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
+ 	stopping = dvobj->sdio_bus_stopping;
++	worker_state = dvobj->sdio_bus_worker_state;
++	if (dvobj->sdio_bus_worker_state_since)
++		worker_state_ms = rtw_get_passing_time_ms(dvobj->sdio_bus_worker_state_since);
++	queued = rtw_sdio_bus_queue_depth_locked(dvobj);
++	req = rtw_sdio_bus_oldest_req_locked(dvobj);
++	if (req) {
++		oldest_name = req->name;
++		oldest_seq = req->seq;
++		oldest_submit_pid = req->submit_pid;
++		oldest_wait_ms = rtw_get_passing_time_ms(req->submit_time);
++		snprintf(oldest_comm, TASK_COMM_LEN, "%s", req->submit_comm);
++	}
++	total_queued = dvobj->sdio_bus_total_queued;
++	total_completed = dvobj->sdio_bus_total_completed;
++	total_irq_queued = dvobj->sdio_bus_total_irq_queued;
++	total_irq_run = dvobj->sdio_bus_total_irq_run;
++	max_queue_depth = dvobj->sdio_bus_max_queue_depth;
++	irq_pending = dvobj->sdio_bus_irq_pending;
++	last_name = dvobj->sdio_bus_last_name;
++	last_seq = dvobj->sdio_bus_last_seq;
++	last_addr = dvobj->sdio_bus_last_addr;
++	last_cnt = dvobj->sdio_bus_last_cnt;
++	last_submit_pid = dvobj->sdio_bus_last_submit_pid;
++	last_elapsed_ms = dvobj->sdio_bus_last_elapsed_ms;
++	last_ret = dvobj->sdio_bus_last_ret;
++	snprintf(last_comm, TASK_COMM_LEN, "%s", dvobj->sdio_bus_last_comm);
++
++	if ((!dvobj->sdio_bus_last_state_log ||
++	     rtw_get_passing_time_ms(dvobj->sdio_bus_last_state_log) >= RB8189_BUS_STATE_LOG_MS) &&
++	    (queued || dvobj->sdio_bus_irq_pending || dvobj->sdio_bus_active_start ||
++	     worker_state_ms >= RB8189_BUS_STATE_LOG_MS)) {
++		dvobj->sdio_bus_last_state_log = rtw_get_current_time();
++		state_log = true;
++	}
++
+ 	if (dvobj->sdio_bus_active_start) {
+ 		elapsed = rtw_get_passing_time_ms(dvobj->sdio_bus_active_start);
++		name = dvobj->sdio_bus_active_name;
++		seq = dvobj->sdio_bus_active_seq;
++		addr = dvobj->sdio_bus_active_addr;
++		cnt = dvobj->sdio_bus_active_cnt;
++		submit_pid = dvobj->sdio_bus_active_submit_pid;
++		is_irq = dvobj->sdio_bus_active_is_irq;
++		snprintf(comm, TASK_COMM_LEN, "%s", dvobj->sdio_bus_active_comm);
+ 		if (elapsed >= RB8189_BUS_STUCK_WARN_MS &&
+ 		    (!dvobj->sdio_bus_last_watchdog ||
+ 		     rtw_get_passing_time_ms(dvobj->sdio_bus_last_watchdog) >= RB8189_BUS_WATCHDOG_PERIOD_MS)) {
+-			name = dvobj->sdio_bus_active_name;
+-			seq = dvobj->sdio_bus_active_seq;
+-			addr = dvobj->sdio_bus_active_addr;
+-			cnt = dvobj->sdio_bus_active_cnt;
+-			submit_pid = dvobj->sdio_bus_active_submit_pid;
+-			is_irq = dvobj->sdio_bus_active_is_irq;
+-			irq_pending = dvobj->sdio_bus_irq_pending;
+-			list_for_each_entry(req, &dvobj->sdio_bus_req_q, list)
+-				queued++;
+-			snprintf(comm, TASK_COMM_LEN, "%s", dvobj->sdio_bus_active_comm);
+ 			dvobj->sdio_bus_last_watchdog = rtw_get_current_time();
+ 			warn = true;
+ 		}
+ 		if (elapsed >= RB8189_BUS_STUCK_PANIC_MS && !dvobj->sdio_bus_fault) {
+ 			dvobj->sdio_bus_fault = 1;
+-			name = dvobj->sdio_bus_active_name;
+-			seq = dvobj->sdio_bus_active_seq;
+-			addr = dvobj->sdio_bus_active_addr;
+-			cnt = dvobj->sdio_bus_active_cnt;
+-			submit_pid = dvobj->sdio_bus_active_submit_pid;
+-			is_irq = dvobj->sdio_bus_active_is_irq;
+-			irq_pending = dvobj->sdio_bus_irq_pending;
+-			queued = 0;
+-			list_for_each_entry(req, &dvobj->sdio_bus_req_q, list)
+-				queued++;
+-			snprintf(comm, TASK_COMM_LEN, "%s", dvobj->sdio_bus_active_comm);
+ 			panic_bus = 1;
+ 		}
+ 	}
+@@ -264,6 +349,17 @@
+ 			name ? name : "-", seq, submit_pid, comm, is_irq,
+ 			addr, cnt, elapsed, irq_pending, queued);
+ 
++	if (state_log)
++		pr_warn("[rb8189-bus] state worker=%s state_ms=%u active=%s seq=%u submit=%u/%s irq=%u addr=0x%05x cnt=%u active_ms=%u irq_pending=%u queued=%u oldest=%s/%u/%u/%s oldest_wait_ms=%u totals=q%u/done%u/irqq%u/irqrun%u maxq=%u last=%s/%u/%u/%s ret=%d elapsed_ms=%u last_addr=0x%05x last_cnt=%u\n",
++			worker_state ? worker_state : "-", worker_state_ms,
++			name ? name : "-", seq, submit_pid, comm, is_irq,
++			addr, cnt, elapsed, irq_pending, queued,
++			oldest_name ? oldest_name : "-", oldest_seq, oldest_submit_pid,
++			oldest_comm, oldest_wait_ms, total_queued, total_completed,
++			total_irq_queued, total_irq_run, max_queue_depth,
++			last_name ? last_name : "-", last_seq, last_submit_pid,
++			last_comm, last_ret, last_elapsed_ms, last_addr, last_cnt);
++
+ 	if (panic_bus) {
+ 		pr_emerg("[rb8189-bus] stuck op panic op=%s seq=%u submit=%u/%s irq=%u addr=0x%05x cnt=%u elapsed_ms=%u irq_pending=%u queued=%u\n",
+ 			 name ? name : "-", seq, submit_pid, comm, is_irq,
+@@ -297,6 +393,7 @@
+ 	req.name = name;
+ 	req.addr = addr;
+ 	req.cnt = cnt;
++	req.submit_time = rtw_get_current_time();
+ 	req.submit_pid = current->pid;
+ 	snprintf(req.submit_comm, TASK_COMM_LEN, "%s", current->comm);
+ 	req.ret = -EINPROGRESS;
+@@ -305,8 +402,14 @@
+ 	if (dvobj->sdio_bus_stopping || dvobj->sdio_bus_fault) {
+ 		ret = -ESHUTDOWN;
+ 	} else {
++		u32 depth;
++
+ 		req.seq = ++dvobj->sdio_bus_seq;
+ 		list_add_tail(&req.list, &dvobj->sdio_bus_req_q);
++		dvobj->sdio_bus_total_queued++;
++		depth = rtw_sdio_bus_queue_depth_locked(dvobj);
++		if (depth > dvobj->sdio_bus_max_queue_depth)
++			dvobj->sdio_bus_max_queue_depth = depth;
+ 	}
+ 	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
+ 
+@@ -314,7 +417,37 @@
+ 		return ret;
+ 
+ 	_rtw_up_sema(&dvobj->sdio_bus_req_sema);
+-	wait_for_completion(&req.done);
++	while (!wait_for_completion_timeout(&req.done,
++					    msecs_to_jiffies(RB8189_BUS_SUBMIT_WAIT_WARN_MS))) {
++		const char *active_name = NULL;
++		const char *worker_state = NULL;
++		char active_comm[TASK_COMM_LEN];
++		u32 active_seq = 0, active_pid = 0, active_ms = 0;
++		u32 queued = 0, irq_pending = 0, state_ms = 0;
++
++		active_comm[0] = '\0';
++		_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
++		worker_state = dvobj->sdio_bus_worker_state;
++		if (dvobj->sdio_bus_worker_state_since)
++			state_ms = rtw_get_passing_time_ms(dvobj->sdio_bus_worker_state_since);
++		if (dvobj->sdio_bus_active_start) {
++			active_name = dvobj->sdio_bus_active_name;
++			active_seq = dvobj->sdio_bus_active_seq;
++			active_pid = dvobj->sdio_bus_active_submit_pid;
++			active_ms = rtw_get_passing_time_ms(dvobj->sdio_bus_active_start);
++			snprintf(active_comm, TASK_COMM_LEN, "%s", dvobj->sdio_bus_active_comm);
++		}
++		queued = rtw_sdio_bus_queue_depth_locked(dvobj);
++		irq_pending = dvobj->sdio_bus_irq_pending;
++		_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
++
++		pr_warn("[rb8189-bus] submit wait op=%s seq=%u submit=%u/%s waited_ms=%u worker=%s state_ms=%u active=%s/%u/%u/%s active_ms=%u queued=%u irq_pending=%u\n",
++			name ? name : "-", req.seq, req.submit_pid, req.submit_comm,
++			rtw_get_passing_time_ms(req.submit_time),
++			worker_state ? worker_state : "-", state_ms,
++			active_name ? active_name : "-", active_seq, active_pid,
++			active_comm, active_ms, queued, irq_pending);
++	}
+ 
+ 	return req.ret;
+ }
+@@ -343,7 +476,7 @@
+ 	rtw_sdio_set_irq_thd(dvobj, NULL);
+ 	sdio_release_host(func);
+ 	rtw_sdio_bus_unlock(dvobj);
+-	rtw_sdio_bus_active_end(dvobj);
++	rtw_sdio_bus_active_end(dvobj, 0);
+ 
+ 	elapsed = rtw_get_passing_time_ms(start);
+ 	if (elapsed >= RB8189_DIAG_SLOW_SDIO_MS)
+@@ -358,11 +491,13 @@
+ 	thread_enter("RTW_SDIO_BUS");
+ 
+ 	while (!kthread_should_stop()) {
++		rtw_sdio_bus_set_state(dvobj, "wait_sema");
+ 		if (_rtw_down_sema(&dvobj->sdio_bus_req_sema) == _FAIL) {
+ 			if (kthread_should_stop())
+ 				break;
+ 			continue;
+ 		}
++		rtw_sdio_bus_set_state(dvobj, "drain");
+ 
+ 		while (!kthread_should_stop()) {
+ 			struct rtw_sdio_bus_req *req = NULL;
+@@ -391,7 +526,7 @@
+ 						  req->addr, req->cnt,
+ 						  req->submit_pid, req->submit_comm, false);
+ 			req->ret = req->fn(dvobj, req->ctx);
+-			rtw_sdio_bus_active_end(dvobj);
++			rtw_sdio_bus_active_end(dvobj, req->ret);
+ 			complete(&req->done);
+ 		}
+ 	}
+@@ -415,6 +550,10 @@
+ 	dvobj->sdio_bus_fault = 0;
+ 	dvobj->sdio_bus_irq_pending = 0;
+ 	dvobj->sdio_bus_seq = 0;
++	dvobj->sdio_bus_worker_state = "init";
++	dvobj->sdio_bus_worker_state_since = rtw_get_current_time();
++	dvobj->sdio_bus_last_state_log = 0;
++	dvobj->sdio_bus_last_comm[0] = '\0';
+ 	dvobj->sdio_bus_thread = kthread_run(rtw_sdio_bus_thread, dvobj,
+ 					     "RTW_SDIO_BUS");
+ 	if (IS_ERR(dvobj->sdio_bus_thread)) {
+@@ -467,6 +606,7 @@
+ 		ret = 0;
+ 	} else if (!dvobj->sdio_bus_irq_pending) {
+ 		dvobj->sdio_bus_irq_pending = 1;
++		dvobj->sdio_bus_total_irq_queued++;
+ 		wake = true;
+ 	}
+ 	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
