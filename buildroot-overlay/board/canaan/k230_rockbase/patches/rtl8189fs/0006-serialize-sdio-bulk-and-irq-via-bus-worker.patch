@@ -15,9 +15,9 @@ not available, the original direct IRQ handling path remains as fallback.
 
 Add an independent watchdog timer around the bus worker's active operation.
 If one SDIO bus operation remains stuck, the watchdog logs the owner and
-operation metadata, marks the primary adapter surprise-removed after a longer
-timeout, and fails queued bus requests so new work stops piling onto the
-stalled SDIO host.
+operation metadata. In debug images, a longer timeout deliberately panics the
+kernel after dumping task state so pstore/ramoops can preserve the freeze
+site across a hard reset.
 
 Signed-off-by: bitpony <bitpony@example.com>
 ---
@@ -99,23 +99,24 @@ Signed-off-by: bitpony <bitpony@example.com>
  		pr_warn("[rb8189-diag] sd_sync_int_hdl before_sd_int seq=%u pid=%d comm=%s func=%p\n",
 --- a/os_dep/linux/sdio_ops_linux.c
 +++ b/os_dep/linux/sdio_ops_linux.c
-@@ -16,9 +16,15 @@
+@@ -16,9 +16,16 @@
  
  #include <drv_types.h>
  #include <linux/atomic.h>
 +#include <linux/completion.h>
 +#include <linux/err.h>
 +#include <linux/jiffies.h>
++#include <linux/sched/signal.h>
  
  #define RB8189_DIAG_SLOW_SDIO_MS 200
  #define RB8189_DIAG_PERIOD_MS 30000
 +#define RB8189_BUS_WATCHDOG_PERIOD_MS 1000
-+#define RB8189_BUS_STUCK_WARN_MS 3000
-+#define RB8189_BUS_STUCK_RECOVER_MS 8000
++#define RB8189_BUS_STUCK_WARN_MS 10000
++#define RB8189_BUS_STUCK_PANIC_MS 60000
  static atomic_t rb8189_diag_sdio_seq = ATOMIC_INIT(0);
  
  static bool rb8189_diag_ratelimit(systime *last, u32 period_ms)
-@@ -100,6 +106,335 @@
+@@ -100,6 +107,375 @@
  {
  	_exit_critical_mutex(&dvobj->sdio_claim_mutex, NULL);
  }
@@ -192,15 +193,40 @@ Signed-off-by: bitpony <bitpony@example.com>
 +	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
 +}
 +
++static bool rtw_sdio_bus_task_interesting(const char *comm)
++{
++	return !strncmp(comm, "RTW", 3) ||
++	       !strncmp(comm, "kworker", 7) ||
++	       !strncmp(comm, "jbd2", 4) ||
++	       !strncmp(comm, "flush", 5) ||
++	       !strncmp(comm, "bitcoind", 8) ||
++	       !strncmp(comm, "rockbase-lcdui", 14) ||
++	       !strncmp(comm, "rockbase_serial", 15);
++}
++
++static void rtw_sdio_bus_dump_key_tasks(void)
++{
++	struct task_struct *g, *p;
++
++	rcu_read_lock();
++	for_each_process_thread(g, p) {
++		if (rtw_sdio_bus_task_interesting(p->comm))
++			pr_emerg("[rb8189-bus] task pid=%d ppid=%d comm=%s state=0x%lx on_cpu=%d\n",
++				 p->pid, task_ppid_nr(p), p->comm,
++				 READ_ONCE(p->__state), task_cpu(p));
++	}
++	rcu_read_unlock();
++}
++
 +static void rtw_sdio_bus_watchdog_hdl(void *ctx)
 +{
 +	struct dvobj_priv *dvobj = ctx;
-+	PADAPTER padapter;
 +	const char *name = NULL;
 +	char comm[TASK_COMM_LEN];
-+	u32 seq = 0, addr = 0, cnt = 0, submit_pid = 0, elapsed = 0;
-+	u8 is_irq = 0, irq_pending = 0, recover = 0, stopping = 0;
++	u32 seq = 0, addr = 0, cnt = 0, submit_pid = 0, elapsed = 0, queued = 0;
++	u8 is_irq = 0, irq_pending = 0, panic_bus = 0, stopping = 0;
 +	bool warn = false;
++	struct rtw_sdio_bus_req *req;
 +	_irqL irqL;
 +
 +	if (!dvobj || !dvobj->sdio_bus_thread)
@@ -222,28 +248,43 @@ Signed-off-by: bitpony <bitpony@example.com>
 +			submit_pid = dvobj->sdio_bus_active_submit_pid;
 +			is_irq = dvobj->sdio_bus_active_is_irq;
 +			irq_pending = dvobj->sdio_bus_irq_pending;
++			list_for_each_entry(req, &dvobj->sdio_bus_req_q, list)
++				queued++;
 +			snprintf(comm, TASK_COMM_LEN, "%s", dvobj->sdio_bus_active_comm);
 +			dvobj->sdio_bus_last_watchdog = rtw_get_current_time();
 +			warn = true;
 +		}
-+		if (elapsed >= RB8189_BUS_STUCK_RECOVER_MS && !dvobj->sdio_bus_fault) {
++		if (elapsed >= RB8189_BUS_STUCK_PANIC_MS && !dvobj->sdio_bus_fault) {
 +			dvobj->sdio_bus_fault = 1;
-+			recover = 1;
++			name = dvobj->sdio_bus_active_name;
++			seq = dvobj->sdio_bus_active_seq;
++			addr = dvobj->sdio_bus_active_addr;
++			cnt = dvobj->sdio_bus_active_cnt;
++			submit_pid = dvobj->sdio_bus_active_submit_pid;
++			is_irq = dvobj->sdio_bus_active_is_irq;
++			irq_pending = dvobj->sdio_bus_irq_pending;
++			queued = 0;
++			list_for_each_entry(req, &dvobj->sdio_bus_req_q, list)
++				queued++;
++			snprintf(comm, TASK_COMM_LEN, "%s", dvobj->sdio_bus_active_comm);
++			panic_bus = 1;
 +		}
 +	}
 +	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
 +
 +	if (warn)
-+		pr_warn("[rb8189-bus] watchdog op=%s seq=%u submit=%u/%s irq=%u addr=0x%05x cnt=%u elapsed_ms=%u irq_pending=%u\n",
++		pr_warn("[rb8189-bus] watchdog op=%s seq=%u submit=%u/%s irq=%u addr=0x%05x cnt=%u elapsed_ms=%u irq_pending=%u queued=%u\n",
 +			name ? name : "-", seq, submit_pid, comm, is_irq,
-+			addr, cnt, elapsed, irq_pending);
++			addr, cnt, elapsed, irq_pending, queued);
 +
-+	if (recover) {
-+		pr_warn("[rb8189-bus] watchdog recovery: mark surprise_removed and fail queued SDIO bus requests\n");
-+		padapter = dvobj_get_primary_adapter(dvobj);
-+		if (padapter)
-+			rtw_set_surprise_removed(padapter);
-+		rtw_sdio_bus_fail_queued(dvobj, -ETIMEDOUT);
++	if (panic_bus) {
++		pr_emerg("[rb8189-bus] stuck op panic op=%s seq=%u submit=%u/%s irq=%u addr=0x%05x cnt=%u elapsed_ms=%u irq_pending=%u queued=%u\n",
++			 name ? name : "-", seq, submit_pid, comm, is_irq,
++			 addr, cnt, elapsed, irq_pending, queued);
++		pr_emerg("[rb8189-bus] dumping current stack and key task states before panic\n");
++		dump_stack();
++		rtw_sdio_bus_dump_key_tasks();
++		panic("rb8189 SDIO bus op stuck");
 +	}
 +
 +	if (!stopping)
@@ -451,7 +492,7 @@ Signed-off-by: bitpony <bitpony@example.com>
  #ifndef RTW_HALMAC
  u8 sd_f0_read8(struct intf_hdl *pintfhdl, u32 addr, s32 *err)
  {
-@@ -834,6 +1169,53 @@
+@@ -834,6 +1210,53 @@
  	return err;
  }
  
@@ -505,7 +546,7 @@ Signed-off-by: bitpony <bitpony@example.com>
  /*
   * Use CMD53 to read data from SDIO device.
   *
-@@ -873,6 +1255,33 @@
+@@ -873,6 +1296,33 @@
  	start = rtw_get_current_time();
  	trace = rb8189_diag_sdio_enter("sd_read", addr, cnt, claim_needed, &seq);
  
@@ -539,7 +580,7 @@ Signed-off-by: bitpony <bitpony@example.com>
  	if (claim_needed)
  		rtw_sdio_bus_lock(psdiodev);
  	if (claim_needed && trace)
-@@ -1013,6 +1422,33 @@
+@@ -1013,6 +1463,33 @@
  	start = rtw_get_current_time();
  	trace = rb8189_diag_sdio_enter("sd_write", addr, cnt, claim_needed, &seq);
  

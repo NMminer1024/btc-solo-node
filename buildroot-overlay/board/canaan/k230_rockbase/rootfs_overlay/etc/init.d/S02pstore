@@ -5,10 +5,40 @@
 
 PSTORE_MNT=/sys/fs/pstore
 LOG_DIR=/root/log/pstore
-ARCHIVE_ROOT=/root/log/pstore-archive
+ARCHIVE_PARENT=/root
+ARCHIVE_PREFIX=pstore-boot-
+MAX_ARCHIVES=8
 
 timestamp_utc() {
     date -u +"%Y%m%dT%H%M%SZ"
+}
+
+archive_path_for_stamp() {
+    stamp="$1"
+    dest="${ARCHIVE_PARENT}/${ARCHIVE_PREFIX}${stamp}"
+    suffix=1
+
+    while [ -e "${dest}" ]; do
+        dest="${ARCHIVE_PARENT}/${ARCHIVE_PREFIX}${stamp}-${suffix}"
+        suffix=$((suffix + 1))
+    done
+
+    printf '%s\n' "${dest}"
+}
+
+prune_old_archives() {
+    # Keep disk usage bounded. The directories are timestamped, so lexical
+    # order is also chronological for normal UTC timestamps.
+    count="$(find "${ARCHIVE_PARENT}" -maxdepth 1 -type d -name "${ARCHIVE_PREFIX}*" 2>/dev/null | wc -l)"
+    [ "${count}" -le "${MAX_ARCHIVES}" ] && return 0
+
+    remove_count=$((count - MAX_ARCHIVES))
+    find "${ARCHIVE_PARENT}" -maxdepth 1 -type d -name "${ARCHIVE_PREFIX}*" 2>/dev/null \
+        | sort \
+        | sed -n "1,${remove_count}p" \
+        | while read -r old; do
+            rm -rf "${old}" 2>/dev/null || true
+        done
 }
 
 mount_pstore() {
@@ -27,7 +57,7 @@ archive_pstore() {
     [ -e "$1" ] || return 0
 
     stamp="$(timestamp_utc)"
-    dest="${ARCHIVE_ROOT}/${stamp}"
+    dest="$(archive_path_for_stamp "${stamp}")"
     mkdir -p "${dest}" "${LOG_DIR}"
 
     for f in "${PSTORE_MNT}"/*; do
@@ -41,7 +71,7 @@ archive_pstore() {
         ls -l "${dest}" 2>/dev/null
     } >> "${LOG_DIR}/pstore.log"
 
-    ln -sfn "${dest}" "${ARCHIVE_ROOT}/latest" 2>/dev/null || true
+    ln -sfn "${dest}" "${ARCHIVE_PARENT}/pstore-boot-latest" 2>/dev/null || true
     sync "${dest}" "${LOG_DIR}/pstore.log" 2>/dev/null || sync 2>/dev/null || true
 
     # Clear records after archiving so the next boot only reports new failures.
@@ -49,6 +79,8 @@ archive_pstore() {
         [ -f "${f}" ] || continue
         rm -f "${f}" 2>/dev/null || true
     done
+
+    prune_old_archives
 }
 
 case "$1" in

@@ -45,6 +45,8 @@ create_swapfile() {
 case "$1" in
   start)
         printf "Starting swap: "
+        echo "disabled for SDIO freeze debug"
+        exit 0
 
         if ! resize_ready; then
                 echo "deferred (waiting for resize_done)"
