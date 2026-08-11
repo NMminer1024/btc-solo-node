@@ -1,0 +1,123 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bitpony <bitpony@example.com>
+Date: Fri, 7 Aug 2026 22:35:00 +0800
+Subject: [PATCH] mmc: add Rockbase claim lifecycle diagnostics
+
+Extend the existing Rockbase MMC diagnostics from "wait/acquired" to a
+full claim lifecycle so freeze captures can show who acquired `mmc1`,
+whether the claim was contended, and how long the owner held the host
+before release.
+
+This patch is diagnostic only. It does not change host claim ordering,
+timeouts, request dispatch, or recovery behavior.
+
+Signed-off-by: bitpony <bitpony@example.com>
+---
+ drivers/mmc/core/core.c | 40 +++++++++++++++++++++++++++++++++-------
+ include/linux/mmc/host.h |  4 ++++
+ 2 files changed, 37 insertions(+), 7 deletions(-)
+
+diff --git a/include/linux/mmc/host.h b/include/linux/mmc/host.h
+--- a/include/linux/mmc/host.h
++++ b/include/linux/mmc/host.h
+@@ -473,6 +473,10 @@ struct mmc_host {
+ 	wait_queue_head_t	wq;
+ 	struct mmc_ctx		*claimer;	/* context that has host claimed */
+ 	int			claim_cnt;	/* "claim" nesting count */
++	unsigned long		rb_claim_acquired_jiffies;
++	pid_t			rb_claim_owner_pid;
++	char			rb_claim_owner_comm[TASK_COMM_LEN];
++	bool			rb_claim_contended;
+ 	struct mmc_ctx		default_ctx;	/* default context */
+ 
+ 	struct delayed_work	detect;
+diff --git a/drivers/mmc/core/core.c b/drivers/mmc/core/core.c
+--- a/drivers/mmc/core/core.c
++++ b/drivers/mmc/core/core.c
+@@ -101,9 +101,18 @@ static void rb_mmc_diag_claim_wait(struct mmc_host *host, unsigned long start,
+ 
+ static void rb_mmc_diag_claim_acquired(struct mmc_host *host, unsigned int waited_ms)
+ {
+-	pr_warn("[rb-mmc-diag] claim acquired host=%s waiter=%d:%s claim_cnt=%d waited_ms=%u\n",
++	pr_warn("[rb-mmc-diag] claim acquired host=%s owner=%d:%s claim_cnt=%d waited_ms=%u contended=%u\n",
+ 		mmc_hostname(host), current->pid, current->comm, host->claim_cnt,
+-		waited_ms);
++		waited_ms, host->rb_claim_contended ? 1 : 0);
++}
++
++static void rb_mmc_diag_claim_release(struct mmc_host *host, unsigned int held_ms,
++				      int claim_cnt, bool contended,
++				      pid_t owner_pid, const char *owner_comm)
++{
++	pr_warn("[rb-mmc-diag] claim release host=%s releaser=%d:%s owner=%d:%s claim_cnt=%d held_ms=%u contended=%u\n",
++		mmc_hostname(host), current->pid, current->comm, owner_pid,
++		owner_comm, claim_cnt, held_ms, contended ? 1 : 0);
+ }
+ 
+ static int mmc_schedule_delayed_work(struct delayed_work *work,
+@@ -878,9 +887,20 @@ int __mmc_claim_host(struct mmc_host *host, struct mmc_ctx *ctx,
+ 	}
+ 	set_current_state(TASK_RUNNING);
+ 	if (!stop) {
++		bool first_claim = (host->claim_cnt == 0);
++
+ 		host->claimed = 1;
+ 		mmc_ctx_set_claimer(host, ctx, task);
+ 		host->claim_cnt += 1;
++		if (first_claim) {
++			host->rb_claim_acquired_jiffies = jiffies;
++			host->rb_claim_owner_pid = current->pid;
++			strscpy(host->rb_claim_owner_comm, current->comm,
++				sizeof(host->rb_claim_owner_comm));
++			host->rb_claim_contended = did_wait;
++		} else if (did_wait) {
++			host->rb_claim_contended = true;
++		}
+ 		if (host->claim_cnt == 1)
+ 			pm = true;
+ 	} else
+@@ -909,10 +928,31 @@ EXPORT_SYMBOL(__mmc_claim_host);
+ void mmc_release_host(struct mmc_host *host)
+ {
+ 	unsigned long flags;
++	bool log_release = false;
++	bool contended = false;
++	unsigned int held_ms = 0;
++	int claim_cnt = 0;
++	pid_t owner_pid = -1;
++	char owner_comm[TASK_COMM_LEN];
++
++	strscpy(owner_comm, "-", sizeof(owner_comm));
+ 
+ 	WARN_ON(!host->claimed);
+ 
+ 	spin_lock_irqsave(&host->lock, flags);
++	if (host->claim_cnt == 1) {
++		held_ms = jiffies_to_msecs(jiffies - host->rb_claim_acquired_jiffies);
++		contended = host->rb_claim_contended;
++		claim_cnt = host->claim_cnt;
++		owner_pid = host->rb_claim_owner_pid;
++		strscpy(owner_comm, host->rb_claim_owner_comm, sizeof(owner_comm));
++		log_release = held_ms >= RB_MMC_CLAIM_HOLD_WARN_MS ||
++			      (contended && held_ms >= RB_MMC_CLAIM_ACQUIRED_WARN_MS);
++		host->rb_claim_acquired_jiffies = 0;
++		host->rb_claim_owner_pid = -1;
++		strscpy(host->rb_claim_owner_comm, "-", sizeof(host->rb_claim_owner_comm));
++		host->rb_claim_contended = false;
++	}
+ 	if (--host->claim_cnt) {
+ 		/* Release for nested claim */
+ 		spin_unlock_irqrestore(&host->lock, flags);
+@@ -928,6 +967,10 @@ void mmc_release_host(struct mmc_host *host)
+ 		else
+ 			pm_runtime_put_autosuspend(mmc_dev(host));
+ 	}
++
++	if (log_release)
++		rb_mmc_diag_claim_release(host, held_ms, claim_cnt, contended,
++					  owner_pid, owner_comm);
+ }
+ EXPORT_SYMBOL(mmc_release_host);
+ 
+-- 
+2.34.1

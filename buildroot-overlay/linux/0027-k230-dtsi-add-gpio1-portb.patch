@@ -1,0 +1,72 @@
+From: K230 SDK <dev@canaan-creative.com>
+Date: Tue, 15 Jul 2026 00:00:00 +0800
+Subject: [PATCH] riscv: dts: canaan: add port B to gpio1 controller
+
+K230 gpio-k230 driver supports up to 4 ports per GPIO controller
+(K230_MAX_PORTS=4). Add port B (reg=<1>) to gpio1 to expose
+GPIO64-GPIO95, which are needed for RockBase board RGB LED.
+
+Port A (reg=<0>) already covers GPIO32-63 via interrupts 64-95.
+Port B (reg=<1>) covers GPIO64-95 via interrupts 96-127.
+
+Signed-off-by: K230 SDK <dev@canaan-creative.com>
+---
+ arch/riscv/boot/dts/canaan/k230.dtsi | 43 +++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 43 insertions(+)
+
+diff --git a/arch/riscv/boot/dts/canaan/k230.dtsi b/arch/riscv/boot/dts/canaan/k230.dtsi
+index 9d739279..b3a56871 100644
+--- a/arch/riscv/boot/dts/canaan/k230.dtsi
++++ b/arch/riscv/boot/dts/canaan/k230.dtsi
+@@ -469,6 +469,49 @@
+ 					<94 IRQ_TYPE_EDGE_RISING>,
+ 					<95 IRQ_TYPE_EDGE_RISING>;
+ 			};
++
++			gpio1_ports_b: gpio-port@1 {
++				compatible = "canaan,k230-apb-gpio-port";
++				reg = <1>;
++				gpio-controller;
++				#gpio-cells = <2>;
++				snps,nr-gpios = <32>;
++				interrupt-controller;
++				#interrupt-cells = <2>;
++				interrupts =
++					<96 IRQ_TYPE_EDGE_RISING>,
++					<97 IRQ_TYPE_EDGE_RISING>,
++					<98 IRQ_TYPE_EDGE_RISING>,
++					<99 IRQ_TYPE_EDGE_RISING>,
++					<100 IRQ_TYPE_EDGE_RISING>,
++					<101 IRQ_TYPE_EDGE_RISING>,
++					<102 IRQ_TYPE_EDGE_RISING>,
++					<103 IRQ_TYPE_EDGE_RISING>,
++					<104 IRQ_TYPE_EDGE_RISING>,
++					<105 IRQ_TYPE_EDGE_RISING>,
++					<106 IRQ_TYPE_EDGE_RISING>,
++					<107 IRQ_TYPE_EDGE_RISING>,
++					<108 IRQ_TYPE_EDGE_RISING>,
++					<109 IRQ_TYPE_EDGE_RISING>,
++					<110 IRQ_TYPE_EDGE_RISING>,
++					<111 IRQ_TYPE_EDGE_RISING>,
++					<112 IRQ_TYPE_EDGE_RISING>,
++					<113 IRQ_TYPE_EDGE_RISING>,
++					<114 IRQ_TYPE_EDGE_RISING>,
++					<115 IRQ_TYPE_EDGE_RISING>,
++					<116 IRQ_TYPE_EDGE_RISING>,
++					<117 IRQ_TYPE_EDGE_RISING>,
++					<118 IRQ_TYPE_EDGE_RISING>,
++					<119 IRQ_TYPE_EDGE_RISING>,
++					<120 IRQ_TYPE_EDGE_RISING>,
++					<121 IRQ_TYPE_EDGE_RISING>,
++					<122 IRQ_TYPE_EDGE_RISING>,
++					<123 IRQ_TYPE_EDGE_RISING>,
++					<124 IRQ_TYPE_EDGE_RISING>,
++					<125 IRQ_TYPE_EDGE_RISING>,
++					<126 IRQ_TYPE_EDGE_RISING>,
++					<127 IRQ_TYPE_EDGE_RISING>;
++			};
+ 		};
+ 
+ 		i2c0: i2c@91405000 {
+-- 
+2.34.1

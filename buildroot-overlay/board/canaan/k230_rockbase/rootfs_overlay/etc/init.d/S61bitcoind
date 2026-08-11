@@ -1,0 +1,99 @@
+#!/bin/sh
+#
+# S61bitcoind - BusyBox init service for Bitcoin Core
+#
+
+CONF=/root/bitcoind/bitcoin.conf
+DATADIR=/root/block
+CLOCK_EPOCH_MIN=1704067200
+RESIZE_DONE_FLAG=/resize_done
+
+is_running() {
+    pidof bitcoind >/dev/null 2>&1
+}
+
+blockdata_ready() {
+    awk -v m="${DATADIR}" '$2 == m { found = 1 } END { exit found ? 0 : 1 }' /proc/mounts
+}
+
+resize_ready() {
+    [ -f "${RESIZE_DONE_FLAG}" ]
+}
+
+wait_for_sane_clock() {
+    timeout=90
+
+    while [ "${timeout}" -gt 0 ]; do
+        now=$(date +%s 2>/dev/null || echo 0)
+        [ "${now}" -ge "${CLOCK_EPOCH_MIN}" ] && return 0
+        sleep 1
+        timeout=$((timeout - 1))
+    done
+
+    return 1
+}
+
+case "$1" in
+  start)
+        printf "Starting bitcoind: "
+
+        if is_running; then
+                echo "already running"
+                exit 0
+        fi
+
+        if ! resize_ready; then
+                echo "deferred (waiting for resize_done)"
+                exit 0
+        fi
+
+        if ! blockdata_ready; then
+                echo "deferred (waiting for blockdata mount)"
+                exit 0
+        fi
+
+        warn=""
+        if ! wait_for_sane_clock; then
+                warn=" (clock unsynced)"
+        fi
+
+        if ! bitcoind -conf="${CONF}" -datadir="${DATADIR}" -daemon >/dev/null 2>&1; then
+                echo "FAIL${warn}"
+                exit 1
+        fi
+
+        sleep 3
+        if is_running; then
+                echo "OK${warn}"
+        else
+                echo "FAIL${warn}"
+                exit 1
+        fi
+        ;;
+  stop)
+        printf "Stopping bitcoind: "
+
+        if ! is_running; then
+                echo "already stopped"
+                exit 0
+        fi
+
+        if /root/bitcoind/stop.sh >/dev/null 2>&1; then
+                echo "OK"
+        else
+                echo "FAIL"
+                exit 1
+        fi
+        ;;
+  restart|reload)
+        "$0" stop
+        sleep 1
+        "$0" start
+        ;;
+  *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac
+
+exit $?

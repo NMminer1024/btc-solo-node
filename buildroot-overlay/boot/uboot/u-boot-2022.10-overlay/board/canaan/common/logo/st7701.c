@@ -24,11 +24,29 @@
 #include "common.h"
 
 #define msleep mdelay
+
+#ifdef CONFIG_ROCKBASE_01STUDIO_2G_HW
+#define ROCKBASE_LCD_RESET_GPIO CONFIG_K230_ROCKBASE_2G_LCD_RESET_GPIO
+#define ROCKBASE_LCD_BACKLIGHT_GPIO CONFIG_K230_ROCKBASE_2G_LCD_BACKLIGHT_GPIO
+#else
+#define ROCKBASE_LCD_RESET_GPIO CONFIG_K230_ROCKBASE_1G_LCD_RESET_GPIO
+#define ROCKBASE_LCD_BACKLIGHT_GPIO CONFIG_K230_ROCKBASE_1G_LCD_BACKLIGHT_GPIO
+#endif
+
+static void rockbase_lcd_gpio_set(int pin, char value)
+{
+    k230_gpio('o', pin, &value);
+    k230_gpio('s', pin, &value);
+}
+
+static void rockbase_lcd_backlight_set(char value)
+{
+    rockbase_lcd_gpio_set(ROCKBASE_LCD_BACKLIGHT_GPIO, value);
+}
+
 static void st7701_hardware_init(void)
 {
 
-	#define GPIO_RST_PIN			24
-	#define GPIO_LCD_BACKLIGHT_EN   25
     char high = 1,low = 0;
 
     // muxpin_config_t config = { //0x388
@@ -49,14 +67,16 @@ static void st7701_hardware_init(void)
     // gpio_set_drive_mode(GPIO_RST_PIN, GPIO_DM_OUTPUT);
     // gpio_set_pin(GPIO_RST_PIN, GPIO_PV_HIGH);  //GPIO_PV_LOW  GPIO_PV_HIGH
 
-    k230_gpio('o', GPIO_RST_PIN , &high);
+    rockbase_lcd_backlight_set(low);
+
+    k230_gpio('o', ROCKBASE_LCD_RESET_GPIO , &high);
 
     msleep(200);
-    k230_gpio('s', GPIO_RST_PIN, &low);
+    k230_gpio('s', ROCKBASE_LCD_RESET_GPIO, &low);
     //gpio_set_pin(GPIO_RST_PIN, GPIO_PV_LOW);  //GPIO_PV_LOW  GPIO_PV_HIGH
 
     msleep(200);
-    k230_gpio('s', GPIO_RST_PIN, &high);
+    k230_gpio('s', ROCKBASE_LCD_RESET_GPIO, &high);
    // gpio_set_pin(GPIO_RST_PIN, GPIO_PV_HIGH);  //GPIO_PV_LOW  GPIO_PV_HIGH
     msleep(200);
 
@@ -64,7 +84,7 @@ static void st7701_hardware_init(void)
 	//muxpin_set_config(GPIO_LCD_BACKLIGHT_EN, config);
     // gpio_set_drive_mode(GPIO_LCD_BACKLIGHT_EN, GPIO_DM_OUTPUT);
     // gpio_set_pin(GPIO_LCD_BACKLIGHT_EN, GPIO_PV_HIGH);  //GPIO_PV_LOW  GPIO_PV_HIGH
-    k230_gpio('o', GPIO_LCD_BACKLIGHT_EN , &high);
+    rockbase_lcd_backlight_set(low);
 
 }
 
@@ -822,8 +842,8 @@ int st7701_init(k_connector_info *info)
 
     ret |= st7701_vo_resolution_init(&info->resolution, info->bg_color, info->intr_line);
 
-	// kd_vo_set_layer(info, 320, 240, 0 , 0 , K_ROTATION_90, 0x13000000);
-	vo_layer1_test(info);
+	/* Linux owns boot artwork and backlight fade-in. Keep U-Boot dark. */
+	rockbase_lcd_backlight_set(0);
 
     return ret;
 }

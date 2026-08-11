@@ -23,7 +23,7 @@ $(BR_SRC_DIR)/.download_extract:
 
 # $(error $(BR_OVERLAY_FS))
 $(BR_SRC_DIR)/.overlay_sync: $(BR_SRC_DIR)/.download_extract $(BR_OVERLAY_FS)
-	rsync -a  $(BR_OVERLAY_DIR)/ $(BR_SRC_DIR)/ --exclude "*-overlay"  --exclude "linux-6.6.22"
+	rsync -a  $(BR_OVERLAY_DIR)/ $(BR_SRC_DIR)/ --exclude "*-overlay"  --exclude "linux-6.6.22" --exclude "linux/*.patch"
 	@touch $@
 
 output/.uboot_overlay_sync:$(UBOOT_OVERLAY_FS)

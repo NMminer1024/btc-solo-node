@@ -1,0 +1,117 @@
+From: K230 SDK <dev@canaan-creative.com>
+Date: Tue, 15 Jul 2026 00:00:00 +0800
+Subject: [PATCH] riscv: dts: canaan: add RGB LED boot status indicator
+
+Add gpio-leds node with RGB LED (Red/Green/Blue, IO low = LED ON)
+on CanMV-K230 V3 and V3-LCD boards (also used by RockBase).
+
+Pin mapping (verified by hardware testing):
+  Red:   GPIO64 (gpio1_ports_b pin 0)  -> IO64  GPIO_ACTIVE_LOW
+  Green: GPIO20 (gpio0_ports  pin 20) -> IO20  GPIO_ACTIVE_LOW
+  Blue:  GPIO65 (gpio1_ports_b pin 1)  -> IO65  GPIO_ACTIVE_LOW
+
+PMU-domain pins IO64/IO65 need pmuiomux pinctrl set to alt1 (GPIO).
+
+Signed-off-by: K230 SDK <dev@canaan-creative.com>
+---
+--- a/arch/riscv/boot/dts/canaan/k230-canmv-v3.dts	2026-07-15 17:45:40.857660566 +0800
++++ b/arch/riscv/boot/dts/canaan/k230-canmv-v3.dts	2026-07-15 19:00:00.000000000 +0800
+@@ -4,7 +4,7 @@
+  */
+ 
+ #include "k230.dtsi"
+-
++#include <dt-bindings/leds/common.h>
+ 
+ / {
+ 	model = "Canaan CanMV-K230";
+@@ -22,6 +22,28 @@
+ 		stdout-path = "serial0:115200n8";
+ 	};
+ 
++	rgb_led {
++		compatible = "gpio-leds";
++		pinctrl-names = "default";
++		pinctrl-0 = <&pmu_rgb_led_pins>;
++
++		led_rgb_red: led-0 {
++			color = <LED_COLOR_ID_RED>;
++			label = "rgb:red";
++			gpios = <&gpio1_ports_b 0 GPIO_ACTIVE_LOW>;
++		};
++		led_rgb_green: led-1 {
++			color = <LED_COLOR_ID_GREEN>;
++			label = "rgb:green";
++			gpios = <&gpio0_ports 20 GPIO_ACTIVE_LOW>;
++		};
++		led_rgb_blue: led-2 {
++			color = <LED_COLOR_ID_BLUE>;
++			label = "rgb:blue";
++			gpios = <&gpio1_ports_b 1 GPIO_ACTIVE_LOW>;
++		};
++	};
++
+ 	ddr: memory@0 {
+ 		device_type = "memory";
+ 		reg = <0x0 0x0 0x0 0x40000000>;
+@@ -129,3 +129,10 @@
+	rx_delay_line = <0x0d>;
+	tx_delay_line = <0xc0>;
+ };
++
++&pmuiomux {
++	pmu_rgb_led_pins: pmu_rgb_led_pins {
++		pins = K230_IO64, K230_IO65;
++		function = "alt1";
++	};
++};
+--- a/arch/riscv/boot/dts/canaan/k230-canmv-v3-lcd.dts	2026-07-15 17:45:40.857660566 +0800
++++ b/arch/riscv/boot/dts/canaan/k230-canmv-v3-lcd.dts	2026-07-15 19:00:00.000000000 +0800
+@@ -5,6 +5,7 @@
+ 
+ #include "k230.dtsi"
+ #include "display-st7701-480x800.dtsi"
++#include <dt-bindings/leds/common.h>
+ 
+ / {
+ 	model = "Canaan CanMV-K230";
+@@ -22,6 +23,28 @@
+ 		stdout-path = "serial0:115200n8";
+ 	};
+ 
++	rgb_led {
++		compatible = "gpio-leds";
++		pinctrl-names = "default";
++		pinctrl-0 = <&pmu_rgb_led_pins>;
++
++		led_rgb_red: led-0 {
++			color = <LED_COLOR_ID_RED>;
++			label = "rgb:red";
++			gpios = <&gpio1_ports_b 0 GPIO_ACTIVE_LOW>;
++		};
++		led_rgb_green: led-1 {
++			color = <LED_COLOR_ID_GREEN>;
++			label = "rgb:green";
++			gpios = <&gpio0_ports 20 GPIO_ACTIVE_LOW>;
++		};
++		led_rgb_blue: led-2 {
++			color = <LED_COLOR_ID_BLUE>;
++			label = "rgb:blue";
++			gpios = <&gpio1_ports_b 1 GPIO_ACTIVE_LOW>;
++		};
++	};
++
+ 	ddr: memory@0 {
+ 		device_type = "memory";
+ 		reg = <0x0 0x0 0x0 0x40000000>;
+@@ -113,3 +137,10 @@
+ 	rx_delay_line = <0x0d>;
+ 	tx_delay_line = <0xc0>;
+ };
++
++&pmuiomux {
++	pmu_rgb_led_pins: pmu_rgb_led_pins {
++		pins = K230_IO64, K230_IO65;
++		function = "alt1";
++	};
++};

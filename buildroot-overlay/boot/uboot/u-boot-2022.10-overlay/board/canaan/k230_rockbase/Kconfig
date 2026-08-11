@@ -1,0 +1,73 @@
+if TARGET_K230_ROCKBASE
+
+config SYS_CPU
+	default "k230"
+
+config SYS_VENDOR
+    default "canaan"
+
+config SYS_BOARD
+    default "k230_rockbase"
+
+config SYS_CONFIG_NAME
+    default "k230_evb"
+
+
+config BOARD_SPECIFIC_OPTIONS # dummy
+	def_bool y
+	select RISCV_THEAD
+choice
+	prompt "ddr typy freq"
+    default ROCKBASE_LPDDR3_2133
+
+    config ROCKBASE_LPDDR3_2133
+        bool  "Rockbase LPDDR3 2133"
+
+    config ROCKBASE_V3_LPDDR4_2667
+	    bool "Rockbase LPDDR4 2667"
+        help
+            "Rockbase LPDDR4 2667 training data"
+
+    config ROCKBASE_V3_LPDDR4_3200
+	    bool "Rockbase LPDDR4 3200"
+        help
+            "Rockbase LPDDR4 3200 training data"
+
+    config ROCKBASE_LPDDR4_1600_WITHOUT_ODT
+	    bool "Rockbase LPDDR4 1600 without ODT"
+        help
+            "Rockbase LPDDR4 1600 training data without ODT"
+endchoice
+
+config ROCKBASE_01STUDIO_2G_HW
+    bool "Rockbase 2G image on 01Studio hardware"
+    help
+        Use the 01Studio SDIO boot path and Wi-Fi reset path while keeping
+        the Rockbase image profile and product stack.
+
+config K230_ROCKBASE_1G_LCD_RESET_GPIO
+    int "Rockbase 1G LCD reset GPIO"
+    default 24
+    depends on !ROCKBASE_01STUDIO_2G_HW
+
+config K230_ROCKBASE_1G_LCD_BACKLIGHT_GPIO
+    int "Rockbase 1G LCD backlight GPIO"
+    default 25
+    depends on !ROCKBASE_01STUDIO_2G_HW
+
+config K230_ROCKBASE_2G_LCD_RESET_GPIO
+    int "Rockbase 2G LCD reset GPIO"
+    default 24
+    depends on ROCKBASE_01STUDIO_2G_HW
+
+config K230_ROCKBASE_2G_LCD_BACKLIGHT_GPIO
+    int "Rockbase 2G LCD backlight GPIO"
+    default 25
+    depends on ROCKBASE_01STUDIO_2G_HW
+
+config K230_ROCKBASE_DISPLAY_BG_COLOR
+    hex "Rockbase U-Boot display background color"
+    default 0x808000
+    help
+        K230 VO background color in YUV-packed format. 0x808000 is black.
+endif

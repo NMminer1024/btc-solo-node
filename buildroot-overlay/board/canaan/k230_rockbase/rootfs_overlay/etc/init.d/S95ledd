@@ -1,0 +1,38 @@
+#!/bin/sh
+#
+# S95ledd - Rockbase LED event daemon
+#
+
+DAEMON=/usr/bin/rockbase_ledd.sh
+
+case "$1" in
+  start)
+        printf "Starting rockbase ledd: "
+        if "${DAEMON}" start >/dev/null 2>&1; then
+                echo "OK"
+        else
+                echo "FAIL"
+                exit 1
+        fi
+        ;;
+  stop)
+        printf "Stopping rockbase ledd: "
+        if "${DAEMON}" stop >/dev/null 2>&1; then
+                echo "OK"
+        else
+                echo "FAIL"
+                exit 1
+        fi
+        ;;
+  restart|reload)
+        "$0" stop
+        sleep 1
+        "$0" start
+        ;;
+  *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac
+
+exit $?

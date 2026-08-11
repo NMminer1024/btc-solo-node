@@ -1,0 +1,112 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -5,0 +6 @@
++option(LV_BUILD_LINUX_APP "Build lv_port_linux demo executable and Linux backend helper library" ON)
+@@ -398,3 +398,0 @@
+-file(GLOB LV_LINUX_SRC src/lib/*.c)
+-set(LV_LINUX_INC src/lib)
+-
+@@ -402,13 +399,0 @@
+-
+-# Library type is determined by BUILD_SHARED_LIBS (shared if ON, static if OFF)
+-add_library(lvgl_linux ${LV_LINUX_SRC} ${LV_LINUX_BACKEND_SRC})
+-target_include_directories(lvgl_linux PUBLIC ${PKG_CONFIG_INC})
+-
+-# If LVGL is configured to use LV_CONF_PATH or Kconfig
+-# Set the exactly the same definitions on the lvgl_linux target
+-set_target_properties(lvgl_linux PROPERTIES COMPILE_DEFINITIONS "${LVGL_COMPILER_DEFINES}")
+-target_include_directories(lvgl_linux PUBLIC
+-    ${LV_LINUX_INC} ${CMAKE_CURRENT_SOURCE_DIR}
+-    ${PROJECT_SOURCE_DIR}/src/lib ${LVGL_CONF_INC_DIR})
+-
+-# Link LVGL with external dependencies - Modern CMake/CMP0079 allows this
+@@ -415,0 +401 @@
++target_compile_options(lvgl PRIVATE -mcpu=c908v -mabi=lp64d)
+@@ -417,4 +403,19 @@
+-# lvgl_linux also needs display/v4l2-drm for the K230 backend
+-if (CONFIG_LV_USE_LINUX_DRM)
+-    target_link_libraries(lvgl_linux PUBLIC v4l2-drm drm display)
+-endif()
++if(LV_BUILD_LINUX_APP)
++    file(GLOB LV_LINUX_SRC src/lib/*.c)
++    set(LV_LINUX_INC src/lib)
++
++    # Library type is determined by BUILD_SHARED_LIBS (shared if ON, static if OFF)
++    add_library(lvgl_linux ${LV_LINUX_SRC} ${LV_LINUX_BACKEND_SRC})
++    target_include_directories(lvgl_linux PUBLIC ${PKG_CONFIG_INC})
++
++    # If LVGL is configured to use LV_CONF_PATH or Kconfig
++    # Set the exactly the same definitions on the lvgl_linux target
++    set_target_properties(lvgl_linux PROPERTIES COMPILE_DEFINITIONS "${LVGL_COMPILER_DEFINES}")
++    target_include_directories(lvgl_linux PUBLIC
++        ${LV_LINUX_INC} ${CMAKE_CURRENT_SOURCE_DIR}
++        ${PROJECT_SOURCE_DIR}/src/lib ${LVGL_CONF_INC_DIR})
++
++    # lvgl_linux also needs display/v4l2-drm for the K230 backend
++    if (CONFIG_LV_USE_LINUX_DRM)
++        target_link_libraries(lvgl_linux PUBLIC v4l2-drm drm display)
++    endif()
+@@ -422 +423 @@
+-add_executable(lvglsim src/main_k230.c)
++    add_executable(lvglsim src/main_k230.c)
+@@ -424,4 +425,12 @@
+-# Repeat lvgl_linux to resolve circular dependency with lvgl
+-# v4l2-drm and display are needed for the K230 combined camera+OSD backend
+-target_include_directories(lvglsim PRIVATE ${DISPLAY_INCLUDE_DIRS} ${V4L2DRM_INCLUDE_DIRS})
+-target_link_libraries(lvglsim lvgl_linux lvgl lvgl_demos lvgl_linux pthread v4l2-drm drm display)
++    # Repeat lvgl_linux to resolve circular dependency with lvgl
++    # v4l2-drm and display are needed for the K230 combined camera+OSD backend
++    target_include_directories(lvglsim PRIVATE ${DISPLAY_INCLUDE_DIRS} ${V4L2DRM_INCLUDE_DIRS})
++    target_link_libraries(lvglsim lvgl_linux lvgl lvgl_demos lvgl_linux pthread v4l2-drm drm display)
++
++    target_compile_options(lvgl_linux PRIVATE -mcpu=c908v -mabi=lp64d)
++    target_compile_options(lvglsim PRIVATE -mcpu=c908v -mabi=lp64d)
++
++    if(WERROR)
++        target_compile_options(lvglsim PRIVATE -Werror)
++        target_compile_options(lvgl_linux PRIVATE -Werror)
++    endif()
+@@ -429,3 +438,17 @@
+-target_compile_options(lvgl_linux PRIVATE -mcpu=c908v -mabi=lp64d)
+-target_compile_options(lvgl PRIVATE -mcpu=c908v -mabi=lp64d)
+-target_compile_options(lvglsim PRIVATE -mcpu=c908v -mabi=lp64d)
++    # Install the lvgl_linux library and its headers
++    install(DIRECTORY src/lib/
++        DESTINATION include/lvgl
++        FILES_MATCHING
++        PATTERN "backends*" EXCLUDE
++        PATTERN "*.h")
++
++    install(TARGETS lvgl_linux
++        LIBRARY DESTINATION lib
++        ARCHIVE DESTINATION lib
++    )
++
++    add_custom_target(run COMMAND ${EXECUTABLE_OUTPUT_PATH}/lvglsim DEPENDS lvglsim)
++    install(TARGETS lvglsim
++        RUNTIME DESTINATION /root/app/
++    )
++endif()
+@@ -434 +456,0 @@
+-    target_compile_options(lvglsim PRIVATE -Werror)
+@@ -436 +457,0 @@
+-    target_compile_options(lvgl_linux PRIVATE -Werror)
+@@ -438,18 +458,0 @@
+-
+-
+-# Install the lvgl_linux library and its headers
+-install(DIRECTORY src/lib/
+-    DESTINATION include/lvgl
+-    FILES_MATCHING
+-    PATTERN "backends*" EXCLUDE
+-    PATTERN "*.h")
+-
+-install(TARGETS lvgl_linux
+-    LIBRARY DESTINATION lib
+-    ARCHIVE DESTINATION lib
+-)
+-
+-add_custom_target(run COMMAND ${EXECUTABLE_OUTPUT_PATH}/lvglsim DEPENDS lvglsim)
+-install(TARGETS lvglsim
+-    RUNTIME DESTINATION /root/app/
+-)

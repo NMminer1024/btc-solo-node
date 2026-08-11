@@ -3,7 +3,12 @@ BR_NAME = buildroot-2025.02.1
 BR_SRC_DIR = output/$(BR_NAME)
 BR_OVERLAY_DIR = buildroot-overlay
 
+# Buildroot 不允许 PATH 中有空格或不可见字符，自动清洗
+export PATH := $(shell echo "$$PATH" | tr ':' '\n' | grep -v '[[:space:]]' | tr '\n' ':' | sed 's/:$$//')
+
 export FORCE_UNSAFE_CONFIGURE := 1
+
+K230_TOOLCHAIN_DIR ?=
 
 export BR2_PRIMARY_SITE ?= $(shell \
 	if curl --output /dev/null --silent --head --fail https://ai.b-bug.org/k230/downloads/dl ;then  \
@@ -15,24 +20,51 @@ export BR2_PRIMARY_SITE ?= $(shell \
 
 ifeq ("$(origin CONF)", "command line")
 $(shell echo CONF=$(CONF)>.last_conf;)
-else
 $(shell [ -f .last_conf ] || ( echo CONF=k230_canmv_defconfig>.last_conf;) )
 endif
 include .last_conf
 BRW_BUILD_DIR = $(CURDIR)/output/$(CONF)
 
 
-.PHONY: all buildroot  debian ubuntu openouler  ruyi  debian_rootfs ubuntu_rootfs
+.PHONY: all buildroot  debian ubuntu openouler  ruyi  debian_rootfs ubuntu_rootfs copy-img
 all :  buildroot
 
 debian ubuntu openouler debian_rootfs ubuntu_rootfs : sync
 	@$(BR_SRC_DIR)/board/canaan/k230-soc/distribution/distribution.sh  $@  $(BRW_BUILD_DIR)
 
+# 镜像拷贝 — 通过 IMG_OUTPUT_DIR 指定目标目录，不硬编码路径
+# 用法: make copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/Iot/k230/img
+copy-img:
+	@if [ -z "$(IMG_OUTPUT_DIR)" ]; then \
+		echo "错误: 请设置 IMG_OUTPUT_DIR 环境变量指定拷贝目标路径"; \
+		echo "用法: make copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/Iot/k230/img"; \
+		exit 1; \
+	fi
+	@img="$(BRW_BUILD_DIR)/images/sysimage-sdcard.img"; \
+	ver_file="$(BRW_BUILD_DIR)/target/etc/version/release_version"; \
+	build_stamp=$$(grep -m1 '^sdk:' "$$ver_file" 2>/dev/null | grep -oE '[0-9]{8}-[0-9]{6}' | head -n1); \
+	[ -n "$$build_stamp" ] || build_stamp=$$(date +%Y%m%d-%H%M%S); \
+		image_prefix="sysimage-sdcard"; \
+		if [ "$(CONF)" = "k230_rockbase_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-1g"; fi; \
+		if [ "$(CONF)" = "k230_rockbase_2g_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-2g"; fi; \
+		export_dir="$(IMG_OUTPUT_DIR)/$$image_prefix-$$build_stamp"; \
+	if [ -z "$$img" ]; then \
+		echo "错误: 未找到镜像文件，请先执行 make CONF=$(CONF) 编译"; \
+		exit 1; \
+	fi; \
+	if [ ! -f "$$img" ]; then \
+		echo "错误: 未找到镜像文件 $$img，请先执行 make CONF=$(CONF) 编译"; \
+		exit 1; \
+	fi; \
+	mkdir -p "$$export_dir" 2>/dev/null || true; \
+	cp --sparse=never -v "$$img" "$$export_dir/"; \
+	echo "镜像已拷贝到: $$export_dir/sysimage-sdcard.img"
+
 ddr_test_img_% :sync buildroot ###128/512/1024/2048
 	@echo "build ddr test img ,ddr size: $*"
 	@tools/ddr_test_img.sh  $*
 
-buildroot: $(BRW_BUILD_DIR)/.config
+buildroot: sync $(BRW_BUILD_DIR)/.config
 	make -C $(BRW_BUILD_DIR) all   BR2_PRIMARY_SITE=$(BR2_PRIMARY_SITE)
 
 .PHONY:dl
@@ -58,6 +90,8 @@ help:sync
 	@echo "    make toolchain_and_depend #install toolchain and depend package"
 	@echo "    make ddr_test_img_128 #build ddr 128MB test img,128 can be 512/1024/2048/128"
 	@echo "    make list_def      #show support config,and current use config"
+	@echo "    make copy-img IMG_OUTPUT_DIR=/your/path  #copy img to target dir"
+	@echo "    make CONF=k230_rockbase_defconfig K230_TOOLCHAIN_DIR=/your/toolchain/path"
 	@echo ""
 	@echo "dcoker build and run example:"
 	@echo "    docker  build   -f tools/docker/Dockerfile  -t wjx/d tools/docker "
@@ -85,6 +119,8 @@ list-def list_def:
 	@echo "	BPI-CanMV-K230D-Zero_ilp32_defconfig  --plct use,new 32 board"
 	@echo "	k230_evb_defconfig                    --k230 evb board"
 	@echo "	k230_canmv_gt6700_defconfig           --gt6700 board"
+		@echo "	k230_rockbase_defconfig                --rockbase board"
+		@echo "	k230_rockbase_2g_defconfig             --rockbase 2G RAM board"
 	@echo "	k230_canmv_01studio_emmc_defconfig    --01studio emmc board"
 	@echo ""
 
@@ -96,7 +132,7 @@ sync:
 	make -f tools/sync.mk sync   BR_SRC_DIR=$(BR_SRC_DIR)  BR_OVERLAY_DIR=$(BR_OVERLAY_DIR)  BR_NAME=$(BR_NAME)
 
 this-makefile := $(lastword $(MAKEFILE_LIST))  all dl help  savedefconfig  sync  %_defconfig  \
-				 debian ubuntu openouler  debian_rootfs ubuntu_rootfs list_def list-def  toolchain_and_depend buildroot  ddr_test_img_%
+				 debian ubuntu openouler  debian_rootfs ubuntu_rootfs list_def list-def  toolchain_and_depend buildroot  ddr_test_img_% copy-img
 $(filter-out $(this-makefile) , $(MAKECMDGOALS)):	$(BRW_BUILD_DIR)/.config
 	[ -d $(BRW_BUILD_DIR) ] && make -C $(BRW_BUILD_DIR) $@ BR2_PRIMARY_SITE=$(BR2_PRIMARY_SITE)
 	@( if [ $@ = linux-savedefconfig ];then \
@@ -117,9 +153,12 @@ $(BRW_BUILD_DIR)/.config: sync
 	mkdir -p $(BRW_BUILD_DIR)/images/deb
 ifeq ("$(origin CONF)", "command line")
 	make -C $(BR_SRC_DIR) $(CONF) O=$(BRW_BUILD_DIR)
+	@if [ -n "$(K230_TOOLCHAIN_DIR)" ]; then \
+		sed -i "s|^BR2_TOOLCHAIN_EXTERNAL_PATH=.*|BR2_TOOLCHAIN_EXTERNAL_PATH=\\"$(K230_TOOLCHAIN_DIR)\\"|" $(BRW_BUILD_DIR)/.config; \
+	fi
 	touch $@
 else
-	[ -e "$(BRW_BUILD_DIR)" ] || ( make -C $(BR_SRC_DIR) $(CONF) O=$(BRW_BUILD_DIR) ;touch $@; )
+	[ -e "$(BRW_BUILD_DIR)" ] || ( make -C $(BR_SRC_DIR) $(CONF) O=$(BRW_BUILD_DIR) ; if [ -n "$(K230_TOOLCHAIN_DIR)" ]; then sed -i "s|^BR2_TOOLCHAIN_EXTERNAL_PATH=.*|BR2_TOOLCHAIN_EXTERNAL_PATH=\"$(K230_TOOLCHAIN_DIR)\"|" $(BRW_BUILD_DIR)/.config; fi ; touch $@; )
 endif
 
 #echo LINUX_OVERRIDE_SRCDIR=/home/wangjianxin/t/linux-xuantie-kernel >output/k230d_canmv_64kernel_32rootfs_defconfig/local.mk

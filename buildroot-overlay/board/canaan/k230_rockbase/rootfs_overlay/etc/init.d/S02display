@@ -1,0 +1,22 @@
+#!/bin/sh
+#
+# Early Rockbase display bring-up after device nodes are ready.
+#
+
+case "$1" in
+start)
+	# U-Boot owns the boot logo. Do not clear or reinitialize the panel here.
+	exit 0
+	;;
+stop)
+	;;
+restart|reload)
+	exit 0
+	;;
+*)
+	echo "Usage: $0 {start|stop|restart}"
+	exit 1
+	;;
+esac
+
+exit 0

@@ -1,0 +1,72 @@
+From: K230 SDK <dev@canaan-creative.com>
+Date: Thu, 17 Jul 2026 00:00:00 +0800
+Subject: [PATCH] riscv: dts: canaan: configure GPIO66 as USB Host power enable
+
+GPIO66 (IO66, gpio1_ports_b pin 2) is the USB Host power enable pin.
+The external circuit pulls this pin up to 5V via a resistor.
+
+The PMU IOMUX default enables internal pull-down, which fights the
+external pull-up. This patch:
+
+1. Adds pmu_usb_host_pwr_pin pinctrl node for IO66:
+   - function = "alt1" (GPIO mode)
+   - bias-disable (disable internal pull-down)
+2. Adds gpio-hog on gpio1_ports_b to drive output-high at boot.
+
+Note: IO66 is NOT in pmu_rgb_led_pins because that group inherits
+the default pull-down needed by active-low RGB LEDs.
+
+Signed-off-by: K230 SDK <dev@canaan-creative.com>
+---
+ arch/riscv/boot/dts/canaan/k230-canmv-v3.dts     | 18 ++++++++++++++++++
+ arch/riscv/boot/dts/canaan/k230-canmv-v3-lcd.dts | 18 ++++++++++++++++++
+ 2 files changed, 36 insertions(+)
+
+--- a/arch/riscv/boot/dts/canaan/k230-canmv-v3.dts
++++ b/arch/riscv/boot/dts/canaan/k230-canmv-v3.dts
+@@ -157,3 +157,21 @@
+ 	pmu_rgb_led_pins: pmu_rgb_led_pins {
+ 		pins = K230_IO64, K230_IO65;
+ 		function = "alt1";
++	};
++};
++
++&pmuiomux {
++	pmu_usb_host_pwr_pin: pmu_usb_host_pwr_pin {
++		pins = K230_IO66;
++		function = "alt1";
++		bias-disable;
++	};
++};
++&gpio1_ports_b {
++	gpio66_hog: gpio66-hog {
++		gpio-hog;
++		gpios = <2 GPIO_ACTIVE_HIGH>;
++		output-high;
++		line-name = "usb-host-pwr";
++	};
++};
+--- a/arch/riscv/boot/dts/canaan/k230-canmv-v3-lcd.dts
++++ b/arch/riscv/boot/dts/canaan/k230-canmv-v3-lcd.dts
+@@ -125,3 +125,21 @@
+ 	pmu_rgb_led_pins: pmu_rgb_led_pins {
+ 		pins = K230_IO64, K230_IO65;
+ 		function = "alt1";
++	};
++};
++
++&pmuiomux {
++	pmu_usb_host_pwr_pin: pmu_usb_host_pwr_pin {
++		pins = K230_IO66;
++		function = "alt1";
++		bias-disable;
++	};
++};
++&gpio1_ports_b {
++	gpio66_hog: gpio66-hog {
++		gpio-hog;
++		gpios = <2 GPIO_ACTIVE_HIGH>;
++		output-high;
++		line-name = "usb-host-pwr";
++	};
++};

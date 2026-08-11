@@ -112,8 +112,4 @@ EOF
 gen_version
 auto_boot_proc
 [ -f "${STAGING_DIR}/lib/libasan.so.8" ] && cp "${STAGING_DIR}/lib/libasan.so.8" "${TARGET_DIR}/lib/"
-# Remove non-essential init scripts (mining-only K230)
-rm -f "${TARGET_DIR}/etc/init.d/S50telnet"
-rm -f "${TARGET_DIR}/etc/init.d/S31canaan_isp"
-rm -f "${TARGET_DIR}/etc/init.d/S41adb_mtp"
 cd ${TARGET_DIR};rm -rf app ; ln -s root/app app; cd -;

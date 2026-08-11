@@ -1,0 +1,47 @@
+--- linux-orig/drivers/usb/storage/usb.c	2025-02-12 17:31:32.000000000 +0800
++++ linux-patched/drivers/usb/storage/usb.c	2026-07-15 16:00:00.000000000 +0800
+@@ -373,6 +373,18 @@
+ 			srb->result = SAM_STAT_GOOD;
+ 		}
+ 
++		/*
++		 * ASMT 2235 on dwc2: TEST UNIT READY stalls the bulk IN
++		 * endpoint repeatedly. Fake a successful result to avoid
++		 * USB communication errors that can cause device disconnect.
++		 */
++		else if ((srb->cmnd[0] == TEST_UNIT_READY) &&
++			 (us->pusb_dev->descriptor.idVendor == cpu_to_le16(0x174c)) &&
++			 (us->pusb_dev->descriptor.idProduct == cpu_to_le16(0x235c))) {
++			usb_stor_dbg(us, "Faking TUR for ASMT 2235\n");
++			srb->result = SAM_STAT_GOOD;
++		}
++
+ 		/* we've got a command, let's do it! */
+ 		else {
+ 			US_DEBUG(usb_stor_show_command(us, srb));
+--- linux-orig/drivers/usb/storage/scsiglue.c	2025-02-12 17:31:32.000000000 +0800
++++ linux-patched/drivers/usb/storage/scsiglue.c	2026-07-15 16:00:00.000000000 +0800
+@@ -165,6 +165,12 @@
+ 			break;
+ 		}
+ 
++		/* ASMT 2235 on dwc2: the bridge reports removable media */
++		if (us->pusb_dev->descriptor.idVendor == cpu_to_le16(0x174c) &&
++		    us->pusb_dev->descriptor.idProduct == cpu_to_le16(0x235c)) {
++			sdev->removable = 0;
++		}
++
+ 		/*
+ 		 * Disk-type devices use MODE SENSE(6) if the protocol
+ 		 * (SubClass) is Transparent SCSI, otherwise they use
+--- linux-orig/drivers/usb/storage/unusual_devs.h	2025-02-12 17:31:32.000000000 +0800
++++ linux-patched/drivers/usb/storage/unusual_devs.h	2026-07-15 16:00:00.000000000 +0800
+@@ -2203,7 +2203,7 @@
+ 		"ASMT",
+ 		"2235",
+ 		USB_SC_DEVICE, USB_PR_BULK, NULL,
+-		US_FL_INITIAL_READ10),
++		US_FL_INITIAL_READ10 | US_FL_NO_WP_DETECT),
+
+ /* Reported by Jesse Feddema <jdfeddema@gmail.com> */
+ UNUSUAL_DEV(  0x177f, 0x0400, 0x0000, 0x0000,

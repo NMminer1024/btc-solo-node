@@ -1,0 +1,16 @@
+From: RockBase SDK <dev@rockbase.local>
+Subject: [PATCH] riscv: dts: canaan: register Rockbase dtbs
+
+---
+--- a/arch/riscv/boot/dts/canaan/Makefile
++++ b/arch/riscv/boot/dts/canaan/Makefile
+@@ -3,6 +3,9 @@
+ dtb-$(CONFIG_ARCH_CANAAN) += k230-canmv.dtb
+ dtb-$(CONFIG_ARCH_CANAAN) += k230d-canmv.dtb
+ dtb-$(CONFIG_ARCH_CANAAN) += k230-evb.dtb
++dtb-$(CONFIG_ARCH_CANAAN) += k230-rockbase.dtb
++dtb-$(CONFIG_ARCH_CANAAN) += k230-rockbase-lcd.dtb
++dtb-$(CONFIG_ARCH_CANAAN) += k230-rockbase-2g-lcd.dtb
+ dtb-$(CONFIG_ARCH_CANAAN) += sipeed_maix_bit.dtb
+ dtb-$(CONFIG_ARCH_CANAAN) += sipeed_maix_dock.dtb
+ dtb-$(CONFIG_ARCH_CANAAN) += sipeed_maix_go.dtb

@@ -1,0 +1,22 @@
+#!/bin/sh
+#
+# S39led_init - Phase 3: Driver and service loading
+#
+# Cyan (Green + Blue) fast blinking to indicate drivers
+# and system services are being initialized. Red is reserved.
+#
+
+case "$1" in
+start)
+	/usr/bin/rgb_led.sh phase init
+	;;
+stop)
+	;;
+restart|reload)
+	/usr/bin/rgb_led.sh phase init
+	;;
+*)
+	echo "Usage: $0 {start|stop|restart}"
+	exit 1
+	;;
+esac

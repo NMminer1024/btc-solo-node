@@ -1,0 +1,38 @@
+#!/bin/sh
+#
+# Auto-connect to WiFi on boot
+#
+
+LIB=/usr/bin/rockbase_wifi.sh
+[ -r "$LIB" ] && . "$LIB"
+
+case "$1" in
+  start)
+        printf "Starting WiFi: "
+        wifi_start_service
+        rc=$?
+        if [ "$rc" = "0" ]; then
+                echo "OK"
+        elif [ "$rc" = "2" ]; then
+                echo "deferred"
+        else
+                echo "FAIL"
+                exit 1
+        fi
+        ;;
+  stop)
+        printf "Stopping WiFi: "
+        wifi_stop_service
+        echo "OK"
+        ;;
+  restart)
+        "$0" stop
+        sleep 1
+        "$0" start
+        ;;
+  *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+esac
+
+exit $?

@@ -1,0 +1,24 @@
+#!/bin/sh
+#
+# S41led_ready - Phase 4: System fully ready
+#
+# Green heartbeat - our beloved system is now alive and operational.
+# This is the final boot phase indication.
+#
+
+case "$1" in
+start)
+	/usr/bin/rgb_led.sh phase ready
+	;;
+stop)
+	# On shutdown: turn all LEDs off
+	/usr/bin/rgb_led.sh color off
+	;;
+restart|reload)
+	/usr/bin/rgb_led.sh phase ready
+	;;
+*)
+	echo "Usage: $0 {start|stop|restart}"
+	exit 1
+	;;
+esac

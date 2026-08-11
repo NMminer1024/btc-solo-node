@@ -52,6 +52,7 @@
 #include <linux/mtd/mtd.h>
 #include "sdk_autoconf.h"
 #include <linux/delay.h>
+#include <string.h>
 
 static int k230_check_and_get_plain_data(firmware_head_s *pfh, ulong *pplain_addr);
 static int k230_boot_rtt_uimage(image_header_t *pUh);
@@ -103,23 +104,40 @@ __weak char *fdt_chosen_bootargs(void)
 {
 	return NULL;
 }
+
+#define ROCKBASE_SERIAL_BOOTARGS_SUFFIX \
+	" ignore_loglevel log_buf_len=4M keep_bootcon printk.always_kmsg_dump=1"
+
+static char *rockbase_append_serial_bootargs(const char *bootargs)
+{
+	static char merged[1024];
+
+	if (!bootargs)
+		return NULL;
+	if (strstr(bootargs, "ignore_loglevel") != NULL)
+		return (char *)bootargs;
+
+	snprintf(merged, sizeof(merged), "%s%s", bootargs, ROCKBASE_SERIAL_BOOTARGS_SUFFIX);
+	return merged;
+}
+
 //weak function
 char *board_fdt_chosen_bootargs(void){
     char *bootargs = env_get("bootargs");
     if(NULL == bootargs) {
         if((bootargs = fdt_chosen_bootargs())!=NULL)
-            return bootargs;
+            return rockbase_append_serial_bootargs(bootargs);
         if(g_bootmod == SYSCTL_BOOT_SDIO0)
-                bootargs = "root=/dev/mmcblk0p2 loglevel=8 rw rootwait rootfstype=ext4 console=ttyS0,115200  earlycon=sbi";
+                bootargs = "root=/dev/mmcblk0p2 loglevel=8 rw rootwait rootfstype=ext4 console=ttyS0,115200 earlycon=sbi";
         else if(g_bootmod == SYSCTL_BOOT_SDIO1)
-                bootargs = "root=/dev/mmcblk1p2 loglevel=8 rw rootwait rootfstype=ext4 console=ttyS0,115200  earlycon=sbi";
+                bootargs = "root=/dev/mmcblk1p2 loglevel=8 rw rootwait rootfstype=ext4 console=ttyS0,115200 earlycon=sbi";
         else  if(g_bootmod == SYSCTL_BOOT_NORFLASH)
             //bootargs = "root=/dev/mtdblock9 rw rootwait rootfstype=jffs2 console=ttyS0,115200 earlycon=sbi";
             //bootargs = "ubi.mtd=9 rootfstype=ubifs rw root=ubi0_0 console=ttyS0,115200 earlycon=sbi";
-            bootargs = "ubi.mtd=9 rootfstype=ubifs rw root=ubi0_0 console=ttyS0,115200 earlycon=sbi fw_devlink=off quiet";
+            bootargs = "ubi.mtd=9 rootfstype=ubifs rw root=ubi0_0 console=ttyS0,115200 earlycon=sbi fw_devlink=off";
     }
     //printf("%s\n",bootargs);
-    return bootargs;
+    return rockbase_append_serial_bootargs(bootargs);
 }
 #endif
 static int k230_boot_decomp_to_load_addr(image_header_t *pUh, ulong des_len, ulong data , ulong *plen)

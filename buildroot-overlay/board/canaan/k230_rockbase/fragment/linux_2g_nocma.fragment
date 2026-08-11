@@ -1,0 +1,6 @@
+# RockBase 2G BTC node does not need large contiguous camera/VPU buffers.
+# Keep the full 2G RAM available for normal Linux page allocation.
+# CONFIG_DMA_CMA is not set
+# CONFIG_CMA is not set
+# CONFIG_CMA_DEBUGFS is not set
+# CONFIG_CMA_SYSFS is not set

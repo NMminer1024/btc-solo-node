@@ -1,0 +1,82 @@
+#!/bin/sh
+#
+# S59blockdata - Mount Rockbase Bitcoin blockdata partition.
+#
+
+MOUNT_POINT=/root/block
+RESIZE_DONE_FLAG=/resize_done
+
+log() {
+    echo "[S59blockdata] $*"
+}
+
+root_device() {
+    sed -n 's#.*root=\(/dev/mmcblk[0-9]p[0-9]\+\).*#\1#p' /proc/cmdline
+}
+
+block_device() {
+    rootdev=$(root_device)
+    bootdev=${rootdev%p*}
+    [ -n "${bootdev}" ] || return 1
+    printf '%sp3\n' "${bootdev}"
+}
+
+is_mounted() {
+    awk -v m="${MOUNT_POINT}" '$2 == m { found = 1 } END { exit found ? 0 : 1 }' /proc/mounts
+}
+
+case "$1" in
+  start)
+        printf "Mounting blockdata: "
+
+        if [ ! -f "${RESIZE_DONE_FLAG}" ]; then
+                echo "deferred (waiting for resize_done)"
+                exit 0
+        fi
+
+        if is_mounted; then
+                echo "already mounted"
+                exit 0
+        fi
+
+        dev=$(block_device)
+        if [ -z "${dev}" ] || [ ! -b "${dev}" ]; then
+                echo "missing blockdata partition"
+                exit 1
+        fi
+
+        mkdir -p "${MOUNT_POINT}"
+        if mount -t ext4 -o noatime "${dev}" "${MOUNT_POINT}" >/dev/null 2>&1; then
+                echo "OK"
+        else
+                echo "FAIL"
+                exit 1
+        fi
+        ;;
+  stop)
+        printf "Unmounting blockdata: "
+
+        if ! is_mounted; then
+                echo "already unmounted"
+                exit 0
+        fi
+
+        if umount "${MOUNT_POINT}" >/dev/null 2>&1; then
+                echo "OK"
+        else
+                echo "FAIL"
+                exit 1
+        fi
+        ;;
+  restart|reload)
+        "$0" stop
+        sleep 1
+        "$0" start
+        ;;
+  *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac
+
+exit $?
