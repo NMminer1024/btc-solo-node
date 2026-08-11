@@ -1,65 +1,134 @@
-# Rockbase Block Seed Image Workflow
+# Rockbase Block Seed 镜像流程
 
-## 1. Purpose
+## 文档目的
 
-This document defines the Rockbase image-build workflow for bundling an external pruned Bitcoin data seed into the final `sysimage-sdcard.img`.
+本文档说明如何把外部 Bitcoin 剪枝数据 seed 打进 Rockbase 最终 `sysimage-sdcard.img`。
 
-The seed data is stored in a git-ignored repo-local directory and is injected only during image build.
+默认构建不使用 seed。只有用户明确要求“带 seed 镜像”时才使用本文档。
 
-## 2. Default Seed Path
+## 默认 seed 路径
 
-Rockbase `post-build.sh` now checks this path by default:
+默认路径：
 
-- `seed/root-block`
+```text
+seed/root-block
+```
 
-You can override it for one build with either environment variable:
+也可以在单次构建时覆盖：
 
-- `BLOCK_SEED_DIR=/your/path`
-- `ROCKBASE_BLOCK_SEED_DIR=/your/path`
+```bash
+BLOCK_SEED_DIR=/your/path
+ROCKBASE_BLOCK_SEED_DIR=/your/path
+```
 
-`BLOCK_SEED_DIR` takes precedence.
+优先级：
 
-## 3. Expected Seed Layout
+- `BLOCK_SEED_DIR` 最高。
+- 其次是 `ROCKBASE_BLOCK_SEED_DIR`。
+- 最后才是默认 `seed/root-block`。
 
-The external seed directory must contain at least:
+## seed 目录要求
+
+seed 目录至少包含：
 
 ```text
 seed/root-block/
   blocks/
+  blocks/index/
   chainstate/
 ```
 
-Optional files and directories may also be present, for example:
+构建脚本会校验：
 
-```text
-  indexes/
-  peers.dat
-  banlist.json
-  fee_estimates.dat
-```
+- `chainstate/CURRENT`
+- `chainstate/<MANIFEST>`
+- `blocks/index/CURRENT`
+- `blocks/index/<MANIFEST>`
 
-Runtime garbage should not be kept in the seed. The build step will delete these if found after copy:
+这些文件缺失时，构建会失败，避免把损坏的 LevelDB seed 打进镜像。
+
+运行时垃圾文件不应该保留在 seed 中，例如：
 
 - `.lock`
 - `.cookie`
 - `bitcoind.pid`
 - `LOCK`
 
-## 4. Daily Update Workflow
+## 当前构建行为
 
-1. Stop `bitcoind` cleanly on the source device.
-2. Remove the source SD card and mount it on the host.
-3. Copy the source Bitcoin data directly into:
-   - `seed/root-block`
+当前代码路径：
 
-Recommended rule:
+- `post-build.sh`：检查 seed 是否存在、是否为空、是否包含必须目录和 LevelDB manifest。
+- `post-image.sh`：用 seed 目录生成 `blockdata.ext4`。
+- `genimage.cfg`：把 `blockdata.ext4` 放入最终 SD 卡镜像的 blockdata 分区。
+- `S59blockdata`：设备启动后把 blockdata 分区挂载到 `/root/block`。
+- `bitcoind`：使用 `/root/block` 作为 datadir。
 
-- Do not copy directly into `seed/root-block` by hand while a build may be reading it.
-- Use `tools/copy-rockbase-seed-from-sd.sh`; it copies into a temporary directory, validates LevelDB manifest files, then replaces `seed/root-block`.
-- The default source path is the RDK X5 layout: `/mnt/sdcard/home/sunrise/Desktop/bitcoind/data`.
-- If the source card is a K230 layout, pass the source path explicitly: `tools/copy-rockbase-seed-from-sd.sh /mnt/sdcard/root/block`.
+重要说明：
 
-Helper script:
+- seed 数据不是直接塞进 rootfs。
+- seed 数据进入独立的 `blockdata.ext4` 分区。
+- 设备运行时通过挂载 blockdata 分区得到 `/root/block`。
+
+## 非 seed 最小镜像
+
+调试卡死问题时默认使用非 seed 最小镜像：
+
+```bash
+mkdir -p /tmp/rockbase-empty-seed
+make CONF=k230_rockbase_defconfig buildroot \
+  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
+  K230_BLOCKDATA_SIZE=256M \
+  K230_IMAGE_GZIP=0
+```
+
+2G：
+
+```bash
+mkdir -p /tmp/rockbase-empty-seed
+make CONF=k230_rockbase_2g_defconfig buildroot \
+  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
+  K230_BLOCKDATA_SIZE=256M \
+  K230_IMAGE_GZIP=0
+```
+
+预期结果：
+
+- `block seed: skip (directory is empty: /tmp/rockbase-empty-seed)`
+- `blockdata: generating empty ... (256M)`
+- 导出的 `sysimage-sdcard.img` 约 `6.4G`
+
+## 带 seed 镜像
+
+带 seed 构建示例：
+
+```bash
+make CONF=k230_rockbase_defconfig buildroot \
+  BLOCK_SEED_DIR=seed/root-block \
+  K230_BLOCKDATA_SIZE=24G \
+  K230_IMAGE_GZIP=0
+```
+
+2G：
+
+```bash
+make CONF=k230_rockbase_2g_defconfig buildroot \
+  BLOCK_SEED_DIR=seed/root-block \
+  K230_BLOCKDATA_SIZE=24G \
+  K230_IMAGE_GZIP=0
+```
+
+容量规则：
+
+- `K230_BLOCKDATA_SIZE` 必须大于 seed 数据实际大小。
+- 对 `~17G` seed，建议从 `24G` 开始，不要卡得太紧。
+- seed 镜像会显著变大，导出和烧录时间都会增加。
+
+## 从 SD 卡更新 seed 的建议流程
+
+推荐使用脚本，不要在构建过程中手工直接改 `seed/root-block`。
+
+辅助脚本：
 
 - `tools/init-rockbase-seed.sh`
 - `tools/copy-rockbase-seed-from-sd.sh`
@@ -68,75 +137,78 @@ Helper script:
 - `tools/umount-sdcard-in-wsl.sh`
 - `tools/detach-sd-from-wsl.ps1`
 
-This creates the git-ignored seed directory:
+通用流程：
 
-- `seed/root-block`
+1. 在源设备上优雅停止 `bitcoind`。
+2. 取下源 SD 卡并接入 Windows。
+3. 在 Windows PowerShell 中 attach 到 WSL。
+4. 在 WSL 中只读挂载源 SD 卡。
+5. 使用 `tools/copy-rockbase-seed-from-sd.sh` 复制并校验 seed。
+6. 卸载并 detach SD 卡。
+7. 构建带 seed 镜像。
 
-## 5. Attach the Source SD Card to WSL On Demand
+RDK X5 默认源路径：
 
-The SD card is not bridged into WSL automatically just because it is inserted into Windows.
+```text
+/mnt/sdcard/home/sunrise/Desktop/bitcoind/data
+```
 
-Recommended flow:
+K230 源路径可显式传入：
 
-1. Insert the USB card reader into Windows.
-2. In Windows PowerShell, run:
-   - `powershell -ExecutionPolicy Bypass -File .\tools\attach-sd-to-wsl.ps1`
-3. In WSL, mount the ext4 partition read-only:
-   - `sudo tools/mount-sdcard-in-wsl.sh`
-4. After the copy finishes, unmount in WSL:
-   - `sudo tools/umount-sdcard-in-wsl.sh`
-5. Then detach in Windows PowerShell:
-   - `powershell -ExecutionPolicy Bypass -File .\tools\detach-sd-from-wsl.ps1`
+```bash
+tools/copy-rockbase-seed-from-sd.sh /mnt/sdcard/root/block
+```
 
-Notes:
+## Windows/WSL SD 卡挂载
 
-- `attach-sd-to-wsl.ps1` relaunches itself with Administrator privileges when needed.
-- If multiple USB storage devices are connected, pass the explicit bus id:
-  - `powershell -ExecutionPolicy Bypass -File .\tools\attach-sd-to-wsl.ps1 -BusId 6-2`
-- `mount-sdcard-in-wsl.sh` mounts the detected ext4 partition with `ro` by default for seed-copy safety.
+Windows PowerShell：
 
-## 6. Build Behavior
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\attach-sd-to-wsl.ps1
+```
 
-During Rockbase image build, `post-build.sh` does the following:
+WSL：
 
-1. Checks whether the external seed path exists.
-2. Skips injection if the directory is missing or empty.
-3. Fails the build if the directory is non-empty but lacks `blocks/` or `chainstate/`.
-4. Copies the seed into:
-   - `output/k230_rockbase_defconfig/target/root/block`
-5. Removes runtime lock and pid files.
-6. Lets Buildroot pack that target root into `rootfs.ext4`.
-7. Lets `post-image.sh` assemble the final:
-   - `sysimage-sdcard.img`
+```bash
+sudo tools/mount-sdcard-in-wsl.sh
+```
 
-## 7. Outputs
+结束后：
 
-Intermediate output after seed injection:
+```bash
+sudo tools/umount-sdcard-in-wsl.sh
+```
 
-- `output/k230_rockbase_defconfig/target/root/block`
+Windows PowerShell：
 
-Packed root filesystem:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\detach-sd-from-wsl.ps1
+```
 
-- `output/k230_rockbase_defconfig/images/rootfs.ext4`
+注意：
 
-Final flash image:
+- `mount-sdcard-in-wsl.sh` 默认只读挂载源卡，这是为了保护 seed 来源。
+- 如果有多个 USB 存储设备，给 `attach-sd-to-wsl.ps1` 传明确 `-BusId`。
 
-- `output/k230_rockbase_defconfig/images/sysimage-sdcard.img`
+## 输出位置
 
-Exported image:
+中间文件：
 
-- `/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-YYYYMMDD-HHMMSS/sysimage-sdcard.img`
+```text
+output/<CONF>/images/blockdata.ext4
+output/<CONF>/images/sysimage-sdcard.img
+```
 
-## 8. Capacity Warning
+默认导出：
 
-The current Rockbase rootfs size in defconfig is still the normal small-image setting.
+```text
+/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-1g-<build_stamp>/sysimage-sdcard.img
+/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-2g-<build_stamp>/sysimage-sdcard.img
+```
 
-That is fine while the external seed directory is empty and this framework is only being staged.
+默认导出完成后，WSL 侧大镜像会被删除，除非设置：
 
-Before enabling a real pruned seed build, you must increase `BR2_TARGET_ROOTFS_EXT2_SIZE` enough to hold:
+```bash
+K230_KEEP_WSL_IMAGES=1
+```
 
-- the full `/root/block` seed
-- the root filesystem itself
-- extra safety margin
-
-For a `~17G` seed, start from `24G` rather than sizing too tightly.
