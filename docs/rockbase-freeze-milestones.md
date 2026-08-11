@@ -193,3 +193,34 @@ vm.dirty_expire_centisecs=500
 
 - pstore 已成为可靠抓手，能覆盖 panic/oops/lockup detector 路径。
 - 如果是完全硬死锁，CPU 不再调度，pstore 仍可能没有新内容。
+
+## 2026-08-11：124.23 硬复位后没有 panic 终点
+
+板子：
+
+- `192.168.124.23`，2G。
+
+本地归档：
+
+- `output/pstore-after-reset-20260811/124.23-074749-freeze/`
+
+关键证据：
+
+- `/root/log/pstore-archive/latest/console-ramoops-0` 被成功捞回，但没有 `Kernel panic`、`Oops`、`rb8189 SDIO bus op stuck` 或 watchdog panic。
+- pstore 末尾是启动 3.8 秒后的 `reboot: Restarting system`，不是 freeze 最终现场。
+- `heartbeat.log` 复位前最后一条为 `2026-08-11T07:30:21Z`，复位后下一条有效时间为 `2026-08-11T07:44:03Z`，中间约 13 分钟没有用户态日志。
+- freeze 前 swap 为 0，dirty/writeback 不高，没有 OOM 迹象。
+- `serialhealth-diag.log` 在 `2026-08-11 15:29:49` 看到 `RTW_SDIO_BUS:D:_rtw_down_sema`；此前多次出现 `RTW_XMIT_THREAD` 卡在 `_rtw_down_sema` 或 `rtw_sdio_bus_call`，但这些状态过去也能恢复。
+
+判断：
+
+- 本次更像完全硬 freeze，没有进入 panic/oops/watchdog 路径。
+- 单独看到 `RTW_SDIO_BUS:D:_rtw_down_sema` 不能直接判定异常，因为 bus worker 空等 semaphore 时也可能表现为 D。
+- 需要区分“正常空等”“队列丢唤醒”“IRQ pending 未处理”和“遗漏的 SDIO 入口直接卡住”。
+
+后续诊断改动：
+
+- 新增 `0007-log-sdio-bus-queue-state-snapshots.patch`。
+- 记录 bus worker 当前状态、状态持续时间、active op、queue depth、最老请求等待时间、IRQ pending、累计 queued/completed/irq 计数、最近完成 op。
+- 当提交线程等待 bus completion 超过 10 秒时打印 `submit wait` 现场。
+- 该改动只增加诊断日志，不改变 SDIO 读写/IRQ 的执行顺序。

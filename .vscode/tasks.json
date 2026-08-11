@@ -12,7 +12,7 @@
                 }
             },
             "args": [
-                "CONF=k230_canmv_rockbase_defconfig"
+                "CONF=k230_rockbase_1g_defconfig"
             ],
             "group": "build",
             "problemMatcher": []

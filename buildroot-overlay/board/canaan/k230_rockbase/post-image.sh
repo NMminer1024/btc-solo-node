@@ -36,7 +36,7 @@ gz_file_add_ver()
 		canaan_site_name="EVB-K230";
 	elif [ "${CONF}" = "k230_canmv_lckfb_defconfig" ] ; then
 		canaan_site_name="CanMV-K230_LCKFB";
-	elif [ "${CONF}" = "k230_rockbase_defconfig" ] ; then
+	elif [ "${CONF}" = "k230_rockbase_1g_defconfig" ] ; then
 		canaan_site_name="RockBase-K230";
 	elif [ "${CONF}" = "k230d_canmv_defconfig" ] ; then
 		canaan_site_name="CanMV-K230D";

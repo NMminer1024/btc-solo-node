@@ -45,7 +45,7 @@ copy-img:
 	build_stamp=$$(grep -m1 '^sdk:' "$$ver_file" 2>/dev/null | grep -oE '[0-9]{8}-[0-9]{6}' | head -n1); \
 	[ -n "$$build_stamp" ] || build_stamp=$$(date +%Y%m%d-%H%M%S); \
 		image_prefix="sysimage-sdcard"; \
-		if [ "$(CONF)" = "k230_rockbase_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-1g"; fi; \
+		if [ "$(CONF)" = "k230_rockbase_1g_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-1g"; fi; \
 		if [ "$(CONF)" = "k230_rockbase_2g_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-2g"; fi; \
 		export_dir="$(IMG_OUTPUT_DIR)/$$image_prefix-$$build_stamp"; \
 	if [ -z "$$img" ]; then \
@@ -91,7 +91,7 @@ help:sync
 	@echo "    make ddr_test_img_128 #build ddr 128MB test img,128 can be 512/1024/2048/128"
 	@echo "    make list_def      #show support config,and current use config"
 	@echo "    make copy-img IMG_OUTPUT_DIR=/your/path  #copy img to target dir"
-	@echo "    make CONF=k230_rockbase_defconfig K230_TOOLCHAIN_DIR=/your/toolchain/path"
+	@echo "    make CONF=k230_rockbase_1g_defconfig K230_TOOLCHAIN_DIR=/your/toolchain/path"
 	@echo ""
 	@echo "dcoker build and run example:"
 	@echo "    docker  build   -f tools/docker/Dockerfile  -t wjx/d tools/docker "
@@ -119,7 +119,7 @@ list-def list_def:
 	@echo "	BPI-CanMV-K230D-Zero_ilp32_defconfig  --plct use,new 32 board"
 	@echo "	k230_evb_defconfig                    --k230 evb board"
 	@echo "	k230_canmv_gt6700_defconfig           --gt6700 board"
-		@echo "	k230_rockbase_defconfig                --rockbase board"
+		@echo "	k230_rockbase_1g_defconfig                --rockbase board"
 		@echo "	k230_rockbase_2g_defconfig             --rockbase 2G RAM board"
 	@echo "	k230_canmv_01studio_emmc_defconfig    --01studio emmc board"
 	@echo ""

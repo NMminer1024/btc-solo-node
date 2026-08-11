@@ -31,7 +31,7 @@ Rockbase 是基于 K230 的 Bitcoin 剪枝验证节点与本地 Stratum/solo min
 
 主要 defconfig：
 
-- 1G：`k230_rockbase_defconfig`
+- 1G：`k230_rockbase_1g_defconfig`
 - 2G：`k230_rockbase_2g_defconfig`
 
 rootfs 容量基线：
@@ -72,7 +72,7 @@ K230_IMAGE_GZIP=0
 
 ```bash
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_defconfig buildroot \
+make CONF=k230_rockbase_1g_defconfig buildroot \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
@@ -107,7 +107,7 @@ Rockbase 的 `post-image.sh` 会在镜像生成后自动导出：
 如果要指定导出目录：
 
 ```bash
-make CONF=k230_rockbase_defconfig buildroot \
+make CONF=k230_rockbase_1g_defconfig buildroot \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0 \
@@ -119,7 +119,7 @@ make CONF=k230_rockbase_defconfig buildroot \
 如果想保留 WSL 侧镜像用于调试：
 
 ```bash
-make CONF=k230_rockbase_defconfig buildroot \
+make CONF=k230_rockbase_1g_defconfig buildroot \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0 \
@@ -129,7 +129,7 @@ make CONF=k230_rockbase_defconfig buildroot \
 也可以在已有 WSL 侧镜像时使用 `copy-img` 手动复制：
 
 ```bash
-make CONF=k230_rockbase_defconfig copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/IoT/k230/img
+make CONF=k230_rockbase_1g_defconfig copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/IoT/k230/img
 ```
 
 但常规路径优先使用 `post-image.sh` 自动导出。
@@ -161,7 +161,7 @@ seed/root-block/
 seed 镜像示例：
 
 ```bash
-make CONF=k230_rockbase_defconfig buildroot \
+make CONF=k230_rockbase_1g_defconfig buildroot \
   BLOCK_SEED_DIR=seed/root-block \
   K230_BLOCKDATA_SIZE=24G \
   K230_IMAGE_GZIP=0
