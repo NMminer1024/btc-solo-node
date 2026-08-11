@@ -14,6 +14,36 @@
 - [设计文档目录](design/)：LVGL、Web/API 等专题架构设计。
 - [Block Seed 镜像流程](rockbase-block-seed-image-workflow.md)：带 seed 镜像构建流程。默认不要使用。
 
+## Seed 更新一页式清单（交接专用）
+
+适用场景：每周从长期运行的 seed 设备更新仓库本地 `seed/root-block`。
+
+唯一推荐流程：仅使用 `tools/sync-rockbase-seed-from-device.sh`。
+
+执行步骤：
+
+1. 在 seed 设备上先优雅停止 `bitcoind`。
+2. 在 WSL 仓库根目录运行：
+
+```bash
+bash tools/sync-rockbase-seed-from-device.sh
+```
+
+3. 按提示输入：远端 IP/主机名、用户名、密码。
+4. SSH 成功后输入远端区块数据目录。
+5. 确认清空本地 `seed/root-block`，等待 rsync 完成。
+6. 观察脚本末尾输出，确认本地 manifest 校验通过且 `du -sh` 正常。
+
+完成判据：
+
+- 本地目录 `seed/root-block` 下存在 `blocks/`、`blocks/index/`、`chainstate/`。
+- 脚本未报错退出，最后打印 `Rockbase block seed 已更新`。
+
+禁用项（避免干扰）：
+
+- 不再使用任何“SD 卡挂载/拷贝 seed”旧流程。
+- 不再查找或恢复已删除的 SD 卡辅助脚本。
+
 ## 本地临时记录
 
 - `output/freeze-log.md` 被 git 忽略，适合放临时现场流水。

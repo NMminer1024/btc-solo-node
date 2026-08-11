@@ -17,13 +17,15 @@ Expected active seed path:
 
   ${SEED_DIR}
 
-Suggested next step after mounting the source SD card in WSL:
+Suggested next step to sync from your long-running seed device:
 
-  tools/copy-rockbase-seed-from-sd.sh
+  tools/sync-rockbase-seed-from-device.sh
 
-If the source data is not at the default X5 path, pass it explicitly:
+The sync script asks for remote host/user/password and remote block directory interactively.
 
-  tools/copy-rockbase-seed-from-sd.sh /mnt/sdcard/root/block
+You can also pre-set local destination for one run:
+
+  DEST_DIR="${SEED_DIR}" tools/sync-rockbase-seed-from-device.sh
 
 One-build override example:
 

@@ -124,71 +124,50 @@ make CONF=k230_rockbase_2g_defconfig buildroot \
 - 对 `~17G` seed，建议从 `24G` 开始，不要卡得太紧。
 - seed 镜像会显著变大，导出和烧录时间都会增加。
 
-## 从 SD 卡更新 seed 的建议流程
+## 更新 seed 的建议流程
 
 推荐使用脚本，不要在构建过程中手工直接改 `seed/root-block`。
 
 辅助脚本：
 
 - `tools/init-rockbase-seed.sh`
-- `tools/copy-rockbase-seed-from-sd.sh`
-- `tools/attach-sd-to-wsl.ps1`
-- `tools/mount-sdcard-in-wsl.sh`
-- `tools/umount-sdcard-in-wsl.sh`
-- `tools/detach-sd-from-wsl.ps1`
+- `tools/sync-rockbase-seed-from-device.sh`：在 WSL 中交互式拉取远端设备上的 block 数据并更新本地 `seed/root-block`。
 
-通用流程：
+### 方案 A：从长时间运行的设备同步 seed（推荐）
 
-1. 在源设备上优雅停止 `bitcoind`。
-2. 取下源 SD 卡并接入 Windows。
-3. 在 Windows PowerShell 中 attach 到 WSL。
-4. 在 WSL 中只读挂载源 SD 卡。
-5. 使用 `tools/copy-rockbase-seed-from-sd.sh` 复制并校验 seed。
-6. 卸载并 detach SD 卡。
-7. 构建带 seed 镜像。
+适用于你有一台长期运行的设备作为 seed 机器，每周定期更新本地 seed。
 
-RDK X5 默认源路径：
+在 WSL 中执行：
+
+```bash
+bash tools/sync-rockbase-seed-from-device.sh
+```
+
+脚本会交互式询问：
+
+- 远端设备 IP/主机名
+- 远端登录用户名（默认 `root`）
+- 远端登录密码
+- SSH 登录成功后，再输入远端 block 数据目录（默认 `/root/block`）
+
+本地目标目录默认就是：
 
 ```text
-/mnt/sdcard/home/sunrise/Desktop/bitcoind/data
+seed/root-block
 ```
 
-K230 源路径可显式传入：
+脚本行为说明：
 
-```bash
-tools/copy-rockbase-seed-from-sd.sh /mnt/sdcard/root/block
-```
+- 先验证 SSH 登录，再验证你输入的远端目录是否存在。
+- 同步前会提示确认并清空本地 `seed/root-block`，然后再接收远端数据。
+- 同步完成后会在本地校验 `chainstate/CURRENT` 和 `blocks/index/CURRENT` 对应 manifest，确保 seed 可用于后续构建。
 
-## Windows/WSL SD 卡挂载
+每周更新时可按这个最短流程执行：
 
-Windows PowerShell：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\attach-sd-to-wsl.ps1
-```
-
-WSL：
-
-```bash
-sudo tools/mount-sdcard-in-wsl.sh
-```
-
-结束后：
-
-```bash
-sudo tools/umount-sdcard-in-wsl.sh
-```
-
-Windows PowerShell：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\detach-sd-from-wsl.ps1
-```
-
-注意：
-
-- `mount-sdcard-in-wsl.sh` 默认只读挂载源卡，这是为了保护 seed 来源。
-- 如果有多个 USB 存储设备，给 `attach-sd-to-wsl.ps1` 传明确 `-BusId`。
+1. 确认 seed 机器上的 `bitcoind` 已优雅停止。
+2. 在 WSL 运行 `bash tools/sync-rockbase-seed-from-device.sh`。
+3. 按提示输入远端连接信息和远端数据目录。
+4. 同步完成后，确认脚本输出的 `du -sh` 结果和本地校验通过。
 
 ## 输出位置
 
