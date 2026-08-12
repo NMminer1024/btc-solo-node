@@ -651,6 +651,13 @@ render_status_json() {
     if [ -z "${blocks}" ] || [ "${blocks}" = "-" ]; then
         blocks="${log_blocks}"
     fi
+    if [ -n "${blocks}" ] && [ -n "${log_blocks}" ] &&
+       echo "${blocks}" | grep -Eq '^[0-9]+$' &&
+       echo "${log_blocks}" | grep -Eq '^[0-9]+$' &&
+       [ "${log_blocks}" -gt "${blocks}" ] 2>/dev/null; then
+        blocks="${log_blocks}"
+        [ -n "${log_progress}" ] && progress="${log_progress}"
+    fi
     if [ -z "${headers}" ] || [ "${headers}" = "-" ]; then
         headers="${log_headers}"
     fi

@@ -1,0 +1,473 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bitpony <bitpony@example.com>
+Date: Tue, 12 Aug 2026 14:30:00 +0800
+Subject: [PATCH] rtl8189fs: bound SDIO bus wait and self-recover, drop panic
+
+The single SDIO bus worker serialises every CMD53 and IRQ DPC. Before this
+change a submitter parked in wait_for_completion*() with no bound, so one
+wedged transfer (seen even in PIO on the RockBase 2G board) blocked the whole
+WiFi datapath forever: a single D-state task, total userspace silence, and no
+pstore because the 60s software panic ran from timer context and never fired.
+
+Make the bus self-recovering instead of relying on a watchdog reset:
+
+- Requests and their data are heap-owned, reference counted, and carry a
+  bounce buffer. The worker only ever touches the heap request and bounce,
+  never the caller's stack/buffer.
+- The submitter waits at most RB8189_BUS_SUBMIT_TIMEOUT_MS. On timeout it
+  safely abandons the request and returns -ETIMEDOUT so the caller can retry
+  or drop, and marks the bus faulted so new ops fast-fail instead of piling
+  onto a stuck worker.
+- The worker clears the fault as soon as it makes forward progress again, so
+  the datapath resumes on its own once a transfer unblocks.
+- Remove the software panic / task-dump watchdog path entirely; a stuck op is
+  now handled by graceful abandonment, never a hard reset.
+
+Signed-off-by: bitpony <bitpony@example.com>
+---
+--- a/os_dep/linux/sdio_ops_linux.c
++++ b/os_dep/linux/sdio_ops_linux.c
+@@ -28,6 +28,8 @@
+ #define RB8189_BUS_STUCK_PANIC_MS 60000
+ #define RB8189_BUS_STATE_LOG_MS 30000
+ #define RB8189_BUS_SUBMIT_WAIT_WARN_MS 10000
++/* rb(0008): bound the submit wait so a wedged bus op can never hang the caller */
++#define RB8189_BUS_SUBMIT_TIMEOUT_MS 8000
+ static atomic_t rb8189_diag_sdio_seq = ATOMIC_INIT(0);
+ 
+ static bool rb8189_diag_ratelimit(systime *last, u32 period_ms)
+@@ -123,6 +125,17 @@
+ 	char submit_comm[TASK_COMM_LEN];
+ 	int ret;
+ 	struct completion done;
++	/* rb(0008): heap-owned request so a submitter can abandon a wedged op
++	 * without freeing memory the worker may still touch (bounce decouples
++	 * the caller buffer from the in-flight transfer). */
++	atomic_t refcnt;
++	u8 heap;
++	u8 abandoned;
++	u8 write;
++	struct intf_hdl *pintfhdl;
++	struct sdio_func *func;
++	u8 *bounce;
++	u32 bounce_cnt;
+ };
+ 
+ static u32 rtw_sdio_bus_queue_depth_locked(struct dvobj_priv *dvobj)
+@@ -156,6 +169,17 @@
+ 	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
+ }
+ 
++static void rtw_sdio_bus_req_put(struct rtw_sdio_bus_req *req)
++{
++	if (!req || !req->heap)
++		return;
++	if (atomic_dec_and_test(&req->refcnt)) {
++		if (req->bounce)
++			rtw_mfree(req->bounce, req->bounce_cnt ? req->bounce_cnt : 1);
++		rtw_mfree((u8 *)req, sizeof(*req));
++	}
++}
++
+ static void rtw_sdio_bus_fail_queued(struct dvobj_priv *dvobj, int ret)
+ {
+ 	struct rtw_sdio_bus_req *req, *tmp;
+@@ -172,6 +196,7 @@
+ 		list_del_init(&req->list);
+ 		req->ret = ret;
+ 		complete(&req->done);
++		rtw_sdio_bus_req_put(req);
+ 	}
+ }
+ 
+@@ -232,31 +257,6 @@
+ 	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
+ }
+ 
+-static bool rtw_sdio_bus_task_interesting(const char *comm)
+-{
+-	return !strncmp(comm, "RTW", 3) ||
+-	       !strncmp(comm, "kworker", 7) ||
+-	       !strncmp(comm, "jbd2", 4) ||
+-	       !strncmp(comm, "flush", 5) ||
+-	       !strncmp(comm, "bitcoind", 8) ||
+-	       !strncmp(comm, "rockbase-lcdui", 14) ||
+-	       !strncmp(comm, "rockbase_serial", 15);
+-}
+-
+-static void rtw_sdio_bus_dump_key_tasks(void)
+-{
+-	struct task_struct *g, *p;
+-
+-	rcu_read_lock();
+-	for_each_process_thread(g, p) {
+-		if (rtw_sdio_bus_task_interesting(p->comm))
+-			pr_emerg("[rb8189-bus] task pid=%d ppid=%d comm=%s state=0x%lx on_cpu=%d\n",
+-				 p->pid, task_ppid_nr(p), p->comm,
+-				 READ_ONCE(p->__state), task_cpu(p));
+-	}
+-	rcu_read_unlock();
+-}
+-
+ static void rtw_sdio_bus_watchdog_hdl(void *ctx)
+ {
+ 	struct dvobj_priv *dvobj = ctx;
+@@ -273,7 +273,7 @@
+ 	u32 max_queue_depth = 0, last_seq = 0, last_addr = 0, last_cnt = 0;
+ 	u32 last_submit_pid = 0, last_elapsed_ms = 0;
+ 	s32 last_ret = 0;
+-	u8 is_irq = 0, irq_pending = 0, panic_bus = 0, stopping = 0;
++	u8 is_irq = 0, irq_pending = 0, stopping = 0;
+ 	bool warn = false, state_log = false;
+ 	struct rtw_sdio_bus_req *req;
+ 	_irqL irqL;
+@@ -337,10 +337,6 @@
+ 			dvobj->sdio_bus_last_watchdog = rtw_get_current_time();
+ 			warn = true;
+ 		}
+-		if (elapsed >= RB8189_BUS_STUCK_PANIC_MS && !dvobj->sdio_bus_fault) {
+-			dvobj->sdio_bus_fault = 1;
+-			panic_bus = 1;
+-		}
+ 	}
+ 	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
+ 
+@@ -360,97 +356,12 @@
+ 			last_name ? last_name : "-", last_seq, last_submit_pid,
+ 			last_comm, last_ret, last_elapsed_ms, last_addr, last_cnt);
+ 
+-	if (panic_bus) {
+-		pr_emerg("[rb8189-bus] stuck op panic op=%s seq=%u submit=%u/%s irq=%u addr=0x%05x cnt=%u elapsed_ms=%u irq_pending=%u queued=%u\n",
+-			 name ? name : "-", seq, submit_pid, comm, is_irq,
+-			 addr, cnt, elapsed, irq_pending, queued);
+-		pr_emerg("[rb8189-bus] dumping current stack and key task states before panic\n");
+-		dump_stack();
+-		rtw_sdio_bus_dump_key_tasks();
+-		panic("rb8189 SDIO bus op stuck");
+-	}
+-
+ 	if (!stopping)
+ 		_set_timer(&dvobj->sdio_bus_watchdog_timer, RB8189_BUS_WATCHDOG_PERIOD_MS);
+ }
+ 
+-static int rtw_sdio_bus_call(struct dvobj_priv *dvobj, const char *name,
+-			     u32 addr, u32 cnt,
+-			     int (*fn)(struct dvobj_priv *dvobj, void *ctx),
+-			     void *ctx)
+-{
+-	struct rtw_sdio_bus_req req;
+-	int ret = 0;
+-	_irqL irqL;
+-
+-	if (!dvobj->sdio_bus_thread || dvobj->sdio_bus_thread == current)
+-		return -EOPNOTSUPP;
+-
+-	INIT_LIST_HEAD(&req.list);
+-	init_completion(&req.done);
+-	req.fn = fn;
+-	req.ctx = ctx;
+-	req.name = name;
+-	req.addr = addr;
+-	req.cnt = cnt;
+-	req.submit_time = rtw_get_current_time();
+-	req.submit_pid = current->pid;
+-	snprintf(req.submit_comm, TASK_COMM_LEN, "%s", current->comm);
+-	req.ret = -EINPROGRESS;
+-
+-	_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
+-	if (dvobj->sdio_bus_stopping || dvobj->sdio_bus_fault) {
+-		ret = -ESHUTDOWN;
+-	} else {
+-		u32 depth;
+-
+-		req.seq = ++dvobj->sdio_bus_seq;
+-		list_add_tail(&req.list, &dvobj->sdio_bus_req_q);
+-		dvobj->sdio_bus_total_queued++;
+-		depth = rtw_sdio_bus_queue_depth_locked(dvobj);
+-		if (depth > dvobj->sdio_bus_max_queue_depth)
+-			dvobj->sdio_bus_max_queue_depth = depth;
+-	}
+-	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
+-
+-	if (ret)
+-		return ret;
+-
+-	_rtw_up_sema(&dvobj->sdio_bus_req_sema);
+-	while (!wait_for_completion_timeout(&req.done,
+-					    msecs_to_jiffies(RB8189_BUS_SUBMIT_WAIT_WARN_MS))) {
+-		const char *active_name = NULL;
+-		const char *worker_state = NULL;
+-		char active_comm[TASK_COMM_LEN];
+-		u32 active_seq = 0, active_pid = 0, active_ms = 0;
+-		u32 queued = 0, irq_pending = 0, state_ms = 0;
+-
+-		active_comm[0] = '\0';
+-		_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
+-		worker_state = dvobj->sdio_bus_worker_state;
+-		if (dvobj->sdio_bus_worker_state_since)
+-			state_ms = rtw_get_passing_time_ms(dvobj->sdio_bus_worker_state_since);
+-		if (dvobj->sdio_bus_active_start) {
+-			active_name = dvobj->sdio_bus_active_name;
+-			active_seq = dvobj->sdio_bus_active_seq;
+-			active_pid = dvobj->sdio_bus_active_submit_pid;
+-			active_ms = rtw_get_passing_time_ms(dvobj->sdio_bus_active_start);
+-			snprintf(active_comm, TASK_COMM_LEN, "%s", dvobj->sdio_bus_active_comm);
+-		}
+-		queued = rtw_sdio_bus_queue_depth_locked(dvobj);
+-		irq_pending = dvobj->sdio_bus_irq_pending;
+-		_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
+-
+-		pr_warn("[rb8189-bus] submit wait op=%s seq=%u submit=%u/%s waited_ms=%u worker=%s state_ms=%u active=%s/%u/%u/%s active_ms=%u queued=%u irq_pending=%u\n",
+-			name ? name : "-", req.seq, req.submit_pid, req.submit_comm,
+-			rtw_get_passing_time_ms(req.submit_time),
+-			worker_state ? worker_state : "-", state_ms,
+-			active_name ? active_name : "-", active_seq, active_pid,
+-			active_comm, active_ms, queued, irq_pending);
+-	}
+-
+-	return req.ret;
+-}
++/* rb(0008): the RW submit path (rtw_sdio_bus_rw) replaced the old
++ * rtw_sdio_bus_call(); it lives next to rtw_sdio_bus_rw_fn below. */
+ 
+ static void rtw_sdio_bus_run_irq(struct dvobj_priv *dvobj)
+ {
+@@ -527,7 +438,14 @@
+ 						  req->submit_pid, req->submit_comm, false);
+ 			req->ret = req->fn(dvobj, req->ctx);
+ 			rtw_sdio_bus_active_end(dvobj, req->ret);
++			/* rb(0008): the bus made forward progress, so clear any
++			 * fault a submit-timeout raised and let new ops resume. */
++			_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
++			if (dvobj->sdio_bus_fault)
++				dvobj->sdio_bus_fault = 0;
++			_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
+ 			complete(&req->done);
++			rtw_sdio_bus_req_put(req);
+ 		}
+ 	}
+ 
+@@ -1350,54 +1268,133 @@
+ 	return err;
+ }
+ 
+-struct rtw_sdio_bus_rw_ctx {
+-	struct intf_hdl *pintfhdl;
+-	struct sdio_func *func;
+-	const char *op;
+-	u32 addr;
+-	u32 cnt;
+-	void *pdata;
+-	u32 seq;
+-	bool trace;
+-	bool write;
+-};
+-
+ static int rtw_sdio_bus_rw_fn(struct dvobj_priv *dvobj, void *priv)
+ {
+-	struct rtw_sdio_bus_rw_ctx *ctx = priv;
++	struct rtw_sdio_bus_req *req = priv;
+ 	s32 err;
+ 
+ 	rtw_sdio_bus_lock(dvobj);
+-	if (ctx->trace)
+-		rb8189_diag_sdio_mark(ctx->op, "before_claim", ctx->seq,
+-				      ctx->addr, ctx->cnt, true);
+-	sdio_claim_host(ctx->func);
+-	if (ctx->trace)
+-		rb8189_diag_sdio_mark(ctx->op, "claim_acquired", ctx->seq,
+-				      ctx->addr, ctx->cnt, true);
+-	if (ctx->trace)
+-		rb8189_diag_sdio_mark(ctx->op, "before_inner", ctx->seq,
+-				      ctx->addr, ctx->cnt, true);
+-	if (ctx->write)
+-		err = _sd_write(ctx->pintfhdl, ctx->addr, ctx->cnt, ctx->pdata);
++	sdio_claim_host(req->func);
++	if (req->write)
++		err = _sd_write(req->pintfhdl, req->addr, req->cnt, req->bounce);
+ 	else
+-		err = _sd_read(ctx->pintfhdl, ctx->addr, ctx->cnt, ctx->pdata);
+-	if (ctx->trace)
+-		rb8189_diag_sdio_mark(ctx->op, "after_inner", ctx->seq,
+-				      ctx->addr, ctx->cnt, true);
+-	if (ctx->trace)
+-		rb8189_diag_sdio_mark(ctx->op, "before_release", ctx->seq,
+-				      ctx->addr, ctx->cnt, true);
+-	sdio_release_host(ctx->func);
+-	if (ctx->trace)
+-		rb8189_diag_sdio_mark(ctx->op, "release_done", ctx->seq,
+-				      ctx->addr, ctx->cnt, true);
++		err = _sd_read(req->pintfhdl, req->addr, req->cnt, req->bounce);
++	sdio_release_host(req->func);
+ 	rtw_sdio_bus_unlock(dvobj);
+ 
+ 	return err;
+ }
+ 
+ /*
++ * rb(0008): submit one CMD53 through the bus worker with a bounded wait.
++ *
++ * The request and its data bounce buffer are heap-owned and reference
++ * counted, so if the underlying transfer wedges the submitter can abandon
++ * the wait after RB8189_BUS_SUBMIT_TIMEOUT_MS and return an error instead of
++ * blocking forever. The worker only ever touches the heap request and its
++ * bounce buffer, never the caller's stack/buffer, so abandoning is safe.
++ * A timeout marks the bus faulted so further ops fast-fail; the worker
++ * clears the fault once it makes forward progress again (self-recovery).
++ *
++ * Returns -EOPNOTSUPP if the worker path is unavailable so the caller can
++ * fall back to the direct SDIO path.
++ */
++static int rtw_sdio_bus_rw(struct dvobj_priv *dvobj, const char *name,
++			   struct intf_hdl *pintfhdl, struct sdio_func *func,
++			   u32 addr, u32 cnt, void *pdata, bool write)
++{
++	struct rtw_sdio_bus_req *req;
++	unsigned long left;
++	int ret = 0;
++	_irqL irqL;
++
++	if (!dvobj->sdio_bus_thread || dvobj->sdio_bus_thread == current)
++		return -EOPNOTSUPP;
++
++	req = (struct rtw_sdio_bus_req *)rtw_zmalloc(sizeof(*req));
++	if (!req)
++		return -EOPNOTSUPP;
++	req->bounce = rtw_malloc(cnt ? cnt : 1);
++	if (!req->bounce) {
++		rtw_mfree((u8 *)req, sizeof(*req));
++		return -EOPNOTSUPP;
++	}
++
++	INIT_LIST_HEAD(&req->list);
++	init_completion(&req->done);
++	req->fn = rtw_sdio_bus_rw_fn;
++	req->ctx = req;
++	req->name = name;
++	req->addr = addr;
++	req->cnt = cnt;
++	req->submit_time = rtw_get_current_time();
++	req->submit_pid = current->pid;
++	snprintf(req->submit_comm, TASK_COMM_LEN, "%s", current->comm);
++	req->ret = -EINPROGRESS;
++	req->heap = 1;
++	req->write = write ? 1 : 0;
++	req->pintfhdl = pintfhdl;
++	req->func = func;
++	req->bounce_cnt = cnt ? cnt : 1;
++	atomic_set(&req->refcnt, 1);
++	if (write && cnt)
++		_rtw_memcpy(req->bounce, pdata, cnt);
++
++	_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
++	if (dvobj->sdio_bus_stopping || dvobj->sdio_bus_fault) {
++		ret = -ESHUTDOWN;
++	} else {
++		u32 depth;
++
++		atomic_inc(&req->refcnt);
++		req->seq = ++dvobj->sdio_bus_seq;
++		list_add_tail(&req->list, &dvobj->sdio_bus_req_q);
++		dvobj->sdio_bus_total_queued++;
++		depth = rtw_sdio_bus_queue_depth_locked(dvobj);
++		if (depth > dvobj->sdio_bus_max_queue_depth)
++			dvobj->sdio_bus_max_queue_depth = depth;
++	}
++	_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
++
++	if (ret) {
++		rtw_sdio_bus_req_put(req);
++		return ret;
++	}
++
++	_rtw_up_sema(&dvobj->sdio_bus_req_sema);
++
++	left = wait_for_completion_timeout(&req->done,
++					   msecs_to_jiffies(RB8189_BUS_SUBMIT_TIMEOUT_MS));
++	if (!left) {
++		bool still_queued = false;
++
++		_enter_critical(&dvobj->sdio_bus_req_lock, &irqL);
++		req->abandoned = 1;
++		if (!list_empty(&req->list)) {
++			list_del_init(&req->list);
++			still_queued = true;
++		}
++		dvobj->sdio_bus_fault = 1;
++		_exit_critical(&dvobj->sdio_bus_req_lock, &irqL);
++
++		pr_warn("[rb8189-bus] submit timeout op=%s seq=%u submit=%u/%s waited_ms=%u still_queued=%u -> abandon+recover\n",
++			name ? name : "-", req->seq, req->submit_pid, req->submit_comm,
++			rtw_get_passing_time_ms(req->submit_time), still_queued ? 1 : 0);
++
++		if (still_queued)
++			rtw_sdio_bus_req_put(req);
++		rtw_sdio_bus_req_put(req);
++		return -ETIMEDOUT;
++	}
++
++	ret = req->ret;
++	if (!ret && !write && cnt)
++		_rtw_memcpy(pdata, req->bounce, cnt);
++	rtw_sdio_bus_req_put(req);
++	return ret;
++}
++
++/*
+  * Use CMD53 to read data from SDIO device.
+  *
+  * Parameters:
+@@ -1437,23 +1434,12 @@
+ 	trace = rb8189_diag_sdio_enter("sd_read", addr, cnt, claim_needed, &seq);
+ 
+ 	if (claim_needed) {
+-		struct rtw_sdio_bus_rw_ctx bus_ctx = {
+-			.pintfhdl = pintfhdl,
+-			.func = func,
+-			.op = "sd_read",
+-			.addr = addr,
+-			.cnt = cnt,
+-			.pdata = pdata,
+-			.seq = seq,
+-			.trace = trace,
+-			.write = false,
+-		};
+ 		int bus_ret;
+ 
+ 		if (trace)
+ 			rb8189_diag_sdio_mark("sd_read", "queue_bus", seq, addr, cnt, claim_needed);
+-		bus_ret = rtw_sdio_bus_call(psdiodev, "sd_read", addr, cnt,
+-					    rtw_sdio_bus_rw_fn, &bus_ctx);
++		bus_ret = rtw_sdio_bus_rw(psdiodev, "sd_read", pintfhdl, func,
++					  addr, cnt, pdata, false);
+ 		if (bus_ret != -EOPNOTSUPP) {
+ 			err = bus_ret;
+ 			if (trace)
+@@ -1604,23 +1590,12 @@
+ 	trace = rb8189_diag_sdio_enter("sd_write", addr, cnt, claim_needed, &seq);
+ 
+ 	if (claim_needed) {
+-		struct rtw_sdio_bus_rw_ctx bus_ctx = {
+-			.pintfhdl = pintfhdl,
+-			.func = func,
+-			.op = "sd_write",
+-			.addr = addr,
+-			.cnt = cnt,
+-			.pdata = pdata,
+-			.seq = seq,
+-			.trace = trace,
+-			.write = true,
+-		};
+ 		int bus_ret;
+ 
+ 		if (trace)
+ 			rb8189_diag_sdio_mark("sd_write", "queue_bus", seq, addr, cnt, claim_needed);
+-		bus_ret = rtw_sdio_bus_call(psdiodev, "sd_write", addr, cnt,
+-					    rtw_sdio_bus_rw_fn, &bus_ctx);
++		bus_ret = rtw_sdio_bus_rw(psdiodev, "sd_write", pintfhdl, func,
++					  addr, cnt, pdata, true);
+ 		if (bus_ret != -EOPNOTSUPP) {
+ 			err = bus_ret;
+ 			if (trace)
+-- 
+2.34.1
