@@ -16,6 +16,14 @@
 | `192.168.124.21` | 1G | mmc0=SDIO WiFi, mmc1=SD card |
 | `192.168.124.23` | 2G | mmc0=SD card, mmc1=SDIO WiFi |
 
+## Seed 源设备
+
+| IP | 型号 | 凭据 | bitcoind datadir |
+|----|------|------|------------------|
+| `192.168.124.12` | RDK X5 (Ubuntu 22.04) | `sunrise` / `sunrise` | `/home/sunrise/Desktop/bitcoind/data` |
+
+Seed 同步流程见 skill: `rockbase-seed`。
+
 **注意：1G/2G 的 MMC host 编号相反。** 分析日志时不要固定假设 mmc0/mmc1 角色，必须结合当次启动日志确认。
 
 ## 始终生效的核心规则

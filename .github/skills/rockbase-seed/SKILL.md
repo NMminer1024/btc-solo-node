@@ -11,6 +11,19 @@ description: 'Build Rockbase images with Bitcoin block seed data, or sync seed d
 
 ---
 
+## Seed 源设备
+
+| IP | 型号 | 角色 | 凭据 | bitcoind datadir |
+|----|------|------|------|------------------|
+| `192.168.124.12` | RDK X5 (Ubuntu 22.04 ARM64) | Seed 源 | `sunrise` / `sunrise` | `/home/sunrise/Desktop/bitcoind/data` |
+
+注意：
+- RDK X5 上 bitcoind 通过 snap 安装（`/snap/bitcoin-core/222/bin/bitcoind`）。
+- 同步 seed 前必须先优雅停止 bitcoind：`sshpass -p 'sunrise' ssh sunrise@192.168.124.12 '/home/sunrise/Desktop/bitcoind/stop.sh'`。
+- 同步完成后重启 bitcoind：`sshpass -p 'sunrise' ssh sunrise@192.168.124.12 'nohup /snap/bin/bitcoin-core.daemon -conf=/home/sunrise/Desktop/bitcoind/bitcoin.conf -datadir=/home/sunrise/Desktop/bitcoind/data &'`。
+
+---
+
 ## Seed 目录要求
 
 最少包含：
@@ -71,7 +84,27 @@ BLOCK_SEED_DIR > ROCKBASE_BLOCK_SEED_DIR > seed/root-block
 
 使用 `tools/sync-rockbase-seed-from-device.sh`，不要在构建中手工直接改 `seed/root-block`。
 
-### 从运行中的设备同步
+### 从 Seed 源设备 (RDK X5) 同步
+
+**快速同步命令（一键）**：
+
+```bash
+# 先停止远端 bitcoind
+sshpass -p 'sunrise' ssh sunrise@192.168.124.12 '/home/sunrise/Desktop/bitcoind/stop.sh'
+sleep 5
+
+# 交互式同步
+REMOTE_HOST=192.168.124.12 \
+REMOTE_USER=sunrise \
+REMOTE_PASSWORD=sunrise \
+REMOTE_DIR=/home/sunrise/Desktop/bitcoind/data \
+bash tools/sync-rockbase-seed-from-device.sh
+
+# 同步完成后重启远端 bitcoind
+sshpass -p 'sunrise' ssh sunrise@192.168.124.12 'nohup /snap/bin/bitcoin-core.daemon -conf=/home/sunrise/Desktop/bitcoind/bitcoin.conf -datadir=/home/sunrise/Desktop/bitcoind/data > /dev/null 2>&1 &'
+```
+
+### 交互式同步（通用）
 
 ```bash
 bash tools/sync-rockbase-seed-from-device.sh
@@ -79,10 +112,10 @@ bash tools/sync-rockbase-seed-from-device.sh
 
 交互式输入：
 
-1. 远端设备 IP
-2. 远端用户名（默认 `root`）
+1. 远端设备 IP（默认用 `192.168.124.12`）
+2. 远端用户名（RDK X5 上用 `sunrise`，Rockbase 板子上用 `root`）
 3. 远端密码
-4. 远端 block 数据目录（默认 `/root/block`）
+4. 远端 block 数据目录（RDK X5 上为 `/home/sunrise/Desktop/bitcoind/data`）
 
 脚本行为：
 

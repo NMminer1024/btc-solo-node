@@ -5,7 +5,13 @@
 本文档说明如何把外部 Bitcoin 剪枝数据 seed 打进 Rockbase 最终 `sysimage-sdcard.img`。
 
 默认构建不使用 seed。只有用户明确要求“带 seed 镜像”时才使用本文档。
+## Seed 源设备
 
+| IP | 型号 | 凭据 | bitcoind datadir |
+|----|------|------|------------------|
+| `192.168.124.12` | RDK X5 (Ubuntu 22.04 ARM64) | `sunrise` / `sunrise` | `/home/sunrise/Desktop/bitcoind/data` |
+
+同步流程见 skill: `rockbase-seed`，或直接运行 `tools/sync-rockbase-seed-from-device.sh`。
 ## 默认 seed 路径
 
 默认路径：

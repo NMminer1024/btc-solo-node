@@ -22,6 +22,10 @@ Rockbase 是基于 K230 的 Bitcoin 剪枝验证节点与本地 Stratum/solo min
 - `192.168.124.21`：1G Rockbase 真板。
 - `192.168.124.23`：2G Rockbase 真板。
 
+Seed 源设备：
+
+- `192.168.124.12`：RDK X5 (Ubuntu 22.04 ARM64)，凭据 `sunrise` / `sunrise`，bitcoind datadir `/home/sunrise/Desktop/bitcoind/data`。
+
 重要 MMC host 拓扑：
 
 - 1G / `124.8`、`124.15`、`124.21`：`mmc0=SDIO WiFi`，`mmc1=SD 卡`。

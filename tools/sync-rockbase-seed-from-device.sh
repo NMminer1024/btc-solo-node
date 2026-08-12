@@ -12,6 +12,11 @@ REMOTE_PASSWORD="${REMOTE_PASSWORD:-}"
 REMOTE_DIR="${REMOTE_DIR:-}"
 DEST_DIR="${DEST_DIR:-${DEST_DIR_DEFAULT}}"
 
+# RDK X5 bitcoind 默认路径（snap 安装）
+REMOTE_BITCOIND_PIDFILE="${REMOTE_BITCOIND_PIDFILE:-/home/sunrise/Desktop/bitcoind/data/bitcoind.pid}"
+REMOTE_BITCOIND_STOP_SCRIPT="${REMOTE_BITCOIND_STOP_SCRIPT:-/home/sunrise/Desktop/bitcoind/stop.sh}"
+REMOTE_BITCOIND_START_CMD="${REMOTE_BITCOIND_START_CMD:-nohup /snap/bin/bitcoin-core.daemon -conf=/home/sunrise/Desktop/bitcoind/bitcoin.conf -datadir=/home/sunrise/Desktop/bitcoind/data > /dev/null 2>&1 &}"
+
 TMP_DIR="${DEST_DIR}.tmp"
 SSH_KNOWN_HOSTS="${TMPDIR:-/tmp}/rockbase-seed-known_hosts.$$"
 
@@ -125,6 +130,42 @@ fi
 
 echo "✓ SSH 登录成功"
 
+# ── 检查远端 bitcoind 是否在运行，若在则优雅停止 ──
+REMOTE_BITCOIND_WAS_RUNNING=false
+if "${SSH_CMD[@]}" "${REMOTE_TARGET}" "pgrep -f 'bitcoind.*-conf.*Desktop/bitcoind' > /dev/null 2>&1 || pgrep -f 'bitcoin-core.daemon' > /dev/null 2>&1"; then
+    REMOTE_BITCOIND_WAS_RUNNING=true
+    echo ""
+    echo "检测到远端 bitcoind 正在运行，正在优雅停止..."
+
+    if "${SSH_CMD[@]}" "${REMOTE_TARGET}" "test -x $(shell_quote "${REMOTE_BITCOIND_STOP_SCRIPT}")" >/dev/null 2>&1; then
+        "${SSH_CMD[@]}" "${REMOTE_TARGET}" "bash $(shell_quote "${REMOTE_BITCOIND_STOP_SCRIPT}")" || true
+    else
+        "${SSH_CMD[@]}" "${REMOTE_TARGET}" "bitcoin-cli -datadir=$(shell_quote "${REMOTE_DIR}") stop" 2>/dev/null || true
+    fi
+
+    echo "等待 bitcoind 退出..."
+    BITCOIND_STOPPED=false
+    for i in $(seq 1 60); do
+        if ! "${SSH_CMD[@]}" "${REMOTE_TARGET}" "pgrep -f 'bitcoind.*-conf.*Desktop/bitcoind' > /dev/null 2>&1 || pgrep -f 'bitcoin-core.daemon' > /dev/null 2>&1" 2>/dev/null; then
+            echo "✓ bitcoind 已退出"
+            BITCOIND_STOPPED=true
+            break
+        fi
+        printf "."
+        sleep 2
+    done
+
+    # 如果还没退出，强制 kill
+    if [ "${BITCOIND_STOPPED}" = false ]; then
+        echo ""
+        echo "bitcoind 未在 120s 内退出，发送 SIGTERM..."
+        "${SSH_CMD[@]}" "${REMOTE_TARGET}" "pkill -TERM -f 'bitcoind.*-conf.*Desktop/bitcoind' || pkill -TERM -f 'bitcoin-core.daemon'" 2>/dev/null || true
+        sleep 10
+    fi
+else
+    echo "远端 bitcoind 未运行，直接同步"
+fi
+
 while true; do
     if [ -z "${REMOTE_DIR}" ]; then
         prompt_input "请输入远端区块数据目录" REMOTE_DIR "${REMOTE_DIR_DEFAULT}"
@@ -178,3 +219,16 @@ validate_manifest "${DEST_DIR}/blocks/index" "copied blocks/index"
 du -sh "${DEST_DIR}" "${DEST_DIR}/blocks" "${DEST_DIR}/blocks/index" "${DEST_DIR}/chainstate"
 
 echo "Rockbase block seed 已更新: ${DEST_DIR}"
+
+# ── 如果之前停止了 bitcoind，重新拉起 ──
+if [ "${REMOTE_BITCOIND_WAS_RUNNING}" = true ]; then
+    echo ""
+    echo "正在重新拉起远端 bitcoind..."
+    "${SSH_CMD[@]}" "${REMOTE_TARGET}" "${REMOTE_BITCOIND_START_CMD}"
+    sleep 3
+    if "${SSH_CMD[@]}" "${REMOTE_TARGET}" "pgrep -f 'bitcoind.*-conf.*Desktop/bitcoind' > /dev/null 2>&1 || pgrep -f 'bitcoin-core.daemon' > /dev/null 2>&1" 2>/dev/null; then
+        echo "✓ 远端 bitcoind 已重新启动"
+    else
+        echo "⚠ 远端 bitcoind 可能未成功启动，请手动检查"
+    fi
+fi
