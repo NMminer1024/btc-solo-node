@@ -1,0 +1,126 @@
+---
+name: rockbase-freeze-debug
+description: 'Debug Rockbase board freeze/lockup/hang issues. Collect logs, pstore data, and analyze freeze evidence. Use when: freeze, 卡死, 死锁, lockup, hang, pstore, ramoops, panic, 抓日志, crash, hung task, softlockup.'
+---
+
+# Rockbase 卡死调试
+
+完整背景见 `docs/rockbase-debug-playbook.md` 和 `docs/rockbase-freeze-milestones.md`。
+
+---
+
+## 如果某台板子再次卡死
+
+按顺序操作：
+
+### 1. 保存串口日志
+
+- 如果串口还在打印，**不要立刻断电**
+- 保存串口日志文件，记录板子 IP、板子类型（1G/2G）和大概卡死时间
+- 如果串口还在输出，继续录 2~5 分钟
+- 如果串口完全无输出，SSH/网页都无响应 → 硬复位
+
+### 2. 硬复位后第一时间捞 pstore
+
+**1G 板子 (124.8/124.15/124.21)**：
+
+```bash
+ssh root@<IP> 'ls -lah /root/log/pstore-archive/latest; cat /root/log/pstore-archive/latest/* 2>/dev/null' > pstore-<IP>.txt
+```
+
+**2G 板子 (124.23)**：
+
+```bash
+ssh root@192.168.124.23 'ls -lah /root/log/pstore-archive/latest; cat /root/log/pstore-archive/latest/* 2>/dev/null' > pstore-124.23.txt
+```
+
+### 3. 验证 pstore 是否正常
+
+```bash
+ssh root@<IP> 'mount | grep pstore; dmesg | grep -Ei "ramoops|pstore"; ls -lah /root/log/pstore-archive/latest'
+```
+
+---
+
+## Freeze 记录清单
+
+每次卡死至少记录：
+
+- 板子 IP
+- 1G 还是 2G
+- `/etc/version/release_version` 镜像版本
+- 串口日志文件名
+- 最后一条串口时间
+- SSH 是否响应
+- Web 是否响应
+- 屏幕时间是否还在更新
+- 重启后 pstore 是否有记录
+- 最后的 `[health]` 行
+- 最后的 `rb8189-diag` 行
+- 最后的 `rb-mmc-diag` 行
+- 当次启动的 MMC host 拓扑
+
+---
+
+## 日志判断重点
+
+### 指向 WiFi/SDIO
+
+- `RTW_XMIT_THREAD` 进入 `D` 状态
+- `RTW_CMD_THREAD` 进入 `D` 状态
+- `sdio_irq_work` pending 或 in-flight
+- 栈里出现 `sd_write`、`sd_read`、`sdio_write_port`、`sdio_read_port`
+- WiFi SDIO host 上出现 `__mmc_claim_host`
+- RTW 线程和 kworker 之间出现 host claim waiter/owner 闭环
+- `cmd=57`（`_Set_Drv_Extra`）频繁出现，常见子项 `cmd=57,11,1`、`cmd=57,5,0`、`cmd=57,2,0`
+
+### 指向 SD 卡写回
+
+- `dirty` 和 `writeback` 高
+- `mmcblkXp3` 有大写入突发
+- `flush-*`、`jbd2/*`、`kblockd` 进入 `D` 状态
+- 栈里出现 `mmc_blk_rw_wait`
+- 栈里出现 `balance_dirty_pages_ratelimited_flags`
+
+### 指向 UI
+
+- `rockbase-lcdui` 卡在非正常 sleep 路径
+- 存储和 RTW 都正常，但只有 LCD 渲染停住
+
+---
+
+## 当前诊断状态
+
+- **当前镜像仍处于 PIO 诊断态**，`0034-rockbase-sdhci-force-pio-dma-diagnostic.patch` 仍在生效，DMA 没有恢复
+- 最新提交 `cc6410e5` 只让 RTL8189FS SDIO bus 自恢复
+- 最强证据指向 `RTL8189FS + SDIO host claim/IRQ/XMIT` 路径
+- pstore/ramoops 已加入并验证成功：`echo c > /proc/sysrq-trigger` 触发 panic → 10s 后重启 → 生成 `console-ramoops-0`
+
+### Panic 设置
+
+```text
+kernel.panic = 10
+kernel.panic_on_oops = 1
+kernel.hung_task_panic = 1
+kernel.softlockup_panic = 1
+kernel.panic_on_warn = 1
+kernel.sysrq = 1
+```
+
+### 关于硬 lockup
+
+- 驱动已内置 `RB8189_BUS_STUCK_PANIC_MS=60000`，但软定时器在关中断硬 lockup 下不触发
+- 真正能定位硬 lockup 的是 JTAG，不是软件看门狗
+- WDT 的价值仅限于 debug：区分"硬 lockup"和"软 hang"
+- 当前 pstore 仍可能为空（如果系统硬死锁到 CPU 不再调度）
+
+---
+
+## 修复优先级
+
+1. 继续用 pstore 观察真实业务负载下的结果
+2. 如果 pstore 捕获到 RTW/SDIO 争抢，优先补齐 SDIO 入口串行化
+3. 如果串行化仍不足，评估 dedicated bus worker
+4. 如果 pstore 为空且串口彻底停住，评估 JTAG/NMI
+5. **不要**盲目加 watchdog 掩盖问题
+6. **不要**恢复高频 rb-mmc-diag 打印（放大单核调度压力）
