@@ -57,8 +57,9 @@ Seed 同步流程见 skill: `rockbase-seed`。
 
 ## 当前诊断状态
 
-- 最新提交: `cc6410e5`（RTL8189FS SDIO bus 自恢复）
-- 当前镜像仍处于 **PIO 诊断态**，`0034-rockbase-sdhci-force-pio-dma-diagnostic.patch` 仍在生效，**DMA 没有恢复**
+- 最新关键提交: `936ea15b`（禁用 `0034`，源码默认恢复 DMA）
+- `dev` 分支源码已不再应用 `0034-rockbase-sdhci-force-pio-dma-diagnostic.patch`，**重新构建的新镜像默认恢复 DMA**
+- 注意：`1G` 和 `2G` 各自复用独立的 `output/<CONF>/build/linux-*`；**共享 kernel patch 变更后，必须对每个目标 defconfig 单独执行 `linux-dirclean` 再重编**，否则可能导出旧的 PIO kernel
 - Rootfs 基线: 2G，非 6G
 - Swap 已禁用
 
