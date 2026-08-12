@@ -252,6 +252,21 @@ vm.dirty_expire_centisecs=500
   - `disk_wbusy`/`block_wbusy` 多次到数百至数千百分比
 - 同时 `RTW_XMIT_THREAD` 长期在 `_rtw_down_sema`，但没有看到 124.23 那种终局 `RTW_SDIO_BUS:D:_rtw_down_sema`。
 
+## 2026-08-12：PIO 诊断仍可卡死，0008 转向自恢复
+
+新一轮实验表明：
+
+- 仅关 ADMA/SDMA 的 PIO 镜像并没有彻底消掉 freeze。
+- 1G 三台 `124.8`、`124.15`、`124.21` 和 2G `124.23` 都已刷入最新镜像并在线核对 `release_version`。
+- 当前提交 `cc6410e5` 只引入 `0008-bound-sdio-bus-wait-and-self-recover.patch` 与 `rockbase_statusd.sh` 修正，**没有恢复 DMA**。
+- 这次修正的重点不是恢复 DMA，而是把 SDIO bus 的单次等待改成有界等待，并让超时后可以自恢复，避免再次把整机拖进无限阻塞。
+
+对后续 agent 的提醒：
+
+- 不要把 `cc6410e5` 误解成 DMA 回归提交。
+- 如果后续要恢复 DMA，仍需单独处理 `0034-rockbase-sdhci-force-pio-dma-diagnostic.patch`。
+- 下一轮测试要重点看 `0008` 是否把原来的“整机静默卡死”降级成“可恢复的超时错误”。
+
 判断：
 
 - 与 124.23 同属“没有 panic/oops 终点的 hard freeze/人工复位”问题族。

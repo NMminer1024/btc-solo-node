@@ -172,6 +172,12 @@ SD 卡写回可能是触发器或放大器，但多次尾部现场显示 dirty/w
 - 不建议继续把 WiFi 低功耗当成唯一主因，禁用低功耗后已经复现过。
 - 不建议恢复高频 `rb-mmc-diag claim wait begin waited_ms=0` 打印，这类日志会放大单核系统调度压力。
 
+## 当前状态提醒
+
+- 当前最新提交 `cc6410e5` 只是让 RTL8189FS SDIO bus 自恢复，并**没有**把 SDHCI 的 DMA 恢复回来。
+- 也就是说，当前镜像仍然是 **PIO 诊断态**；如果后续 agent 讨论“恢复 DMA”，必须先回退或替换 `0034-rockbase-sdhci-force-pio-dma-diagnostic.patch`，不要误把 `cc6410e5` 当成 DMA 已回归。
+- 之后的重点观察应当是：`0008` 是否把 freeze 从“整机静默卡死”降级成“可恢复超时并继续跑”。
+
 ## 静默硬 lockup 专项方案（可落地修复 / 调试顺序）
 
 背景结论见 `docs/rockbase-freeze-milestones.md` 的“2026-08-11：静默卡死的结构性复盘”。要点：本问题很可能是**单核 + 无硬 lockup 检测**下的**硬 lockup（关中断/总线 stall，定时器都停）**，现有 panic 抓手结构性看不到；且 1G/2G 的 SDIO WiFi 走**不同控制器、不同 PHY 路径**，不保证同一根因。

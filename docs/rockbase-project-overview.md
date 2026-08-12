@@ -15,14 +15,16 @@ Rockbase 是基于 K230 的 Bitcoin 剪枝验证节点与本地 Stratum/solo min
 
 ## 板子基线
 
-当前两台真实板：
+当前 4 台真实板：
 
-- `192.168.124.28`：1G Rockbase 真板。
+- `192.168.124.8`：1G Rockbase 真板。
+- `192.168.124.15`：1G Rockbase 真板。
+- `192.168.124.21`：1G Rockbase 真板。
 - `192.168.124.23`：2G Rockbase 真板。
 
 重要 MMC host 拓扑：
 
-- 1G / `124.28`：`mmc0=SDIO WiFi`，`mmc1=SD 卡`。
+- 1G / `124.8`、`124.15`、`124.21`：`mmc0=SDIO WiFi`，`mmc1=SD 卡`。
 - 2G / `124.23`：`mmc0=SD 卡`，`mmc1=SDIO WiFi`。
 
 这个编号差异非常重要。分析日志时不要固定假设 `mmc0` 或 `mmc1`，必须结合当次启动日志确认哪个 host 是 WiFi SDIO。
@@ -37,6 +39,11 @@ Rockbase 是基于 K230 的 Bitcoin 剪枝验证节点与本地 Stratum/solo min
 rootfs 容量基线：
 
 - `BR2_TARGET_ROOTFS_EXT2_SIZE="2G"`（1G/2G 两个 Rockbase defconfig 已统一）
+
+当前诊断状态：
+
+- 最新提交 `cc6410e5` 只让 RTL8189FS SDIO bus 自恢复。
+- 当前镜像仍处于 **PIO 诊断态**，`0034-rockbase-sdhci-force-pio-dma-diagnostic.patch` 仍在生效，**DMA 没有恢复**。
 
 主要源码路径：
 
@@ -210,9 +217,9 @@ UI、页面、业务逻辑改动：
 
 ## 当前已验证镜像版本
 
-2026-08-11 带 pstore 的非 seed 镜像已经在真板验证：
+2026-08-12 的非 seed 镜像已经在真板验证：
 
-- 1G / `124.28`：`sdk:v1.2-20260811-104352-bitpony-DESKTOP-KC5S6JM-1f7ef1ae-nncase0.0.0`
-- 2G / `124.23`：`sdk:v1.2-20260811-104909-bitpony-DESKTOP-KC5S6JM-1f7ef1ae-nncase0.0.0`
+- 1G / `124.8`、`124.15`、`124.21`：`sdk:v0.1.0-20260812-143609-bitpony-DESKTOP-KC5S6JM-57fc4982-nncase0.0.0`
+- 2G / `124.23`：`sdk:v0.1.0-20260812-143716-bitpony-DESKTOP-KC5S6JM-57fc4982-nncase0.0.0`
 
-两者都包含 `pstore/ramoops`、`S02pstore` 和 panic/hung-task 相关 sysctl 设置。
+两者都包含 `pstore/ramoops`、`S02pstore` 和 panic/hung-task 相关 sysctl 设置；当前仍是 PIO 诊断态，DMA 未恢复。

@@ -1,6 +1,6 @@
 # Rockbase 当前交接文档
 
-更新时间：2026-08-11 18:40 CST。
+更新时间：2026-08-12 14:40 CST。
 
 本文档是新 agent 接手入口。更完整的背景见：
 
@@ -15,6 +15,9 @@
 
 最新提交：
 
+- `cc6410e5 rockbase: make rtl8189fs SDIO bus self-recover`
+- `57fc4982 rockbase: fix 0034 sdhci pio patch hunk context for actual kernel source`
+- `d4228e1a rockbase: add freeze debug notes and sdio diagnostics`
 - `c3c7b123 rockbase: rename 1g defconfig and align references`
 - `ab6efa9b rockbase: commit pending wifi and init script updates`
 - `d2136efa rockbase: set rootfs 2G and keep blockdata default 24G`
@@ -22,11 +25,10 @@
 - `741394f7 seed: switch to device sync and remove legacy SD-card flow`
 - `f548c8d0 docs: organize Rockbase handoff and design notes`
 
-当前未提交改动：
+当前工作区：
 
-- `buildroot-overlay/board/canaan/k230_rockbase/patches/rtl8189fs/0007-log-sdio-bus-queue-state-snapshots.patch`
-
-这个 `0007` 已经编译进当前两台真机正在跑的最新镜像，但补丁文件本身还没有 git commit。
+- 当前工作区应保持干净；本轮已提交的关键提交是 `cc6410e5`。
+- 注意：当前镜像仍然是 **PIO** 诊断态，`0034-rockbase-sdhci-force-pio-dma-diagnostic.patch` 仍在生效，**DMA 没有恢复**。
 
 ## 板子基线
 
@@ -53,16 +55,27 @@
 2G 镜像：
 
 - 板子：`192.168.124.23`
-- Windows 侧镜像：`/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-2g-20260811-160221/sysimage-sdcard.img`
+- Windows 侧镜像：`/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-2g-20260812-143716/sysimage-sdcard.img`
 - 镜像大小：`2.4G`
-- 内核时间：`Tue Aug 11 10:48:37 CST 2026`
+- release_version：`sdk:v0.1.0-20260812-143716-bitpony-DESKTOP-KC5S6JM-57fc4982-nncase0.0.0`
 
 1G 镜像：
 
-- 板子：`192.168.124.28`
-- Windows 侧镜像：`/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-1g-20260811-161202/sysimage-sdcard.img`
+- 板子：`192.168.124.8`、`192.168.124.15`、`192.168.124.21`
+- Windows 侧镜像：`/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-1g-20260812-143609/sysimage-sdcard.img`
 - 镜像大小：`2.4G`
-- 内核时间：`Tue Aug 11 10:43:22 CST 2026`
+- release_version：`sdk:v0.1.0-20260812-143609-bitpony-DESKTOP-KC5S6JM-57fc4982-nncase0.0.0`
+
+## 当前跑测板子
+
+当前 4 台真机都已刷入最近导出的镜像，并在线核对了 `release_version`：
+
+- `192.168.124.8`：1G，`CONF:k230_rockbase_1g`
+- `192.168.124.15`：1G，`CONF:k230_rockbase_1g`
+- `192.168.124.21`：1G，`CONF:k230_rockbase_1g`
+- `192.168.124.23`：2G，`CONF:k230_rockbase_2g`
+
+这 4 台都对应同一个 commit：`cc6410e5`。
 
 镜像规则：
 
@@ -102,6 +115,7 @@
 - 主嫌疑仍是 RTL8189FS SDIO 路径。
 - 关注点是 TX/RX/IRQ work、`RTW_SDIO_BUS` bus worker、`RTW_XMIT_THREAD`、`RTW_CMD_THREAD` 与 MMC host claim/SD 卡写回之间的交互。
 - SD 卡写回和 bitcoind 同步是重要放大器，但目前不像唯一根因。
+- 当前 `cc6410e5` 只是让 RTL8189FS SDIO bus 自恢复，**没有恢复 DMA**；因此后续 agent 不要把这次 commit 误解成“DMA 已经回来了”。
 - UI/LVGL、内存耗尽、swap、单纯 ext4 写回都不是当前最强主因。
 
 需要特别谨慎的点：
@@ -258,6 +272,9 @@ make CONF=k230_rockbase_2g_defconfig buildroot \
 这些不是当前 freeze 主线，除非用户明确要求 UI，否则新 agent 应优先关注 kernel/driver freeze。
 
 ## 接手建议
+
+- 如果下一轮目标是恢复 DMA，必须先回退或替换 `0034-rockbase-sdhci-force-pio-dma-diagnostic.patch`，不要把 `cc6410e5` 当成 DMA 回归提交。
+- 当前最值得继续观察的是：`0008` 是否把“卡死”降级成“可恢复超时”，以及 pstore/heartbeat/serialhealth 是否能在下一次 freeze 后给出更明确证据。
 
 短期不要继续盲改 WiFi 逻辑。当前最有价值的是等待 `0007` 镜像下一次真实 freeze：
 
