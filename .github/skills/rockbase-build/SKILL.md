@@ -24,23 +24,27 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 
 | `K230_NET` 值 | 说明 | 镜像目录后缀 |
 |---------------|------|-------------|
-| `sdio_wifi`（默认） | RTL8189FS SDIO WiFi，defconfig 基线 | `-sdio` |
-| `usb_eth` | USB 有线网卡互斥模式：不编译 SDIO WiFi 驱动、不安装 wpa_supplicant/wireless_tools | `-usbeth` |
-| `usb_wifi` | USB 无线（占位，驱动待调试），不编译 SDIO WiFi | `-usbwifi` |
+| `sdio_8189`（默认） | 仅启用 RTL8189FS SDIO WiFi（互斥） | `-sdio8189` |
+| `sdio_bl616`（占位） | BL616 SDIO WiFi 预留模式（互斥，当前仅保留用户态） | `-sdiobl616` |
+| `usb_eth` | USB 有线网卡互斥模式：不编译 WiFi 接口驱动 | `-usbeth` |
+| `usb_wifi` | USB 无线互斥模式：启用 USB WiFi 驱动族，禁用 SDIO 驱动族 | `-usbwifi` |
+
+兼容旧值：`sdio_wifi` 会自动映射到 `sdio_8189`。
 
 ### 用法
 
 在 `make buildroot` 命令末尾追加 `K230_NET=<模式>`：
 
 ```bash
-# sdio_wifi（默认，不写也等价）
+# sdio_8189（默认，不写也等价）
 mkdir -p /tmp/rockbase-empty-seed
 make CONF=k230_rockbase_1g_defconfig buildroot \
+  K230_NET=sdio_8189 \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
 
-# usb_eth — SDIO WiFi 完全不编译进镜像
+# usb_eth — 仅 USB 有线，WiFi 接口驱动不进入镜像
 mkdir -p /tmp/rockbase-empty-seed
 make CONF=k230_rockbase_1g_defconfig buildroot \
   K230_NET=usb_eth \
@@ -48,6 +52,17 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
 ```
+
+### 互斥原则（关键）
+
+每个 `K230_NET` 模式只允许一个接口族：
+
+- `sdio_8189`：仅 `rtl8189fs`
+- `sdio_bl616`：仅 `bl616`（当前占位）
+- `usb_eth`：仅 USB 有线
+- `usb_wifi`：仅 USB 无线（如 AIC）
+
+不要在一个模式里混入其他模式的驱动文件，否则测速与稳定性结论会被噪声污染。
 
 ### 模式切换时的内部行为
 
@@ -63,7 +78,8 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 导出目录格式：`sysimage-sdcard-rockbase-{1g,2g}-{net_suffix}-TIMESTAMP/`
 
 示例：
-- `sysimage-sdcard-rockbase-1g-sdio-20260813-102416/`
+- `sysimage-sdcard-rockbase-1g-sdio8189-20260813-102416/`
+- `sysimage-sdcard-rockbase-1g-sdiobl616-20260813-104100/`
 - `sysimage-sdcard-rockbase-1g-usbeth-20260813-113037/`
 
 ### 模式验收（互斥标准）
@@ -74,11 +90,21 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 - 无 `wlan0`
 - 无 `wpa_supplicant` 与 `iwconfig`
 
-`sdio_wifi` 目标（必须全部满足）：
+`sdio_8189` 目标（必须全部满足）：
 - 有 `8189fs.ko`
 - `lsmod` 有 `8189fs`
 - 有 `wlan0`
 - 有 `wpa_supplicant` 与 `iwconfig`
+
+`sdio_bl616` 目标（占位）：
+- 不应出现 `8189fs.ko`
+- 不应出现 USB WiFi 驱动模块
+- 后续接入 BL616 驱动后，再补充对应验收项
+
+`usb_wifi` 目标（必须全部满足）：
+- 不应出现 `8189fs.ko`
+- 应出现 USB WiFi 驱动模块（如 `aic_*`）
+- 由 USB 网卡提供 `wlan*` 接口
 
 如果任一条不满足，按“镜像与模式不一致”处理，不要继续做业务验证。
 
@@ -247,7 +273,9 @@ command -v iwconfig >/dev/null && echo "OK:iwconfig present" || echo "FAIL:no iw
 
 烧录时优先使用目录名带后缀的镜像：
 - `-usbeth-` 对应 `K230_NET=usb_eth`
-- `-sdio-` 对应 `K230_NET=sdio_wifi`
+- `-usbwifi-` 对应 `K230_NET=usb_wifi`
+- `-sdio8189-` 对应 `K230_NET=sdio_8189`
+- `-sdiobl616-` 对应 `K230_NET=sdio_bl616`
 
 若实机行为与后缀不一致，先排查误烧录或混用旧目录，再排查构建流程。
 

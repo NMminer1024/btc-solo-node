@@ -10,6 +10,7 @@ WIFI_ASSOC_TIMEOUT=${WIFI_ASSOC_TIMEOUT:-25}
 WIFI_DHCP_TRIES=${WIFI_DHCP_TRIES:-12}
 WIFI_LATE_WATCH_TIMEOUT=${WIFI_LATE_WATCH_TIMEOUT:-90}
 WIFI_DHCP_LOG=${WIFI_DHCP_LOG:-/tmp/rockbase-wifi-udhcpc.log}
+USB_WIFI_HELPER=${USB_WIFI_HELPER:-/usr/bin/rockbase_usb_wifi.sh}
 
 wifi_shell_quote() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
@@ -27,6 +28,23 @@ wifi_console_log() {
   line="[rockbase_wifi] $*"
   printf '%s\n' "$line" >>/tmp/rockbase-wifi.log 2>/dev/null || true
   printf '%s\n' "$line" >/dev/console 2>/dev/null || printf '%s\n' "$line"
+}
+
+wifi_select_iface() {
+  if [ -e "/sys/class/net/${WLAN_DEV}" ]; then
+    return 0
+  fi
+
+  if [ -x "$USB_WIFI_HELPER" ]; then
+    usb_iface=$($USB_WIFI_HELPER detect --autoload 2>/dev/null | head -n1)
+    if [ -n "$usb_iface" ] && [ -e "/sys/class/net/${usb_iface}" ]; then
+      wifi_console_log "usb wifi detected: iface=${usb_iface}"
+      WLAN_DEV="$usb_iface"
+      return 0
+    fi
+  fi
+
+  return 1
 }
 
 wifi_write_state() {
@@ -238,19 +256,30 @@ wifi_get_json() {
 }
 
 wifi_ensure_device() {
+  wifi_select_iface && return 0
+
   if ! lsmod 2>/dev/null | grep -q '^8189fs'; then
     modprobe 8189fs 2>/dev/null || true
     sleep 2
   fi
 
+  wifi_select_iface && return 0
+
   i=0
   while [ "$i" -lt 10 ]; do
     [ -e "/sys/class/net/${WLAN_DEV}" ] && return 0
+    if [ -x "$USB_WIFI_HELPER" ]; then
+      usb_iface=$($USB_WIFI_HELPER detect --autoload 2>/dev/null | head -n1)
+      if [ -n "$usb_iface" ] && [ -e "/sys/class/net/${usb_iface}" ]; then
+        WLAN_DEV="$usb_iface"
+        return 0
+      fi
+    fi
     sleep 1
     i=$((i + 1))
   done
 
-  return 1
+  return 2
 }
 
 wifi_write_wpa_conf() {
@@ -321,7 +350,13 @@ wifi_start_late_watcher() {
 }
 
 wifi_start_service() {
-  wifi_ensure_device || return 1
+  wifi_ensure_device
+  rc=$?
+  if [ "$rc" = "2" ]; then
+    wifi_console_log "no wifi backend found, skip start"
+    return 0
+  fi
+  [ "$rc" = "0" ] || return 1
 
   iw dev "$WLAN_DEV" set power_save off 2>/dev/null || true
   iwconfig "$WLAN_DEV" power off 2>/dev/null || true

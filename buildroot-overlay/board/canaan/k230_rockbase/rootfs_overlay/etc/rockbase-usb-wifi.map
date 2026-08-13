@@ -1,0 +1,10 @@
+# Rockbase USB WiFi map
+# Format:
+# VID:PID|CHIP|MODULES(space-separated)|IFNAME|NOTE
+# - VID:PID should be upper-case hex, e.g. A69C:88DE
+# - MODULES are passed to modprobe in order
+# - IFNAME can be fixed (wlan0) or auto
+# - NOTE is free text
+
+# AIC Ugreen USB WiFi (Windows reports Service=aicusbwifi)
+A69C:88DE|AIC8800-family|aic_load_fw aic8800_fdrv|auto|Needs USB net mode (not storage mode)

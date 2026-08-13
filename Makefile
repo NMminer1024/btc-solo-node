@@ -3,8 +3,10 @@ BR_NAME = buildroot-2025.02.1
 BR_SRC_DIR = output/$(BR_NAME)
 BR_OVERLAY_DIR = buildroot-overlay
 
-# Network interface mode: sdio_wifi (default) | usb_eth | usb_wifi (placeholder)
-K230_NET ?= sdio_wifi
+# Network interface mode (mutually exclusive):
+#   sdio_8189 (default) | sdio_bl616 (placeholder) | usb_eth | usb_wifi
+# Backward compatible aliases: sdio_wifi -> sdio_8189
+K230_NET ?= sdio_8189
 
 # Buildroot 不允许 PATH 中有空格或不可见字符，自动清洗
 export PATH := $(shell echo "$$PATH" | tr ':' '\n' | grep -v '[[:space:]]' | tr '\n' ':' | sed 's/:$$//')
@@ -47,9 +49,13 @@ copy-img:
 	ver_file="$(BRW_BUILD_DIR)/target/etc/version/release_version"; \
 	build_stamp=$$(grep -m1 '^sdk:' "$$ver_file" 2>/dev/null | grep -oE '[0-9]{8}-[0-9]{6}' | head -n1); \
 	[ -n "$$build_stamp" ] || build_stamp=$$(date +%Y%m%d-%H%M%S); \
-		net_sfx="-sdio"; \
-		if [ "$(K230_NET)" = "usb_eth" ]; then net_sfx="-usbeth"; fi; \
-		if [ "$(K230_NET)" = "usb_wifi" ]; then net_sfx="-usbwifi"; fi; \
+		net_sfx="-sdio8189"; \
+		case "$(K230_NET)" in \
+			sdio_bl616) net_sfx="-sdiobl616" ;; \
+			usb_eth) net_sfx="-usbeth" ;; \
+			usb_wifi) net_sfx="-usbwifi" ;; \
+			sdio_wifi) net_sfx="-sdio8189" ;; \
+		esac; \
 		image_prefix="sysimage-sdcard"; \
 		if [ "$(CONF)" = "k230_rockbase_1g_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-1g$${net_sfx}"; fi; \
 		if [ "$(CONF)" = "k230_rockbase_2g_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-2g$${net_sfx}"; fi; \

@@ -288,11 +288,17 @@ sync_image_outputs()
 	local export_dir
 	local exported_image
 	local CONF=$(basename ${BASE_DIR})
-	# Network-mode suffix: sdio_wifi->-sdio  usb_eth->-usbeth  usb_wifi->-usbwifi
-	local net_sfx="-sdio"
-	case "${K230_NET:-sdio_wifi}" in
-	  usb_eth)  net_sfx="-usbeth" ;;
-	  usb_wifi) net_sfx="-usbwifi" ;;
+	# Network-mode suffix (canonical):
+	#   sdio_8189 -> -sdio8189
+	#   sdio_bl616 -> -sdiobl616
+	#   usb_eth -> -usbeth
+	#   usb_wifi -> -usbwifi
+	local net_sfx="-sdio8189"
+	case "${K230_NET:-sdio_8189}" in
+	  sdio_bl616|sdio-bl616) net_sfx="-sdiobl616" ;;
+	  usb_eth|usb-eth)       net_sfx="-usbeth" ;;
+	  usb_wifi|usb-wifi)     net_sfx="-usbwifi" ;;
+	  sdio_wifi|sdio_8189)   net_sfx="-sdio8189" ;;
 	esac
 	local image_prefix="sysimage-sdcard-rockbase-1g${net_sfx}"
 	# 从 release_version 中提取首个 YYYYMMDD-HHMMSS 时间戳，保证每次导出落到新目录
