@@ -326,16 +326,34 @@ wifi_start_service() {
   iw dev "$WLAN_DEV" set power_save off 2>/dev/null || true
   iwconfig "$WLAN_DEV" power off 2>/dev/null || true
 
+  wifi_load_config
+  wifi_console_log "boot wifi config: source=${WIFI_CONFIG_SOURCE} target_ssid=\"${WIFI_SSID}\" hidden=${WIFI_HIDDEN} pass_len=${#WIFI_PASS}"
   wifi_write_wpa_conf || return 1
-  printf '[rockbase_wifi] trying SSID "%s" on %s (source=%s)\n' "$WIFI_SSID" "$WLAN_DEV" "$WIFI_CONFIG_SOURCE"
+  wifi_console_log "trying SSID \"${WIFI_SSID}\" on ${WLAN_DEV} (source=${WIFI_CONFIG_SOURCE})"
 
   killall wpa_supplicant 2>/dev/null || true
   sleep 1
-  wpa_supplicant -D nl80211 -i "$WLAN_DEV" -c "$WIFI_WPA_CONF" -B >/dev/null 2>&1 || return 1
+  wpa_start_log=/tmp/rockbase-wpa_supplicant.start.log
+  start_ok=0
+  for drv in nl80211 wext; do
+    wpa_supplicant -D "$drv" -i "$WLAN_DEV" -c "$WIFI_WPA_CONF" -B >"$wpa_start_log" 2>&1 && {
+      wifi_console_log "wpa_supplicant started driver=${drv}"
+      start_ok=1
+      break
+    }
+    err_msg=$(tr '\n' ';' <"$wpa_start_log" 2>/dev/null | cut -c1-220)
+    wifi_console_log "wpa_supplicant start failed driver=${drv} err=${err_msg}"
+  done
+  [ "$start_ok" = "1" ] || return 1
 
   i=0
+  last_assoc_state=""
   while [ "$i" -lt "$WIFI_ASSOC_TIMEOUT" ]; do
     wifi_current_status
+    if [ "$WIFI_CONNECTED_STATE" != "$last_assoc_state" ]; then
+      wifi_console_log "assoc state=${WIFI_CONNECTED_STATE} ssid=\"${WIFI_CONNECTED_SSID}\" bssid=${WIFI_CONNECTED_BSSID} ip=${WIFI_CONNECTED_IP}"
+      last_assoc_state="$WIFI_CONNECTED_STATE"
+    fi
     [ "$WIFI_CONNECTED_STATE" = "COMPLETED" ] && break
     sleep 1
     i=$((i + 1))
@@ -345,10 +363,11 @@ wifi_start_service() {
 
   wifi_current_status
   if [ "$WIFI_CONNECTED_STATE" = "COMPLETED" ] || [ "$WIFI_CONNECTED_IP" != "-" ]; then
-    printf '[rockbase_wifi] connected SSID "%s", IP %s\n' "$WIFI_CONNECTED_SSID" "$WIFI_CONNECTED_IP"
+    wifi_console_log "connected ssid=\"${WIFI_CONNECTED_SSID}\" bssid=${WIFI_CONNECTED_BSSID} ip=${WIFI_CONNECTED_IP}"
     return 0
   fi
 
+  wifi_console_log "connect pending: state=${WIFI_CONNECTED_STATE} ssid=\"${WIFI_CONNECTED_SSID}\" bssid=${WIFI_CONNECTED_BSSID} ip=${WIFI_CONNECTED_IP} assoc_timeout=${WIFI_ASSOC_TIMEOUT}s dhcp_tries=${WIFI_DHCP_TRIES} late_watch=${WIFI_LATE_WATCH_TIMEOUT}s"
   printf '[rockbase_wifi] connect pending: state=%s ssid="%s" ip=%s assoc_timeout=%ss dhcp_tries=%s late_watch=%ss\n' \
     "$WIFI_CONNECTED_STATE" "$WIFI_CONNECTED_SSID" "$WIFI_CONNECTED_IP" \
     "$WIFI_ASSOC_TIMEOUT" "$WIFI_DHCP_TRIES" "$WIFI_LATE_WATCH_TIMEOUT"

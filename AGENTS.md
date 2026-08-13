@@ -67,7 +67,7 @@ Seed 同步流程见 skill: `rockbase-seed`。
 
 | 场景 | 使用 Skill |
 |------|-----------|
-| 构建镜像、导出 | `rockbase-build` |
+| 构建镜像、导出、切换网络模式（K230_NET） | `rockbase-build` |
 | 热部署、固化 | `rockbase-hotfix` |
 | 卡死/死锁调试 | `rockbase-freeze-debug` |
 | Seed 镜像管理 | `rockbase-seed` |

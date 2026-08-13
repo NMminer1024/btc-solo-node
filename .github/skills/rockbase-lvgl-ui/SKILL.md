@@ -69,3 +69,37 @@ make CONF=k230_rockbase_2g_defconfig rockbase_lcdui-rebuild
 ```
 
 然后再构建完整镜像。详见 `rockbase-build` skill。
+注意：若当前使用非默认网络模式（如 `usb_eth`），构建时须同时传入 `K230_NET=usb_eth`，否则模式会重置为 `sdio_wifi`。
+
+完整镜像烧录后，必须做网络模式互斥验收：
+
+- `usb_eth` 目标：`8189fs.ko` 不存在、`lsmod` 无 `8189fs`、无 `wlan0`、无 `wpa_supplicant/iwconfig`
+- `sdio_wifi` 目标：`8189fs.ko` 存在、`lsmod` 有 `8189fs`、有 `wlan0`、有 `wpa_supplicant/iwconfig`
+
+`usb_eth` 验收命令：
+
+```bash
+ssh root@<IP> '
+echo "[release]"; cat /etc/version/release_version
+find /lib/modules -name "8189fs.ko" | head -3
+lsmod | grep 8189 || true
+command -v wpa_supplicant >/dev/null && echo "FAIL:wpa_supplicant present" || echo "OK:no wpa_supplicant"
+command -v iwconfig >/dev/null && echo "FAIL:iwconfig present" || echo "OK:no iwconfig"
+[ -d /sys/class/net/wlan0 ] && echo "FAIL:wlan0 present" || echo "OK:no wlan0"
+'
+```
+
+`sdio_wifi` 验收命令：
+
+```bash
+ssh root@<IP> '
+echo "[release]"; cat /etc/version/release_version
+find /lib/modules -name "8189fs.ko" | head -3
+lsmod | grep 8189 || true
+command -v wpa_supplicant >/dev/null && echo "OK:wpa_supplicant present" || echo "FAIL:no wpa_supplicant"
+command -v iwconfig >/dev/null && echo "OK:iwconfig present" || echo "FAIL:no iwconfig"
+[ -d /sys/class/net/wlan0 ] && echo "OK:wlan0 present" || echo "FAIL:no wlan0"
+'
+```
+
+任一 `FAIL` 都先排查烧录目录后缀与目标模式是否一致（`-usbeth-` / `-sdio-`），再继续 UI 功能验证。

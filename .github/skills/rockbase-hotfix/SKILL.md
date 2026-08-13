@@ -71,6 +71,43 @@ ssh root@192.168.124.X '<验证命令>'
 
 ---
 
+## 固化后若需编译镜像（网络模式验收）
+
+若本次固化后还要编译并烧录镜像，且涉及 `K230_NET`，烧录后必须做互斥验收：
+
+- `usb_eth` 目标：`8189fs.ko` 不存在、`lsmod` 无 `8189fs`、无 `wlan0`、无 `wpa_supplicant/iwconfig`
+- `sdio_wifi` 目标：`8189fs.ko` 存在、`lsmod` 有 `8189fs`、有 `wlan0`、有 `wpa_supplicant/iwconfig`
+
+`usb_eth` 验收命令：
+
+```bash
+ssh root@<IP> '
+echo "[release]"; cat /etc/version/release_version
+find /lib/modules -name "8189fs.ko" | head -3
+lsmod | grep 8189 || true
+command -v wpa_supplicant >/dev/null && echo "FAIL:wpa_supplicant present" || echo "OK:no wpa_supplicant"
+command -v iwconfig >/dev/null && echo "FAIL:iwconfig present" || echo "OK:no iwconfig"
+[ -d /sys/class/net/wlan0 ] && echo "FAIL:wlan0 present" || echo "OK:no wlan0"
+'
+```
+
+`sdio_wifi` 验收命令：
+
+```bash
+ssh root@<IP> '
+echo "[release]"; cat /etc/version/release_version
+find /lib/modules -name "8189fs.ko" | head -3
+lsmod | grep 8189 || true
+command -v wpa_supplicant >/dev/null && echo "OK:wpa_supplicant present" || echo "FAIL:no wpa_supplicant"
+command -v iwconfig >/dev/null && echo "OK:iwconfig present" || echo "FAIL:no iwconfig"
+[ -d /sys/class/net/wlan0 ] && echo "OK:wlan0 present" || echo "FAIL:no wlan0"
+'
+```
+
+任一 `FAIL` 都按“镜像模式不一致”处理，先排查误烧录（目录后缀 `-usbeth-` / `-sdio-`）再继续业务验证。
+
+---
+
 ## 变更追踪
 
 热调试期间，在 session memory 中维护一个清单：

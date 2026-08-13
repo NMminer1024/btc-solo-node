@@ -3,7 +3,7 @@
 # Auto-connect to WiFi on boot
 #
 
-# Skip entirely when SDIO WiFi driver is not compiled in
+# Skip instantly when SDIO WiFi driver is not compiled into this image
 if ! find /lib/modules -name "8189fs.ko" 2>/dev/null | grep -q .; then
   exit 0
 fi

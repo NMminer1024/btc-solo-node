@@ -1,6 +1,6 @@
 ---
 name: rockbase-build
-description: 'Build Rockbase images and export to Windows. Use when: 构建镜像, 编译, make buildroot, rebuild, export image, 导出镜像, 打进镜像, LVGL rebuild, 镜像构建, compile image.'
+description: 'Build Rockbase images and export to Windows. Use when: 构建镜像, 编译, make buildroot, rebuild, export image, 导出镜像, 打进镜像, LVGL rebuild, 镜像构建, compile image, K230_NET, usb_eth, usb_wifi, sdio_wifi, 网络模式, 有线网卡, USB网卡, 网络接口, 切换网络, 网络变体.'
 ---
 
 # Rockbase 镜像构建与导出
@@ -14,6 +14,75 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 | WSL 导出 | 使用 `post-image.sh` 自动导出到 `/mnt/d/code/pony/IoT/k230/img/` |
 | 构建前准备 | 非 seed 构建需要 `mkdir -p /tmp/rockbase-empty-seed` |
 | Kernel patch 变更 | 只要改了 `buildroot-overlay/board/canaan/k230_rockbase/patches/linux/`，每个目标 defconfig 都必须先执行一次 `linux-dirclean` 再重编 |
+| 网络模式切换 | 使用 `K230_NET` 变量控制；详见下方 **网络接口模式（K230_NET）** 章节 |
+
+---
+
+## 网络接口模式（K230_NET）
+
+### 可用模式
+
+| `K230_NET` 值 | 说明 | 镜像目录后缀 |
+|---------------|------|-------------|
+| `sdio_wifi`（默认） | RTL8189FS SDIO WiFi，defconfig 基线 | `-sdio` |
+| `usb_eth` | USB 有线网卡互斥模式：不编译 SDIO WiFi 驱动、不安装 wpa_supplicant/wireless_tools | `-usbeth` |
+| `usb_wifi` | USB 无线（占位，驱动待调试），不编译 SDIO WiFi | `-usbwifi` |
+
+### 用法
+
+在 `make buildroot` 命令末尾追加 `K230_NET=<模式>`：
+
+```bash
+# sdio_wifi（默认，不写也等价）
+mkdir -p /tmp/rockbase-empty-seed
+make CONF=k230_rockbase_1g_defconfig buildroot \
+  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
+  K230_BLOCKDATA_SIZE=256M \
+  K230_IMAGE_GZIP=0
+
+# usb_eth — SDIO WiFi 完全不编译进镜像
+mkdir -p /tmp/rockbase-empty-seed
+make CONF=k230_rockbase_1g_defconfig buildroot \
+  K230_NET=usb_eth \
+  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
+  K230_BLOCKDATA_SIZE=256M \
+  K230_IMAGE_GZIP=0
+```
+
+### 模式切换时的内部行为
+
+脚本 `tools/rockbase_net_mode.sh` 在 `buildroot` target 最前面自动执行：
+
+1. 若 `K230_NET` 与上次构建相同 → 仅做幂等 sed overlay，直接构建。
+2. 若 `K230_NET` 发生变化 → 先 re-apply defconfig（清洁基线），再 dirclean WiFi 包，再 overlay。
+
+**不需要手动 `dirclean` WiFi 包**，切换模式时脚本自动处理。
+
+### 镜像目录命名
+
+导出目录格式：`sysimage-sdcard-rockbase-{1g,2g}-{net_suffix}-TIMESTAMP/`
+
+示例：
+- `sysimage-sdcard-rockbase-1g-sdio-20260813-102416/`
+- `sysimage-sdcard-rockbase-1g-usbeth-20260813-113037/`
+
+### 模式验收（互斥标准）
+
+`usb_eth` 目标（必须全部满足）：
+- 无 `8189fs.ko`
+- `lsmod` 无 `8189fs`
+- 无 `wlan0`
+- 无 `wpa_supplicant` 与 `iwconfig`
+
+`sdio_wifi` 目标（必须全部满足）：
+- 有 `8189fs.ko`
+- `lsmod` 有 `8189fs`
+- 有 `wlan0`
+- 有 `wpa_supplicant` 与 `iwconfig`
+
+如果任一条不满足，按“镜像与模式不一致”处理，不要继续做业务验证。
+
+---
 
 ## Kernel Patch 变更规则（重要）
 
@@ -55,16 +124,9 @@ make CONF=k230_rockbase_2g_defconfig buildroot \
   K230_IMAGE_GZIP=0
 ```
 
-### 本次踩坑案例
-
-- 已在源码中禁用 `0034-rockbase-sdhci-force-pio-dma-diagnostic.patch`
-- 1G 因为做过 `linux-dirclean`，重编后确实恢复 DMA
-- 2G 第一次直接 `make buildroot` 很快完成，但实际复用了旧的 `output/k230_rockbase_2g_defconfig/build/linux-*`
-- 因此第一次导出的 2G 镜像仍然是旧的 PIO kernel，不是预期中的 DMA 版本
-
 ## 默认构建命令
 
-### 1G 非 seed 最小镜像（默认）
+### 1G 非 seed 最小镜像（默认 sdio_wifi）
 
 ```bash
 mkdir -p /tmp/rockbase-empty-seed
@@ -74,7 +136,7 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
   K230_IMAGE_GZIP=0
 ```
 
-### 2G 非 seed 最小镜像（默认）
+### 2G 非 seed 最小镜像（默认 sdio_wifi）
 
 ```bash
 mkdir -p /tmp/rockbase-empty-seed
@@ -98,6 +160,40 @@ make CONF=k230_rockbase_2g_defconfig buildroot \
 make CONF=k230_rockbase_1g_defconfig copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/IoT/k230/img
 ```
 
+---
+
+## 编译陷阱
+
+### ⚠️ 从 target 手动删除包文件后，Buildroot 不会自动重装
+
+**场景**：手动 `rm` 了 target 里某个包的二进制（如 `wpa_supplicant`、`8189fs.ko`），后续 `make buildroot` 仍不会重装——因为 Buildroot 依据 `.stamp_target_installed` 判断包已安装。
+
+**后果举例**（本次亲历）：
+
+1. 临时试验中手动删除了 `output/.../target/usr/sbin/wpa_supplicant`
+2. 恢复 defconfig（加回 `BR2_PACKAGE_WPA_SUPPLICANT=y`）
+3. `make buildroot` 很快跑完，看起来正常
+4. 刷机后串口报 `wpa_supplicant: not found` — 二进制根本没进镜像
+
+**正确修复**：对受影响的包跑 dirclean，迫使 Buildroot 重新编译并安装到 target：
+
+```bash
+make CONF=k230_rockbase_1g_defconfig wpa_supplicant-dirclean
+make CONF=k230_rockbase_1g_defconfig wireless_tools-dirclean
+# 然后正常 make buildroot
+```
+
+**一般规律**：只要手动改动过 `output/.../target/` 目录里的包文件，对应的包就需要 dirclean。
+
+---
+
+### ⚠️ Kernel patch / rtl8189fs patch 变更必须 dirclean
+
+- `patches/linux/` 任意 patch 变更 → 每个目标 defconfig 都要 `linux-dirclean`
+- `patches/rtl8189fs/` 任意 patch 变更 → 要 `rtl8189fs-dirclean`
+
+---
+
 ## 构建后验证（重要）
 
 如果本次目标是验证 kernel patch 是否真的进镜像，构建后至少做一项源码侧检查和一项实机侧检查。
@@ -108,7 +204,6 @@ make CONF=k230_rockbase_1g_defconfig copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/Io
 
 ```bash
 sed -n '292,310p' output/k230_rockbase_1g_defconfig/build/linux-*/drivers/mmc/host/sdhci-of-kendryte.c
-sed -n '292,310p' output/k230_rockbase_2g_defconfig/build/linux-*/drivers/mmc/host/sdhci-of-kendryte.c
 ```
 
 判读：
@@ -124,6 +219,38 @@ sed -n '292,310p' output/k230_rockbase_2g_defconfig/build/linux-*/drivers/mmc/ho
 ssh root@<IP> 'dmesg | grep -iE "mmc[01]: SDHCI controller|using PIO|using ADMA|using DMA"'
 ```
 
+### K230_NET 验证
+
+```bash
+# usb_eth 互斥验证（任一 FAIL 都视为镜像不合格）
+ssh root@<IP> '
+echo "[release]"; cat /etc/version/release_version
+echo "[iface]"; ip link show | awk -F: "/^[0-9]+:/ {print \$2}" | sed "s/^ //"
+echo "[ko]"; find /lib/modules -name "8189fs.ko" | head -3
+echo "[lsmod]"; lsmod | grep 8189 || true
+command -v wpa_supplicant >/dev/null && echo "FAIL:wpa_supplicant present" || echo "OK:no wpa_supplicant"
+command -v iwconfig >/dev/null && echo "FAIL:iwconfig present" || echo "OK:no iwconfig"
+[ -d /sys/class/net/wlan0 ] && echo "FAIL:wlan0 present" || echo "OK:no wlan0"
+'
+
+# sdio_wifi 验证（任一 FAIL 都视为镜像不合格）
+ssh root@<IP> '
+echo "[release]"; cat /etc/version/release_version
+echo "[iface]"; ip link show | awk -F: "/^[0-9]+:/ {print \$2}" | sed "s/^ //"
+echo "[ko]"; find /lib/modules -name "8189fs.ko" | head -3
+echo "[lsmod]"; lsmod | grep 8189 || true
+command -v wpa_supplicant >/dev/null && echo "OK:wpa_supplicant present" || echo "FAIL:no wpa_supplicant"
+command -v iwconfig >/dev/null && echo "OK:iwconfig present" || echo "FAIL:no iwconfig"
+[ -d /sys/class/net/wlan0 ] && echo "OK:wlan0 present" || echo "FAIL:no wlan0"
+'
+```
+
+烧录时优先使用目录名带后缀的镜像：
+- `-usbeth-` 对应 `K230_NET=usb_eth`
+- `-sdio-` 对应 `K230_NET=sdio_wifi`
+
+若实机行为与后缀不一致，先排查误烧录或混用旧目录，再排查构建流程。
+
 不要只看源码目录或 commit 信息就默认镜像行为已经变化。
 
 ---
@@ -137,8 +264,6 @@ make CONF=k230_rockbase_1g_defconfig rockbase_lcdui-rebuild
 make CONF=k230_rockbase_2g_defconfig rockbase_lcdui-rebuild
 ```
 
-**不要**依赖后续的顶层 `buildroot` 命令去自动发现本地包 UI 改动。
-
 ---
 
 ## 镜像产物说明
@@ -146,25 +271,11 @@ make CONF=k230_rockbase_2g_defconfig rockbase_lcdui-rebuild
 | 产物 | 路径 |
 |------|------|
 | 构建中间文件 | `output/<CONF>/images/blockdata.ext4`、`sysimage-sdcard.img` |
-| Windows 导出 | `/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-{1g,2g}-<timestamp>/sysimage-sdcard.img` |
+| Windows 导出 | `/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-{1g,2g}-{net}-<timestamp>/sysimage-sdcard.img` |
 
 非 seed 镜像预期大小：`~2.4G ~ 2.6G`（rootfs 2G + blockdata 256M + 分区开销）。
 
 如果镜像约 32G，说明走到了 seed 路径或默认 24G blockdata，需要加 `K230_BLOCKDATA_SIZE=256M` 重新构建。
-
----
-
-## 编译陷阱
-
-参考 `docs/rockbase-project-overview.md` 和 `/memories/repo/build-notes.md`：
-
-- WSL 下 Buildroot 可能拒绝含 Windows 路径的 PATH，需要清理 PATH
-- WiFi 驱动 `8189fs.ko` 可能残留旧模块，必要时 `rtl8189fs-dirclean rtl8189fs`
-- 共享 `patches/linux/` 改动后，如果没对对应 defconfig 先做 `linux-dirclean`，镜像可能静默复用旧 kernel
-- LVGL 8.3.7 不支持 `lv_indev_set_gesture_limit`
-- `rockbase_lcdui` 调用 `drmModeAtomicCommit` 前需要 `display_wait_vsync`
-- rootfs 基线为 2G（非 6G）
-- 默认导出后 WSL 侧大镜像会被自动删除（除非 `K230_KEEP_WSL_IMAGES=1`）
 
 ---
 

@@ -3,6 +3,9 @@ BR_NAME = buildroot-2025.02.1
 BR_SRC_DIR = output/$(BR_NAME)
 BR_OVERLAY_DIR = buildroot-overlay
 
+# Network interface mode: sdio_wifi (default) | usb_eth | usb_wifi (placeholder)
+K230_NET ?= sdio_wifi
+
 # Buildroot 不允许 PATH 中有空格或不可见字符，自动清洗
 export PATH := $(shell echo "$$PATH" | tr ':' '\n' | grep -v '[[:space:]]' | tr '\n' ':' | sed 's/:$$//')
 
@@ -44,9 +47,12 @@ copy-img:
 	ver_file="$(BRW_BUILD_DIR)/target/etc/version/release_version"; \
 	build_stamp=$$(grep -m1 '^sdk:' "$$ver_file" 2>/dev/null | grep -oE '[0-9]{8}-[0-9]{6}' | head -n1); \
 	[ -n "$$build_stamp" ] || build_stamp=$$(date +%Y%m%d-%H%M%S); \
+		net_sfx="-sdio"; \
+		if [ "$(K230_NET)" = "usb_eth" ]; then net_sfx="-usbeth"; fi; \
+		if [ "$(K230_NET)" = "usb_wifi" ]; then net_sfx="-usbwifi"; fi; \
 		image_prefix="sysimage-sdcard"; \
-		if [ "$(CONF)" = "k230_rockbase_1g_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-1g"; fi; \
-		if [ "$(CONF)" = "k230_rockbase_2g_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-2g"; fi; \
+		if [ "$(CONF)" = "k230_rockbase_1g_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-1g$${net_sfx}"; fi; \
+		if [ "$(CONF)" = "k230_rockbase_2g_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-2g$${net_sfx}"; fi; \
 		export_dir="$(IMG_OUTPUT_DIR)/$$image_prefix-$$build_stamp"; \
 	if [ -z "$$img" ]; then \
 		echo "错误: 未找到镜像文件，请先执行 make CONF=$(CONF) 编译"; \
@@ -65,7 +71,8 @@ ddr_test_img_% :sync buildroot ###128/512/1024/2048
 	@tools/ddr_test_img.sh  $*
 
 buildroot: sync $(BRW_BUILD_DIR)/.config
-	make -C $(BRW_BUILD_DIR) all   BR2_PRIMARY_SITE=$(BR2_PRIMARY_SITE)
+	@tools/rockbase_net_mode.sh "$(K230_NET)" "$(BRW_BUILD_DIR)" "$(BR_SRC_DIR)" "$(CONF)"
+	make -C $(BRW_BUILD_DIR) all   BR2_PRIMARY_SITE=$(BR2_PRIMARY_SITE) K230_NET=$(K230_NET)
 
 .PHONY:dl
 dl:   $(BRW_BUILD_DIR)/.config
