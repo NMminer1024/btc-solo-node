@@ -3,6 +3,11 @@
 # Auto-connect to WiFi on boot
 #
 
+# Skip entirely when SDIO WiFi driver is not compiled in
+if ! find /lib/modules -name "8189fs.ko" 2>/dev/null | grep -q .; then
+  exit 0
+fi
+
 LIB=/usr/bin/rockbase_wifi.sh
 [ -r "$LIB" ] && . "$LIB"
 
