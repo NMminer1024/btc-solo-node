@@ -1,6 +1,6 @@
 # Rockbase 当前交接文档
 
-更新时间：2026-08-12 14:40 CST。
+更新时间：2026-08-13 CST。
 
 本文档是新 agent 接手入口。更完整的背景见：
 
@@ -306,3 +306,77 @@ make CONF=k230_rockbase_2g_defconfig buildroot \
 关键提醒：**不要指望看门狗或任何“软件定时器 + panic”探针兜住主问题**。现跑的 `0006` 已内置 60s“SDIO op 卡死 panic”，现场从未触发，证明卡死时定时器已停（关中断硬 lockup）；WDT pretimeout 与软件探针有同一盲区，只对“软 hang”子集有效。
 
 当前尚未动手改代码/配置，等用户确认后再按轨道 B1 →（可选）A' → A 推进。
+
+## 2026-08-13 补充：绕过 SDIO 的 USB 网络替代方案（WiFi / 以太网）
+
+### 决策背景
+
+RTL8189FS SDIO 路径一直是 freeze 最强主嫌疑，且前几轮验证显示是“无 panic/oops 的硬 lockup”，软件抓手（hung_task/panic/pstore）难以定位。因此决策**不再继续 debug SDIO 静默卡死，改为用 USB 网络设备绕过整条 SDIO/RTL8189FS 路径**。硬件到手后按本章方案落地。
+
+### 已验证的 USB 能力基线（1G/2G 内核 .config 均已具备）
+
+- USB host 控制器：`CONFIG_USB_DWC2=y` + `CONFIG_USB_DWC2_HOST=y`（已启用，无 DUAL_ROLE）。
+- 已内置 USB 以太网驱动：
+  - `CONFIG_USB_RTL8152=y`（RTL8152/8153）
+  - `CONFIG_USB_RTL8153_ECM=y`
+  - `CONFIG_USB_NET_AX8817X=y`（AX88772/AX88772A/AX88772B）
+  - `CONFIG_USB_NET_AX88179_178A=y`（AX88179）
+  - `CONFIG_USB_NET_CDCETHER=y` / `CONFIG_USB_NET_CDC_NCM=y`
+  - `CONFIG_USB_USBNET=y`
+- 无线协议栈：`CONFIG_CFG80211=y` + `CONFIG_MAC80211=y`（已启用）。
+- 当前 WiFi 驱动状态：`CONFIG_RTL8XXXU=y`（但**不绑定 RTL8192CU**，见下）；`CONFIG_MT7601U`、`CONFIG_RT2X00` 均为 `not set`，需按需新增。
+
+### 方案一：USB 以太网（推荐，零内核改动）
+
+**无需改内核**，USB 以太网驱动已全部内置，只需换硬件 + 改网络初始化脚本。
+
+可选芯片（mainline 均有稳定支持）：
+
+| 芯片 | USB ID | 内核驱动 | 说明 |
+|------|--------|----------|------|
+| AX88772(B) | `0b95:772b` / `0b95:7720` | `ax8817x`（已内置） | 百兆，绿联 USB2.0 百兆网卡大概率是此芯片 |
+| RTL8152/8153 | `0bda:8152` / `0bda:8153` | `r8152`（已内置） | 百兆/千兆 |
+| AX88179 | `0b95:1790` | `ax88179_178a`（已内置） | 千兆 |
+
+落地步骤：
+
+1. 硬件插上后 `lsusb` 确认 USB ID 落在上表。
+2. 网络初始化脚本从 `wlan0` 改为 `eth0`（或 `enx*` 可预测名，取决于 udev/mdev 规则）。
+3. 排除 8189fs（见下文“排除 8189fs 的唯一可靠方法”）。
+4. 重编 rootfs 并烧录（内核未变，**无需 `linux-dirclean`**）。
+
+### 方案二：USB WiFi（需新增驱动 + 固件）
+
+可选芯片：
+
+| 芯片 | USB ID | 内核驱动 | 需要做的事 |
+|------|--------|----------|-----------|
+| MT7601U | `148f:7601` | `mt7601u` | 加 `CONFIG_MT7601U=y` + 固件 `mt7601u.bin` |
+| RT5370 | `148f:5370` / `1814:5370` | `rt2800usb` | 加 `CONFIG_RT2X00=y` + `CONFIG_RT2800USB=y` |
+| MT7612U | `0e8d:7612` | `mt76x2u` | 加 `CONFIG_MT76x2U=y` + 固件（可选） |
+
+**已排除：RTL8192CU（`0bda:8178`）**。虽然内核有 `CONFIG_RTL8XXXU=y`，但 mainline `rtl8xxxu` 的 ID 表**不绑定 RTL8192CU**（Ubuntu 用的是已被删除的 staging `rtl8192cu`），实测板子上无法 probe。不要再追这条。
+
+落地步骤（以 MT7601U 为例）：
+
+1. `linux.fragment` 加 `CONFIG_MT7601U=y`。
+2. 把 `mt7601u.bin` 放到 `rootfs_overlay/lib/firmware/mt7601u.bin`。
+3. 排除 8189fs（见下文）。
+4. `make CONF=k230_rockbase_1g_defconfig linux-dirclean`（fragment 改了必须 dirclean，见仓库 AGENTS.md 规则）。
+5. 重编 buildroot + 烧录。
+
+固件时序注意：builtin（`=y`）的 USB WiFi 驱动可能在 rootfs 挂载前就请求固件。若启动日志出现 firmware load 失败，改用 `=m`，或确认固件随 rootfs 就位。当前 `rootfs_overlay` 的固件会进 rootfs，时序上通常足够，但需留意。
+
+### 排除 8189fs 的唯一可靠方法
+
+关键事实：
+
+- `S38wifi` → `rockbase_wifi.sh`（`rootfs_overlay/usr/bin/rockbase_wifi.sh`）第 241-242 行**显式 `modprobe 8189fs`**，不依赖 modprobe 自动加载别名。
+- BusyBox 的 `modprobe` **支持 `blacklist`（仅对别名自动加载生效），但不支持 `install` 指令**。所以 `install 8189fs /bin/false` 这种写法无效。
+- 因此**唯一可靠排除 8189fs 的方法是：从 defconfig 移除 `BR2_PACKAGE_RTL8189FS`**（即 `# BR2_PACKAGE_RTL8189FS is not set`），让 `8189fs.ko` 根本不进入镜像。1G 和 2G 都要改各自 defconfig。
+
+### 建议
+
+- **优先 USB 以太网**：零内核改动、驱动全内置、无固件/射频复杂度，最稳；等 AX88772 网卡到手即可落地。
+- 若必须无线，选 **MT7601U**（mainline 支持最好、功耗低、固件单一）。
+- 无论选哪个，落地前都要先 `lsusb` 确认实际芯片 ID，再决定是否改内核。
