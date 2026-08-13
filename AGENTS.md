@@ -15,6 +15,7 @@
 | `192.168.124.15` | 1G | mmc0=SDIO WiFi, mmc1=SD card |
 | `192.168.124.21` | 1G | mmc0=SDIO WiFi, mmc1=SD card |
 | `192.168.124.23` | 2G | mmc0=SD card, mmc1=SDIO WiFi |
+| `192.168.124.30` | 1G | mmc0=SDIO WiFi, mmc1=SD card；当前烧 usb_eth 专属镜像 |
 
 ## Seed 源设备
 
@@ -73,6 +74,7 @@ Seed 同步流程见 skill: `rockbase-seed`。
 | Seed 镜像管理 | `rockbase-seed` |
 | LVGL/LCD UI 开发 | `rockbase-lvgl-ui` |
 | Web/API 开发 | `rockbase-web` |
+| 网络测速（停服务→验CPU→SSH吞吐测试） | `rockbase-netspeed` |
 
 ## 参考文档
 
