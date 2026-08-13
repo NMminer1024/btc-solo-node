@@ -7,6 +7,8 @@ BR_OVERLAY_DIR = buildroot-overlay
 #   sdio_8189 (default) | sdio_bl616 (placeholder) | usb_eth | usb_wifi
 # Backward compatible aliases: sdio_wifi -> sdio_8189
 K230_NET ?= sdio_8189
+K230_NET_DEBUG_COEXIST ?= 0
+export K230_NET_DEBUG_COEXIST
 
 # Buildroot 不允许 PATH 中有空格或不可见字符，自动清洗
 export PATH := $(shell echo "$$PATH" | tr ':' '\n' | grep -v '[[:space:]]' | tr '\n' ':' | sed 's/:$$//')
@@ -49,13 +51,18 @@ copy-img:
 	ver_file="$(BRW_BUILD_DIR)/target/etc/version/release_version"; \
 	build_stamp=$$(grep -m1 '^sdk:' "$$ver_file" 2>/dev/null | grep -oE '[0-9]{8}-[0-9]{6}' | head -n1); \
 	[ -n "$$build_stamp" ] || build_stamp=$$(date +%Y%m%d-%H%M%S); \
+	mode_state=$$(tr -d '\r\n' < "$(BRW_BUILD_DIR)/.k230_net_mode" 2>/dev/null || printf '%s|debug=%s' "$(K230_NET)" "$(K230_NET_DEBUG_COEXIST)"); \
+	mode_name=$${mode_state%%|*}; \
+	mode_debug=$$(printf '%s' "$$mode_state" | awk -F'debug=' '{print $$2}' | cut -d'|' -f1); \
+	mode_debug=$${mode_debug:-0}; \
 		net_sfx="-sdio8189"; \
-		case "$(K230_NET)" in \
+		case "$$mode_name" in \
 			sdio_bl616) net_sfx="-sdiobl616" ;; \
 			usb_eth) net_sfx="-usbeth" ;; \
 			usb_wifi) net_sfx="-usbwifi" ;; \
 			sdio_wifi) net_sfx="-sdio8189" ;; \
 		esac; \
+		if [ "$$mode_debug" = "1" ] && [ "$$mode_name" = "usb_eth" ]; then net_sfx="-usbethdbg"; fi; \
 		image_prefix="sysimage-sdcard"; \
 		if [ "$(CONF)" = "k230_rockbase_1g_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-1g$${net_sfx}"; fi; \
 		if [ "$(CONF)" = "k230_rockbase_2g_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-2g$${net_sfx}"; fi; \
@@ -78,7 +85,7 @@ ddr_test_img_% :sync buildroot ###128/512/1024/2048
 
 buildroot: sync $(BRW_BUILD_DIR)/.config
 	@tools/rockbase_net_mode.sh "$(K230_NET)" "$(BRW_BUILD_DIR)" "$(BR_SRC_DIR)" "$(CONF)"
-	make -C $(BRW_BUILD_DIR) all   BR2_PRIMARY_SITE=$(BR2_PRIMARY_SITE) K230_NET=$(K230_NET)
+	K230_NET_DEBUG_COEXIST=$(K230_NET_DEBUG_COEXIST) make -C $(BRW_BUILD_DIR) all   BR2_PRIMARY_SITE=$(BR2_PRIMARY_SITE) K230_NET=$(K230_NET) K230_NET_DEBUG_COEXIST=$(K230_NET_DEBUG_COEXIST)
 
 .PHONY:dl
 dl:   $(BRW_BUILD_DIR)/.config

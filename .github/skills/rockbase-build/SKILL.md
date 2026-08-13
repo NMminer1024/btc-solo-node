@@ -51,7 +51,24 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
+
+# 临时调试共存：usb_eth 里保留 8189 WiFi 用户态和驱动
+mkdir -p /tmp/rockbase-empty-seed
+make CONF=k230_rockbase_1g_defconfig buildroot \
+  K230_NET=usb_eth \
+  K230_NET_DEBUG_COEXIST=1 \
+  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
+  K230_BLOCKDATA_SIZE=256M \
+  K230_IMAGE_GZIP=0
 ```
+
+### 临时共存开关
+
+`K230_NET_DEBUG_COEXIST=1` 是临时调试开关，只建议在 USB WiFi / USB ETH bring-up 期间使用。
+
+当它与 `K230_NET=usb_eth` 同时设置时，构建会保留 `RTL8189FS`、`wpa_supplicant` 和 `iwconfig`，方便让 `8189` 与 `eth` 同时在线调试。
+
+导出目录后缀会变成 `-usbethdbg`，便于和正式 `usb_eth` 镜像区分。
 
 ### 互斥原则（关键）
 
