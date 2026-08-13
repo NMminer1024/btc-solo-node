@@ -65,9 +65,9 @@ prev_debug="$(printf '%s' "${prev_debug:-0}")"
 # Family package switches (only these are toggled by K230_NET)
 PKG_WIFI_USER="WPA_SUPPLICANT WPA_SUPPLICANT_WEXT WPA_SUPPLICANT_CLI WPA_SUPPLICANT_PASSPHRASE WIRELESS_TOOLS WIRELESS_TOOLS_LIB"
 PKG_SDIO_8189="RTL8189FS"
+PKG_SDIO_BL616="BL616_SDIO"
 PKG_USB_WIFI="AIC8800"
 PKG_DISABLED_ALWAYS="AIC8800_SDIO RTL8733BS"
-PKG_SDIO_BL616=""
 
 if [ "${prev}" != "${K230_NET}" ] || [ "${prev_debug}" != "${DEBUG_COEXIST}" ]; then
   echo "[K230_NET] mode switch: ${prev} -> ${K230_NET} (debug_coexist=${prev_debug} -> ${DEBUG_COEXIST})"
@@ -77,7 +77,7 @@ if [ "${prev}" != "${K230_NET}" ] || [ "${prev_debug}" != "${DEBUG_COEXIST}" ]; 
     # Clean WiFi package build dirs so they are rebuilt (or skipped) correctly.
         echo "[K230_NET] dirclean net-related packages from previous mode..."
         make -C "${BRW_BUILD_DIR}" rtl8189fs-dirclean wpa_supplicant-dirclean wireless_tools-dirclean \
-          aic8800-dirclean aic8800_sdio-dirclean 2>/dev/null || true
+          aic8800-dirclean aic8800_sdio-dirclean bl616_sdio-dirclean 2>/dev/null || true
     # dirclean only clears build dirs, not already-installed target files. Remove
     # stale WiFi artifacts from target so disabled packages don't leak into the image.
     echo "[K230_NET] removing stale WiFi artifacts from target..."
@@ -99,7 +99,11 @@ if [ "${prev}" != "${K230_NET}" ] || [ "${prev_debug}" != "${DEBUG_COEXIST}" ]; 
       rm -f "${TARGET}"/lib/libiw.so.* 2>/dev/null || true
     fi
     find "${TARGET}/lib/modules" -name 'aic*.ko' -delete 2>/dev/null || true
+        find "${TARGET}/lib/modules" -name 'mr_sdio.ko' -delete 2>/dev/null || true
     rm -rf "${TARGET}/lib/firmware/aic8800D80" 2>/dev/null || true
+        rm -f "${TARGET}/usr/sbin/bflbwifid" \
+          "${TARGET}/usr/bin/bflbwifictrl" \
+          "${TARGET}/etc/init.d/S38bl616wifi" 2>/dev/null || true
     # Refresh module dependency files so the removed module is not referenced.
     KVER=$(ls "${TARGET}/lib/modules" 2>/dev/null | head -1)
     if [ -n "${KVER}" ] && [ -x "${BRW_BUILD_DIR}/host/sbin/depmod" ]; then
@@ -108,7 +112,7 @@ if [ "${prev}" != "${K230_NET}" ] || [ "${prev_debug}" != "${DEBUG_COEXIST}" ]; 
 fi
 
 # Start from strict disabled baseline for all managed families.
-for pkg in ${PKG_WIFI_USER} ${PKG_SDIO_8189} ${PKG_USB_WIFI} ${PKG_DISABLED_ALWAYS}; do
+for pkg in ${PKG_WIFI_USER} ${PKG_SDIO_8189} ${PKG_SDIO_BL616} ${PKG_USB_WIFI} ${PKG_DISABLED_ALWAYS}; do
     unset_pkg "${pkg}"
 done
 
@@ -120,8 +124,8 @@ case "${K230_NET}" in
     done
     ;;
   sdio_bl616)
-    echo "[K230_NET] overlay: exclusive mode sdio_bl616 (placeholder, no driver package yet)"
-    for pkg in ${PKG_WIFI_USER}; do
+    echo "[K230_NET] overlay: exclusive mode sdio_bl616"
+    for pkg in ${PKG_SDIO_BL616}; do
         set_pkg_y "${pkg}"
     done
     ;;

@@ -1,0 +1,5 @@
+config BR2_PACKAGE_BL616_SDIO
+	bool "BL616 SDIO WiFi host stack"
+	depends on BR2_LINUX_KERNEL
+	help
+	  Bouffalo Lab BL616/BL618 SDIO host-router module and control tools.
