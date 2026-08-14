@@ -205,6 +205,21 @@ make CONF=k230_rockbase_1g_defconfig copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/Io
 
 ---
 
+## 编译输出必须可见
+
+执行 `make buildroot` 或任何编译命令时，**必须让编译输出直接显示在终端**，方便开发者观察进度和排查错误。
+
+**禁止做法**：
+- 不要加 `&> /dev/null`、`> /dev/null 2>&1`、`| tee /dev/null` 等重定向隐藏输出
+- 不要用 `make -s`（silent 模式）
+- 不要用后台模式（`mode=async`）执行编译，编译是一-shot 任务，应用 `mode=sync`
+
+**正确做法**：
+- 直接在前台运行 `make CONF=... buildroot ...`，让完整输出流显示在终端
+- 输出量较大时，Buildroot 自身会控制输出粒度，不需要额外压制
+
+---
+
 ## 编译陷阱
 
 ### ⚠️ 从 target 手动删除包文件后，Buildroot 不会自动重装
