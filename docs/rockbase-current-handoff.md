@@ -1,6 +1,6 @@
 # Rockbase 当前交接文档
 
-更新时间：2026-08-13 CST。
+更新时间：2026-08-14 CST。
 
 本文档是新 agent 接手入口。更完整的背景见：
 
@@ -84,7 +84,59 @@
 - `K230_BLOCKDATA_SIZE=256M`。
 - `swap` 已禁用，两台 `/proc/swaps` 均为空。
 - 默认不要构建 seed 镜像，除非用户明确说“带 seed”。
+## 待办：USB WiFi 网卡升级计划（RTL8821CU 5G）
 
+**状态**：已购买，待设备到货。
+
+**现状分析（2026-08-14）**：
+
+- 板子 `192.168.124.27` 当前用的是 **MediaTek MT7601U 2.4G-only USB WiFi 网卡**。
+- 实测网速：停服务后 CPU idle 93%，SSH 吞吐仍只有 **1~2 MB/s**。
+- 根因：单流 20MHz 802.11n（信道 13，信号 -53dBm），物理天花板 72.2 Mbps → 现实吞吐 1~2 MB/s。
+- AP 侧限制：路由器 `NMTech-2.4G` 仅支持 20MHz，无法开启 40MHz；同时 5G 频段 `RockBase_5G` 现成可用（主机侧 866.7 Mbps 已连接）。
+
+**已购网卡规格**：
+
+- 芯片：**RTL8821CU**（Realtek，单流 AC 433 Mbps）
+- 频段：2.4G + 5G 双频
+- 接口：USB 2.0
+- 价格：约 ¥20（淘宝）
+- Linux 驱动：K230 内核 6.6 已内置 `rtw88` 驱动支持 `rtw8821cu`
+
+**预期收益**：
+
+- 连接 `RockBase_5G` 5G 频段，单流 AC 协商 250~433 Mbps。
+- 受限于 K230 USB 2.0 控制器（480 Mbps High-Speed），现实吞吐 **~20~30 MB/s**（较现在提升 10~15 倍）。
+- 与有线 USB-ETH 百兆（12 MB/s）持平或略优。
+
+**内核改动计划**：
+
+待设备到货后，执行以下三步：
+
+1. **改内核配置**（两个 defconfig）：
+   - `CONFIG_RTW88_8821CU=m`（启用模块）
+   - 对象文件：`output/k230_rockbase_1g_defconfig/.config` 和 `output/k230_rockbase_2g_defconfig/.config`
+
+2. **加固件到 rootfs**：
+   - 源文件：`linux-firmware` 中的 `rtw8821c_fw.bin`
+   - 目标路径：`buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/lib/firmware/rtw8821c_fw.bin`
+
+3. **重编镜像**：
+   - 对 1G/2G 各执行一次 `rockbase-build` 标准编译流程
+   - 执行 `linux-dirclean` 确保内核重新编译（共享 Linux build 目录）
+   - 导出新镜像到 Windows `/mnt/d/code/pony/IoT/k230/img/`
+
+**预检清单**：
+
+- [ ] RTL8821CU USB 网卡设备已到货并确认型号
+- [ ] 改 1G defconfig，启用 `CONFIG_RTW88_8821CU=m`
+- [ ] 改 2G defconfig，启用 `CONFIG_RTW88_8821CU=m`
+- [ ] 从 linux-firmware 源下载 `rtw8821c_fw.bin`
+- [ ] 复制固件到 rootfs overlay
+- [ ] 1G 完整编译 + 导出
+- [ ] 2G 完整编译 + 导出
+- [ ] 烧录到对应板子进行验证测速
+- [ ] 确认吞吐提升到 20~30 MB/s 预期
 ## 已验证的运行特征
 
 两台都具备以下能力：
