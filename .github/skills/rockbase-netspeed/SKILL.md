@@ -132,7 +132,9 @@ done
 | 接口 | CPU idle | Run 1 | Run 2 | Run 3 | 平均 |
 |------|---------|-------|-------|-------|------|
 | wlan0 (SDIO WiFi) | 95% | 1.2 MB/s | 1.0 MB/s | 0.9 MB/s | **~1.0 MB/s** |
-| eth0 (USB ETH) | 97% | 12.0 MB/s | 12.1 MB/s | 12.1 MB/s | **~12.1 MB/s** |
+| eth0 (USB ETH 百兆转换器) | 97% | 12.0 MB/s | 12.1 MB/s | 12.1 MB/s | **~12.1 MB/s** |
+
+> 注：此 12.1 MB/s 基线用的是**百兆** USB-ETH 转换器（100 Mbps），12.1 MB/s × 8 ≈ 96 Mbps，已顶满百兆口。换千兆 RTL8153 后见下方「千兆口 + RTL8153」章节（~20.4 MB/s）。
 
 **停服务后 SDIO WiFi 速度没有变化** —— 与服务运行中（1.0 MB/s）完全一致。
 
@@ -145,7 +147,44 @@ SDIO WiFi 的 1 MB/s 瓶颈**不是** CPU、不是 SSH 加密、也不是我们�
 - chacha20-poly1305 cipher 替换 aes-128-ctr 后同样 ~955 kB/s（排除加密开销）
 - 推断原因：RTL8189FS 驱动未实现有效的 A-MPDU 帧聚合，每帧都经历独立 SDIO CMD53 事务，SDIO 总线往返延迟累积导致吞吐受限
 
-对比结论：USB ETH 在相同 CPU 空闲状态下稳定 12 MB/s，为 SDIO WiFi 的 **12 倍**。
+对比结论：USB ETH（**百兆**转换器）在相同 CPU 空闲状态下稳定 12 MB/s，为 SDIO WiFi 的 **12 倍**。此 12 MB/s 受**百兆网卡**（100 Mbps）限速，非 USB 2.0 上限。
+
+### USB ETH 千兆口 + RTL8153 上限（2026-08-14 实测）
+
+**测试条件**：交换机已换千兆口，网卡为 Realtek **RTL8153**（USB 3.0 千兆芯片），板子 USB 控制器为 `dwc2_hsotg`（High-Speed，仅 USB 2.0）。
+
+**链路协商**：`eth0 = 1000/full`（网卡芯片支持千兆），但 USB 设备实际运行在 `speed=480`（USB 2.0 High-Speed）。
+
+**实测吞吐**（停服务后，CPU idle 88%）：
+
+| Run | 吞吐 |
+|-----|------|
+| 1 | 19.6 MB/s |
+| 2 | 20.5 MB/s |
+| 3 | 21.0 MB/s |
+| 平均 | **~20.4 MB/s** |
+
+**结论：已触碰 USB 2.0 物理天花板。**
+
+- USB 2.0 High-Speed 理论 480 Mbps（60 MB/s），bulk transfer 有效 ~80%，纯 USB 层上限 ~48 MB/s
+- 叠加 USB↔以太网 + TCP/IP + SSH 加密开销后，现实天花板 ~20–25 MB/s
+- 瓶颈**不在**交换机（已千兆）、**不在**网卡芯片（RTL8153 支持千兆），而在板子 USB 控制器只有 USB 2.0
+- K230 无 USB 3.0 主控，USB 有线无法突破 ~20 MB/s；SDIO WiFi 更慢（~1 MB/s）
+
+**验证是否 USB 2.0 限速的命令**：
+
+```bash
+ssh root@<IP> '
+cat /sys/class/net/eth0/speed          # 期望 1000
+cat /sys/class/net/eth0/duplex         # 期望 full
+lsusb | grep -i lan                    # 期望 RTL8153 (0bda:8153)
+for d in /sys/bus/usb/devices/[0-9]*/; do
+  [ -f "$d/product" ] && echo "$(basename $d): $(cat $d/product) [$(cat $d/speed)]"
+done                                   # 期望网卡 speed=480 → USB 2.0
+'
+```
+
+判读：若网卡 `speed=480` 而 `eth0 speed=1000`，说明瓶颈是 USB 2.0 物理限速，非网络/网卡问题。
 
 ### 判断依据
 
@@ -154,7 +193,8 @@ SDIO WiFi 的 1 MB/s 瓶颈**不是** CPU、不是 SSH 加密、也不是我们�
 | SDIO 停服务后明显提升（>3 MB/s） | CPU 是主要瓶颈 |
 | SDIO 停服务后无变化（仍 ~1 MB/s） | ✅ 已确认：驱动/硬件是瓶颈，与 CPU 无关 |
 | ETH 停服务后明显提升（>20 MB/s） | 背景服务在抢网络带宽 |
-| ETH 停服务后无明显变化（~12 MB/s） | ✅ 已确认：USB ETH dongle 自身限速约 12 MB/s |
+| ETH 停服务后无明显变化（~12 MB/s） | ✅ 已确认：百兆 USB ETH 转换器（100 Mbps）限速 |
+| ETH 千兆口 + RTL8153（~20 MB/s） | ✅ 已确认：USB 2.0 控制器物理上限（见上方千兆口章节） |
 
 ---
 
