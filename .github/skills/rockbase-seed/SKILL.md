@@ -126,7 +126,7 @@ BLOCK_SEED_DIR > ROCKBASE_BLOCK_SEED_DIR > seed/root-block
 sshpass -p 'sunrise' ssh sunrise@192.168.124.12 '/home/sunrise/Desktop/bitcoind/stop.sh'
 sleep 5
 
-# 交互式同步
+# ⚠️ 重要：前台运行，禁止重定向输出（不要用 `> /tmp/xxx.log` 或 `| tail`），以便看到 rsync 进度
 REMOTE_HOST=192.168.124.12 \
 REMOTE_USER=sunrise \
 REMOTE_PASSWORD=sunrise \

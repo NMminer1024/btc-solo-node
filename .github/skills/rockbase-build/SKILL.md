@@ -5,6 +5,26 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 
 # Rockbase 镜像构建与导出
 
+---
+
+## ⚠️⚠️⚠️ 铁律：编译输出必须可见 ⚠️⚠️⚠️
+
+> **这是本 skill 最重要的规则，每次构建前请必读！**
+>
+> 执行 `make buildroot` 或任何编译命令时，**必须让编译输出直接显示在终端**，方便开发者观察进度和排查错误。
+>
+> **❌ 禁止做法：**
+> - 不要加 `&> /dev/null`、`> /dev/null 2>&1`、`| tee /dev/null` 等重定向隐藏输出
+> - 不要用 `| tail` 截断输出
+> - 不要用 `make -s`（silent 模式）
+> - 不要用后台模式（`mode=async`）执行编译，编译是一-shot 任务，应用 `mode=sync`
+>
+> **✅ 正确做法：**
+> - 直接在前台运行 `make CONF=... buildroot ...`，让完整输出流显示在终端
+> - 输出量较大时，Buildroot 自身会控制输出粒度，不需要额外压制
+
+---
+
 ## 构建规则总览
 
 | 规则 | 说明 |
@@ -202,21 +222,6 @@ make CONF=k230_rockbase_2g_defconfig buildroot \
 ```bash
 make CONF=k230_rockbase_1g_defconfig copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/IoT/k230/img
 ```
-
----
-
-## 编译输出必须可见
-
-执行 `make buildroot` 或任何编译命令时，**必须让编译输出直接显示在终端**，方便开发者观察进度和排查错误。
-
-**禁止做法**：
-- 不要加 `&> /dev/null`、`> /dev/null 2>&1`、`| tee /dev/null` 等重定向隐藏输出
-- 不要用 `make -s`（silent 模式）
-- 不要用后台模式（`mode=async`）执行编译，编译是一-shot 任务，应用 `mode=sync`
-
-**正确做法**：
-- 直接在前台运行 `make CONF=... buildroot ...`，让完整输出流显示在终端
-- 输出量较大时，Buildroot 自身会控制输出粒度，不需要额外压制
 
 ---
 

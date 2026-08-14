@@ -6,7 +6,7 @@
 #   sdio_8189  — RTL8189FS SDIO WiFi only
 #   sdio_bl616 — BL616 SDIO WiFi placeholder (driver not wired yet)
 #   usb_eth    — USB wired ethernet only
-#   usb_wifi   — USB WiFi only (AIC path)
+#   usb_wifi   — USB WiFi only (mt7601u)
 set -e
 
 K230_NET_RAW="${1:-sdio_8189}"
@@ -66,8 +66,8 @@ prev_debug="$(printf '%s' "${prev_debug:-0}")"
 PKG_WIFI_USER="WPA_SUPPLICANT WPA_SUPPLICANT_WEXT WPA_SUPPLICANT_CLI WPA_SUPPLICANT_PASSPHRASE WIRELESS_TOOLS WIRELESS_TOOLS_LIB"
 PKG_SDIO_8189="RTL8189FS"
 PKG_SDIO_BL616="BL616_SDIO"
-PKG_USB_WIFI="AIC8800"
-PKG_DISABLED_ALWAYS="AIC8800_SDIO RTL8733BS"
+PKG_USB_WIFI=""
+PKG_DISABLED_ALWAYS="AIC8800 AIC8800_SDIO RTL8733BS"
 
 if [ "${prev}" != "${K230_NET}" ] || [ "${prev_debug}" != "${DEBUG_COEXIST}" ]; then
   echo "[K230_NET] mode switch: ${prev} -> ${K230_NET} (debug_coexist=${prev_debug} -> ${DEBUG_COEXIST})"
@@ -139,8 +139,8 @@ case "${K230_NET}" in
     fi
     ;;
   usb_wifi)
-    echo "[K230_NET] overlay: exclusive mode usb_wifi"
-    for pkg in ${PKG_WIFI_USER} ${PKG_USB_WIFI}; do
+    echo "[K230_NET] overlay: exclusive mode usb_wifi (mt7601u)"
+    for pkg in ${PKG_WIFI_USER}; do
         set_pkg_y "${pkg}"
     done
     ;;

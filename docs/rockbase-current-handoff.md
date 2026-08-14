@@ -380,3 +380,28 @@ RTL8189FS SDIO 路径一直是 freeze 最强主嫌疑，且前几轮验证显示
 - **优先 USB 以太网**：零内核改动、驱动全内置、无固件/射频复杂度，最稳；等 AX88772 网卡到手即可落地。
 - 若必须无线，选 **MT7601U**（mainline 支持最好、功耗低、固件单一）。
 - 无论选哪个，落地前都要先 `lsusb` 确认实际芯片 ID，再决定是否改内核。
+
+## 2026-08-14 更新：MT7601U USB WiFi 已落地（usb_wifi 模式默认）
+
+决策：**`usb_wifi` 模式默认改用 MT7601U，移除 AIC8800**。驱动编译为模块（`=m`），固件随 rootfs 就位。
+
+### 实际改动清单
+
+| 文件 | 改动 |
+|------|------|
+| `fragment/linux.fragment` | 末尾追加 `CONFIG_MT7601U=m` |
+| `rootfs_overlay/lib/firmware/mt7601u.bin` | 新增固件（45412 字节，linux-firmware `mediatek/mt7601u.bin`） |
+| `rootfs_overlay/etc/rockbase-usb-wifi.map` | 新增 `148F:7601|MT7601U|mt7601u|auto|MediaTek MT7601U USB WiFi` |
+| `tools/rockbase_net_mode.sh` | `PKG_USB_WIFI` 清空；`PKG_DISABLED_ALWAYS` 加入 `AIC8800`；`usb_wifi` 分支只启用 `PKG_WIFI_USER`（wpa_supplicant + wireless_tools） |
+| `board/canaan/k230_rockbase/post-build.sh` | 删除 AIC8800 / AIC8800_SDIO 的 modprobe 死代码；SDIO_OFF 判断移除 AIC 引用 |
+
+### 说明
+
+- MT7601U 是 mainline 内核模块，**不占用 buildroot 包体系**，由 `rockbase_usb_wifi.sh` 的 `detect --autoload` 按 map 自动 `modprobe mt7601u`。
+- 固件 `mt7601u.bin` 直接放 `rootfs_overlay/lib/firmware/`（`request_firmware` 名为 `mt7601u.bin`，不带 `mediatek/` 子目录）。
+- `AIC8800` / `AIC8800_SDIO` 从 rockbase 构建链路永久禁用，但 `package/aic8800*` 源码目录与 `Config_canaan.in` 的 source 保留（canmv 三个 defconfig 仍依赖，不能物理删除）。
+- 内核 fragment 改动后必须 `linux-dirclean` 再重编（1G/2G 各自执行）。
+
+### 待验证
+
+- 重编烧录后 `lsusb` 确认 `148f:7601` 被 `mt7601u` probe；`dmesg | grep mt7601u` 确认固件加载成功、`wlan0` 建立。

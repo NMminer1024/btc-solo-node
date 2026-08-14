@@ -5,3 +5,4 @@
 # - MODULES are passed to modprobe in order
 # - IFNAME can be fixed (wlan0) or auto
 # - NOTE is free text
+148F:7601|MT7601U|mt7601u|auto|MediaTek MT7601U USB WiFi
