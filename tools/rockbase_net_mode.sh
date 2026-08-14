@@ -67,7 +67,7 @@ PKG_WIFI_USER="WPA_SUPPLICANT WPA_SUPPLICANT_WEXT WPA_SUPPLICANT_CLI WPA_SUPPLIC
 PKG_SDIO_8189="RTL8189FS"
 PKG_SDIO_BL616="BL616_SDIO"
 PKG_USB_WIFI=""
-PKG_DISABLED_ALWAYS="AIC8800 AIC8800_SDIO RTL8733BS"
+PKG_DISABLED_ALWAYS="RTL8733BS"
 
 if [ "${prev}" != "${K230_NET}" ] || [ "${prev_debug}" != "${DEBUG_COEXIST}" ]; then
   echo "[K230_NET] mode switch: ${prev} -> ${K230_NET} (debug_coexist=${prev_debug} -> ${DEBUG_COEXIST})"
@@ -77,7 +77,7 @@ if [ "${prev}" != "${K230_NET}" ] || [ "${prev_debug}" != "${DEBUG_COEXIST}" ]; 
     # Clean WiFi package build dirs so they are rebuilt (or skipped) correctly.
         echo "[K230_NET] dirclean net-related packages from previous mode..."
         make -C "${BRW_BUILD_DIR}" rtl8189fs-dirclean wpa_supplicant-dirclean wireless_tools-dirclean \
-          aic8800-dirclean aic8800_sdio-dirclean bl616_sdio-dirclean 2>/dev/null || true
+          bl616_sdio-dirclean 2>/dev/null || true
     # dirclean only clears build dirs, not already-installed target files. Remove
     # stale WiFi artifacts from target so disabled packages don't leak into the image.
     echo "[K230_NET] removing stale WiFi artifacts from target..."
@@ -98,9 +98,7 @@ if [ "${prev}" != "${K230_NET}" ] || [ "${prev_debug}" != "${DEBUG_COEXIST}" ]; 
             "${TARGET}/lib/libiw.so" 2>/dev/null || true
       rm -f "${TARGET}"/lib/libiw.so.* 2>/dev/null || true
     fi
-    find "${TARGET}/lib/modules" -name 'aic*.ko' -delete 2>/dev/null || true
-        find "${TARGET}/lib/modules" -name 'mr_sdio.ko' -delete 2>/dev/null || true
-    rm -rf "${TARGET}/lib/firmware/aic8800D80" 2>/dev/null || true
+    find "${TARGET}/lib/modules" -name 'mr_sdio.ko' -delete 2>/dev/null || true
         rm -f "${TARGET}/usr/sbin/bflbwifid" \
           "${TARGET}/usr/bin/bflbwifictrl" \
           "${TARGET}/etc/init.d/S38bl616wifi" 2>/dev/null || true

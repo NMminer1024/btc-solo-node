@@ -47,7 +47,7 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 | `sdio_8189`（默认） | 仅启用 RTL8189FS SDIO WiFi（互斥） | `-sdio8189` |
 | `sdio_bl616`（占位） | BL616 SDIO WiFi 预留模式（互斥，当前仅保留用户态） | `-sdiobl616` |
 | `usb_eth` | USB 有线网卡互斥模式：不编译 WiFi 接口驱动 | `-usbeth` |
-| `usb_wifi` | USB 无线互斥模式：启用 USB WiFi 驱动族，禁用 SDIO 驱动族 | `-usbwifi` |
+| `usb_wifi` | USB 无线互斥模式：启用 MT7601U USB WiFi 驱动族（`mt7601u`），禁用 SDIO 驱动族 | `-usbwifi` |
 
 兼容旧值：`sdio_wifi` 会自动映射到 `sdio_8189`。
 
@@ -97,9 +97,16 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 - `sdio_8189`：仅 `rtl8189fs`
 - `sdio_bl616`：仅 `bl616`（当前占位）
 - `usb_eth`：仅 USB 有线
-- `usb_wifi`：仅 USB 无线（如 AIC）
+- `usb_wifi`：仅 USB 无线（MT7601U，`mt7601u`）
 
 不要在一个模式里混入其他模式的驱动文件，否则测速与稳定性结论会被噪声污染。
+
+### MT7601U USB WiFi（usb_wifi 模式）关键事实
+
+- `mt7601u` 是 **mainline 内核模块**（`drivers/net/wireless/mediatek/mt7601u`），**不是独立 buildroot 包**，由 `fragment/linux.fragment` 里的 `CONFIG_MT7601U=m` 控制。
+- 固件：`rootfs_overlay/lib/firmware/mt7601u.bin`（`request_firmware` 名为 `mt7601u.bin`，不带 `mediatek/` 子目录）。⚠️ linux-firmware 仓库里的实际路径是 `mediatek/mt7601u.bin`，根目录 URL 会 404，下载后放到 `lib/firmware/` 时**不要保留** `mediatek/` 前缀。
+- 运行时加载：`rockbase_usb_wifi.sh detect --autoload` 按 `rootfs_overlay/etc/rockbase-usb-wifi.map` 中的 `148F:7601` 条目自动 `modprobe mt7601u`。
+- 改 `CONFIG_MT7601U` 或任何 `linux.fragment` 内容后，必须 `linux-dirclean` 再重编。
 
 ### 模式切换时的内部行为
 
@@ -140,7 +147,8 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 
 `usb_wifi` 目标（必须全部满足）：
 - 不应出现 `8189fs.ko`
-- 应出现 USB WiFi 驱动模块（如 `aic_*`）
+- 应出现 USB WiFi 驱动模块 `mt7601u.ko`
+- 应有固件 `mt7601u.bin`
 - 由 USB 网卡提供 `wlan*` 接口
 
 如果任一条不满足，按“镜像与模式不一致”处理，不要继续做业务验证。
@@ -160,6 +168,7 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 ### 什么时候必须 `linux-dirclean`
 
 - 改了 `patches/linux/` 下任意 patch
+- 改了 `fragment/linux.fragment`（内核配置 fragment，如 `CONFIG_MT7601U=m`）
 - 预期 kernel 行为应变化，例如 `PIO ↔ DMA`、MMC/SDHCI/IRQ/DT 相关修改
 - 需要给 `1G`、`2G` 都出镜像，且这些镜像必须口径一致
 
