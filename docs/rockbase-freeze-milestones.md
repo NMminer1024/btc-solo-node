@@ -375,3 +375,64 @@ vm.dirty_expire_centisecs=500
 4. ~~2G 无 PHY 校准弱路径~~ —— 频率相近已基本排除其为主因，降为可忽略项。
 
 判别手段（关键）：SDHCI 支持用 quirk 强制回退 PIO（`SDHCI_QUIRK_BROKEN_ADMA | SDHCI_QUIRK_BROKEN_DMA`，`sdhci-of-kendryte.c` 里加一行）。强制 PIO 泡机：两板都不再卡 → 坐实 `dma-noncoherent` ADMA 缓存竞态；照卡 → 排除 DMA 一致性，转查软件并发/电气。落地顺序见 playbook。
+
+## 2026-08-16：看门狗确实能让卡死恢复 —— 但它是误烧进镜像的，不是源码功能
+
+本节结论来自对 4 台在线 1G 板（`124.15`/`124.21`/`124.27`/`124.30`）uptime 异常的排查，以及对 8/14 构建产物的交叉核对。**本次只做分析，未改动任何文件。**
+
+### 现象
+
+- 4 台 1G 板都是 8/14 下午约 16:00 上电，但 8/16 检查时 uptime 各不相同（部分只剩约 2 小时），说明**中途发生过非人为重启**。
+- `boot_audit.log` 显示 `prev_shutdown=unclean`，`/sys/fs/pstore` 为空 → 不是 panic 路径，更像硬复位。
+- 各板 `/etc/init.d/S05watchdog` 存在，且 `watchdog -T 60 -t 10 /dev/watchdog` 正在运行（busybox applet，pid ~164），加上内核线程 `[watchdogd]`。
+- 60 秒硬件看门狗超时 → 硬复位。这解释了 uptime 各异 + unclean 复位。
+
+### 关键事实：看门狗确实能让卡死恢复
+
+- 这是**首次用真机实证**：带 `S05watchdog` 的 1G 板，卡死后会由 60s 硬件看门狗复位自动恢复，而不是像过去那样永久静默卡死（需人工断电）。
+- 但要明确：**watchdog 是"兜底恢复"手段，不是"根因修复"**。它让板子能自愈，但卡死根因（SDHCI/ADMA 一致性 / RTL8189FS SDIO 争抢，见上文）仍未解决，且硬复位可能影响 bitcoind 数据一致性。**卡死根因仍需继续深挖。**
+
+### 看门狗是怎么进镜像的（重要坑，避免重犯）
+
+溯源结论：
+
+- `S05watchdog` 启动脚本**只存在于构建产物** `output/k230_rockbase_1g_defconfig/target/etc/init.d/S05watchdog`（时间戳 `Aug 13 16:33`），**源码里从来没有**。
+- 源码 `buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/etc/init.d/` 中无 `S05watchdog`。
+- `git log --all` 全历史从未提交过任何 watchdog 相关文件。
+- 时间线还原：
+  1. 8/13 15:51 热部署改 WiFi（`S38wifi`，rootfs_overlay 能对上）。
+  2. 8/13 16:33 热部署加看门狗，但把 `S05watchdog` **误写进 `output/.../target/`（构建产物目录）**，而非源码 `rootfs_overlay/`。
+  3. 8/14 下午重编：buildroot 增量重编**不清空 target 目录**，rootfs_overlay 只做覆盖拷贝，不会删除 target 里 overlay 没有的残留文件 → 残留 `S05watchdog` 被原样打包进新镜像并烧录到 4 台板子。
+
+- 内核侧：`CONFIG_DW_WATCHDOG=y` 是 `arch/riscv/configs/k230_defconfig` 默认开启的，**从来没人禁用过**，`/dev/watchdog` 一直存在。但没有用户态脚本打开它时，DesignWare 硬件看门狗不会激活，不会复位。所以内核驱动本身无害，关键是脚本。
+
+### 1G vs 2G 对比
+
+| 项 | 1G 镜像 | 2G 镜像 |
+|----|---------|---------|
+| `S05watchdog` 启动脚本 | **残留存在**（8/13 热部署误写进 target） | 无 |
+| `CONFIG_DW_WATCHDOG` 内核驱动 | 开启 | 开启 |
+| `/dev/watchdog` | 存在 | 存在 |
+| 用户态看门狗进程 | **有** `watchdog -T 60 -t 10` | 无 |
+| 卡死后是否自动复位 | **会**（60s） | 不会 |
+
+（2G 板 `124.23` 的 `output/k230_rockbase_2g_defconfig/target/` 里没有 `S05watchdog`，所以 2G 不受影响。这也解释了为何复位现象集中在 1G 板。）
+
+### 正确的去看门狗方法（供后续参考）
+
+若要从镜像彻底去掉看门狗：
+
+1. 删残留脚本：`rm -f output/k230_rockbase_1g_defconfig/target/etc/init.d/S05watchdog`（2G 若有残留也一并删）。
+2. 更彻底：`make clean` 或删除 `output/<conf>/` 后全量重编（增量 `make` 不清 target，残留会被再次打包）。
+3. 若要连内核驱动也关：在 `linux.fragment` 加 `# CONFIG_DW_WATCHDOG is not set` 并 `linux-dirclean` 重编内核，则 `/dev/watchdog` 也不存在。
+
+### 热部署铁律（写入 agent 记忆）
+
+- **热部署永远不要直接往 `output/<conf>/target/` 写文件**。要改镜像，必须写源码 `buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/`，否则增量重编时残留会污染镜像，且 git 无法追踪（output 被 gitignore）。
+- 判断"某文件是否真的来自源码"：先查 `rootfs_overlay/` 有没有、`git log --all -- <file>` 有没有，再看 `output/<conf>/target/` 的时间戳是否早于最后一次 build。
+
+### 附带观察：MMC 慢路径仍是 SD 卡（mmc1）
+
+- 4 台板 `rb-mmc-diag` 慢操作统计：mmc0（WiFi）干净（0~3 次），mmc1（SD 卡）281~4553 次、平均 754~804ms、最大 2496~5748ms。
+- 结论：慢路径集中在 SD 卡 mmc1，WiFi mmc0 干净。与上文"SD 卡写回参与/放大 freeze"的方向一致。
+- DMA 状态：当前镜像已恢复 ADMA（`mmc0/mmc1 ... using ADMA`），quirk 仅 `SDHCI_QUIRK_CAP_CLOCK_BASE_BROKEN`，无 BROKEN_ADMA/BROKEN_DMA（`0034` 已 `.disabled`）。
