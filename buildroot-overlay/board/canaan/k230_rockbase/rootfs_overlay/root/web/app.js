@@ -165,7 +165,7 @@
       text: "",
       loaded: false,
       loading: false,
-      path: "/root/bitcoind/debug.log",
+      path: "/root/block/debug.log",
       label: "Bitcoind log",
       summary: "Tail 300 lines · live cursor"
     },

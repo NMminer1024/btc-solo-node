@@ -40,7 +40,7 @@ case "$service" in
   ;;
   bitcoind|*)
     log_service="bitcoind"
-    log_path="/root/bitcoind/debug.log"
+    log_path="/root/block/debug.log"
     default_limit=300
   ;;
 esac

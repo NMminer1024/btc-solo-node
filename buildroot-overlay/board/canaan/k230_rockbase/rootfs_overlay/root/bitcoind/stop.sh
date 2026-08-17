@@ -6,7 +6,7 @@
 
 CONF=/root/bitcoind/bitcoin.conf
 DATADIR=/root/block
-LOGFILE=/root/bitcoind/debug.log
+LOGFILE=/root/block/debug.log
 
 if ! pidof bitcoind > /dev/null 2>&1; then
     echo "bitcoind is not running"

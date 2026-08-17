@@ -7,7 +7,7 @@
 
 CONF=/root/bitcoind/bitcoin.conf
 DATADIR=/root/block
-DEBUG_LOG=/root/bitcoind/debug.log
+DEBUG_LOG=/root/block/debug.log
 CKPOOL_CONF=/root/ckpool/ckpool.conf
 CKPOOL_LOG=/root/ckpool/logs/ckpool.log
 STATE_DIR=/tmp/rockbase-status
