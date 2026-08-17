@@ -10,7 +10,9 @@ description: 'Measure Rockbase board network throughput under idle conditions. U
 - **必须停服务再测**：bitcoind + ckpool 占用大量 CPU/IO/网络，会严重干扰结果
 - **测前验证 CPU idle ≥ 50%**：否则测出的是 CPU 瓶颈，不是网络瓶颈
 - **所有板子用同一套命令**：保证横向对比有效
-- **测速方向**：从板子发数据到 WSL 本地（板子 TX 方向），用 SSH 做传输通道
+- **测速工具**：统一用 iperf3（无加密 TCP，隔离 SSH 加密在单核 RISC-V 上的额外开销）
+- **测速方向**：双向都测 —— TX（板子→本地，上传）+ RX（本地→板子，下载，加 `-R`）
+- **测速轮次**：每个方向测 3 轮，取中位数
 
 ---
 
@@ -69,48 +71,63 @@ top -b -n1 | head -15
 
 ---
 
-## 步骤三：测速（从 WSL 执行）
+## 步骤三：测速（iperf3，双向各 3 轮）
 
-### 标准测速命令（所有板子统一用这个）
+### 前置：本地 WSL 启动 iperf3 server
+
+iperf3 已打进镜像，板子上自带 `iperf3` 命令。测速前先在本地 WSL 启动 iperf3 server：
 
 ```bash
-IP=192.168.124.XX  # 替换为目标板子 IP（SDIO WiFi 用 wlan0 的 IP，ETH 用 eth0 的 IP）
-
-echo "=== Run 1 ==="
-{ time ssh -o StrictHostKeyChecking=no root@$IP \
-    'dd if=/dev/zero bs=1M count=64 2>/dev/null' \
-  | dd of=/dev/null bs=1M 2>&1; } 2>&1 | grep -E "bytes|real"
-
-echo "=== Run 2 ==="
-{ time ssh -o StrictHostKeyChecking=no root@$IP \
-    'dd if=/dev/zero bs=1M count=64 2>/dev/null' \
-  | dd of=/dev/null bs=1M 2>&1; } 2>&1 | grep -E "bytes|real"
-
-echo "=== Run 3 ==="
-{ time ssh -o StrictHostKeyChecking=no root@$IP \
-    'dd if=/dev/zero bs=1M count=64 2>/dev/null' \
-  | dd of=/dev/null bs=1M 2>&1; } 2>&1 | grep -E "bytes|real"
+# 本地 WSL 若无 iperf3，用 apt 下载免 sudo 解压（无需 root）：
+cd /tmp
+apt-get download iperf3 libiperf0 libsctp1 2>/dev/null
+rm -rf iperf3-local && mkdir -p iperf3-local
+for d in iperf3_*.deb libiperf0_*.deb libsctp1_*.deb; do dpkg -x "$d" iperf3-local/; done
+LD_LIBRARY_PATH=/tmp/iperf3-local/usr/lib/x86_64-linux-gnu /tmp/iperf3-local/usr/bin/iperf3 -s
 ```
 
-**参数固定**：`bs=1M count=64`（64 MB），不要随意改，保证跨板对比一致。
+server 默认监听 **5201** 端口，保持前台运行。
+
+### 标准测速命令（双向各 3 轮，所有板子统一用这个）
+
+```bash
+IP=192.168.124.XX      # 目标板子 IP（SDIO WiFi 用 wlan0，ETH 用 eth0）
+SERVER=192.168.124.20  # WSL 本机 IP（iperf3 server 所在）
+
+echo "########## TX 上传（板子 → 本地）##########"
+for run in 1 2 3; do
+  echo "===== TX Run $run ====="
+  ssh -o StrictHostKeyChecking=no root@$IP "iperf3 -c $SERVER -t 15 2>&1 | grep -E 'sender|receiver' | tail -2"
+done
+
+echo "########## RX 下载（本地 → 板子）##########"
+for run in 1 2 3; do
+  echo "===== RX Run $run ====="
+  ssh -o StrictHostKeyChecking=no root@$IP "iperf3 -c $SERVER -t 15 -R 2>&1 | grep -E 'sender|receiver' | tail -2"
+done
+```
+
+**参数固定**：`-t 15`（每轮 15 秒），不要随意改，保证跨板对比一致。
+**取值**：看汇总行 `sender` 的 `Mbits/sec`；TX 取 `sender`，RX 加 `-R` 后 `sender` 表示本地发送方向，同样取 `sender` 行。
 
 ### 双板同测（SDIO WiFi vs USB ETH 对比）
 
 ```bash
 IP_SDIO=192.168.124.21   # SDIO WiFi 板子
 IP_ETH=192.168.124.30    # USB ETH 板子
+SERVER=192.168.124.20
 
-for run in 1 2 3; do
-  echo "=== Run $run SDIO ==="
-  { time ssh -o StrictHostKeyChecking=no root@$IP_SDIO \
-      'dd if=/dev/zero bs=1M count=64 2>/dev/null' \
-    | dd of=/dev/null bs=1M 2>&1; } 2>&1 | grep -E "bytes|real"
-
-  echo "=== Run $run ETH ==="
-  { time ssh -o StrictHostKeyChecking=no root@$IP_ETH \
-      'dd if=/dev/zero bs=1M count=64 2>/dev/null' \
-    | dd of=/dev/null bs=1M 2>&1; } 2>&1 | grep -E "bytes|real"
-  echo ""
+for ip in $IP_SDIO $IP_ETH; do
+  echo "========== $ip TX 上传 =========="
+  for run in 1 2 3; do
+    echo "--- TX Run $run ---"
+    ssh -o StrictHostKeyChecking=no root@$ip "iperf3 -c $SERVER -t 15 2>&1 | grep -E 'sender|receiver' | tail -2"
+  done
+  echo "========== $ip RX 下载 =========="
+  for run in 1 2 3; do
+    echo "--- RX Run $run ---"
+    ssh -o StrictHostKeyChecking=no root@$ip "iperf3 -c $SERVER -t 15 -R 2>&1 | grep -E 'sender|receiver' | tail -2"
+  done
 done
 ```
 
@@ -196,6 +213,57 @@ done                                   # 期望网卡 speed=480 → USB 2.0
 | ETH 停服务后无明显变化（~12 MB/s） | ✅ 已确认：百兆 USB ETH 转换器（100 Mbps）限速 |
 | ETH 千兆口 + RTL8153（~20 MB/s） | ✅ 已确认：USB 2.0 控制器物理上限（见上方千兆口章节） |
 
+### UWB-WiFi RTL8821CU 2.4G 基线（2026-08-17 实测）
+
+**测试设备**：`192.168.124.35`（UWB-WiFi 模组，芯片 **RTL8821CU**，`0bda:c820`，走 USB，内核模块 `rtw88_8821cu`）
+
+**接口**：`wlan0`（USB WiFi），2.4G 频段（freq=2472 MHz，SSID `NMTech-2.4G`）
+
+**测试条件**：服务已停，CPU idle 85%
+
+| Run | 传输量 | 耗时 | 吞吐 |
+|-----|--------|------|------|
+| 1 | 64 MiB | 77.7s | 864 kB/s |
+| 2 | 64 MiB | 113.2s | 593 kB/s |
+| 3 | 42 MiB ⚠️ | 48.9s | 906 kB/s |
+
+**平均 ≈ 0.79 MB/s**
+
+**结论**：
+- RTL8821CU 走 USB 2.0（`dwc2_hsotg`），2.4G 模式下 SSH 吞吐 ~0.8 MB/s，与 SDIO 8189FS（~1.0 MB/s）同量级
+- 波动明显（593~906 kB/s），ping 抖动 12~127 ms，说明 2.4G 信号偏弱/干扰大
+
+### UWB-WiFi RTL8821CU 5G 基线（2026-08-17 实测）
+
+**测试条件**：SSID `RockBase_5G`（freq=5785 MHz，信号 -38 dBm），服务已停，CPU idle 87%
+
+| Run | 传输量 | 耗时 | 吞吐 |
+|-----|--------|------|------|
+| 1 | 64 MiB | 22.7s | 3.0 MB/s |
+| 2 | 64 MiB | 20.9s | 3.2 MB/s |
+| 3 | 64 MiB | 22.0s | 3.0 MB/s |
+
+**平均 ≈ 3.1 MB/s**
+
+**结论**：RTL8821CU 从 2.4G（~0.8 MB/s）切到 5G（~3.1 MB/s），吞吐提升约 **4 倍**；信号从 -56 提升到 -38 dBm，且 5G 频段干扰少、波动稳定（3.0~3.2 MB/s）。仍低于 USB 有线（百兆 ~12 MB/s / 千兆 RTL8153 ~20 MB/s），受 USB 2.0 + 802.11ac 单流实际开销限制。
+
+### UWB-WiFi RTL8821CU 5G iperf3 实测（2026-08-17）
+
+**方法**：板子部署 iperf3 3.18（RISC-V，复用 `k230_canmv_01studio_defconfig` 已编译产物 + `libiperf.so.0`），本地 WSL 用 `apt download iperf3` 解压跑 server。PHY 协商 433.3 Mb/s（5G 80MHz 单流），信号 -40 dBm，USB speed=480。
+
+| 方向 | 吞吐 | Retr | 说明 |
+|------|------|------|------|
+| **TX（板子→本地，上传）** | 19~20 Mbits/sec ≈ **2.4 MB/s** | 116 次 | 大量重传 |
+| **RX（本地→板子，下载）** | 53~56 Mbits/sec ≈ **6.7 MB/s** | 1 次 | 几乎零重传 |
+
+**关键结论**：
+
+1. **RX ≈ 2.8 × TX**，方向严重不对称，瓶颈在 **rtw88 驱动的 USB TX（上行）路径**，与 SDIO 8189FS 的 TX 瓶颈同源（每帧独立 USB bulk OUT 事务，无有效聚合）。
+2. **无加密 iperf3 时 CPU idle 60~90%（未打满）** —— 说明之前 SSH dd 测速时 CPU 打满（usr+sys≈100%）是 **SSH 加密在单核 RISC-V 上极慢**导致的，加密是 SSH 测速的额外瓶颈，不是链路瓶颈。
+3. 真实 TCP 上限：TX ~2.4 MB/s，RX ~6.7 MB/s。SSH dd 测的 3.1 MB/s（TX）略高于 iperf3 TX，因 `/dev/zero` 全零数据在 SSH 压缩后吞吐虚高。
+
+**结论修正（重要）**：之前"单核 CPU 是瓶颈"的判断不准确。正确结论是 —— **SSH 加密拖累 CPU，但即便去掉加密，RTL8821CU 走 USB 2.0 的 TX 上限也只有 ~2.4 MB/s，RX 上限 ~6.7 MB/s**。二者都是 rtw88 USB 传输路径的固有瓶颈，非 CPU 能力问题。
+
 ---
 
 ## 步骤五：测速完毕后处理
@@ -222,10 +290,11 @@ ssh root@<IP> 'reboot'
 
 ## 附：快速单板一键测速脚本
 
-把以下内容在 WSL 中整段执行，指定 IP 后自动完成"停服务 → 等待 → 验 CPU → 测速 × 3"：
+把以下内容在 WSL 中整段执行，指定 IP 后自动完成"停服务 → 等待 → 验 CPU → iperf3 双向测速 × 3"：
 
 ```bash
 IP=192.168.124.XX
+SERVER=192.168.124.20   # WSL 本机 iperf3 server
 
 echo ">>> Stopping services on $IP..."
 ssh -o StrictHostKeyChecking=no root@$IP '
@@ -240,12 +309,16 @@ sleep 20
 echo ">>> CPU idle check:"
 ssh -o StrictHostKeyChecking=no root@$IP 'top -b -n2 -d2 | grep "^CPU" | tail -1'
 
-echo ">>> Speed test (3 runs, 64 MB each):"
+echo ">>> TX 上传 (板子→本地, 3 rounds):"
 for run in 1 2 3; do
-  echo "--- Run $run ---"
-  { time ssh -o StrictHostKeyChecking=no root@$IP \
-      'dd if=/dev/zero bs=1M count=64 2>/dev/null' \
-    | dd of=/dev/null bs=1M 2>&1; } 2>&1 | grep -E "bytes|real"
+  echo "--- TX Run $run ---"
+  ssh -o StrictHostKeyChecking=no root@$IP "iperf3 -c $SERVER -t 15 2>&1 | grep -E 'sender|receiver' | tail -2"
+done
+
+echo ">>> RX 下载 (本地→板子, 3 rounds):"
+for run in 1 2 3; do
+  echo "--- RX Run $run ---"
+  ssh -o StrictHostKeyChecking=no root@$IP "iperf3 -c $SERVER -t 15 -R 2>&1 | grep -E 'sender|receiver' | tail -2"
 done
 
 echo ">>> Done. Run 'ssh root@$IP reboot' to restore services."
@@ -256,6 +329,7 @@ echo ">>> Done. Run 'ssh root@$IP reboot' to restore services."
 ## 注意事项
 
 - WiFi 板子通过 wlan0 IP 连接，ETH 板子通过 eth0 IP 连接，**不要混用**
-- `dd count=64` 对 SDIO WiFi (~1 MB/s) 约需 60-70 秒/次，属正常
-- 如果 SSH 连接不稳定导致 dd 中断，检查 WiFi 信号或换成有线测试
+- iperf3 每轮 `-t 15` 约 15 秒，双向 3 轮合计约 90 秒 + SSH 建连时间
+- 本地 WSL iperf3 server 若未启动，板子端会报 `connect failed`，先确认 server 前台运行中
+- 如果 WiFi 信号差导致 iperf3 波动大，检查信号或换成有线测试
 - bitcoind stop 可能需要 10-60 秒，等待足够时间再测
