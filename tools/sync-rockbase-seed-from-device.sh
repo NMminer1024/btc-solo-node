@@ -131,8 +131,9 @@ fi
 echo "✓ SSH 登录成功"
 
 # ── 检查远端 bitcoind 是否在运行，若在则优雅停止 ──
+# 注意：使用 [b] 方括号技巧避免 pgrep -f 匹配到自身 shell 进程
 REMOTE_BITCOIND_WAS_RUNNING=false
-if "${SSH_CMD[@]}" "${REMOTE_TARGET}" "pgrep -f 'bitcoind.*-conf.*Desktop/bitcoind' > /dev/null 2>&1 || pgrep -f 'bitcoin-core.daemon' > /dev/null 2>&1"; then
+if "${SSH_CMD[@]}" "${REMOTE_TARGET}" "pgrep -f '[b]itcoind.*-conf.*Desktop/bitcoind' > /dev/null 2>&1 || pgrep -f '[b]itcoin-core.daemon' > /dev/null 2>&1"; then
     REMOTE_BITCOIND_WAS_RUNNING=true
     echo ""
     echo "检测到远端 bitcoind 正在运行，正在优雅停止..."
@@ -146,7 +147,7 @@ if "${SSH_CMD[@]}" "${REMOTE_TARGET}" "pgrep -f 'bitcoind.*-conf.*Desktop/bitcoi
     echo "等待 bitcoind 退出..."
     BITCOIND_STOPPED=false
     for i in $(seq 1 60); do
-        if ! "${SSH_CMD[@]}" "${REMOTE_TARGET}" "pgrep -f 'bitcoind.*-conf.*Desktop/bitcoind' > /dev/null 2>&1 || pgrep -f 'bitcoin-core.daemon' > /dev/null 2>&1" 2>/dev/null; then
+        if ! "${SSH_CMD[@]}" "${REMOTE_TARGET}" "pgrep -f '[b]itcoind.*-conf.*Desktop/bitcoind' > /dev/null 2>&1 || pgrep -f '[b]itcoin-core.daemon' > /dev/null 2>&1" 2>/dev/null; then
             echo "✓ bitcoind 已退出"
             BITCOIND_STOPPED=true
             break
@@ -159,7 +160,7 @@ if "${SSH_CMD[@]}" "${REMOTE_TARGET}" "pgrep -f 'bitcoind.*-conf.*Desktop/bitcoi
     if [ "${BITCOIND_STOPPED}" = false ]; then
         echo ""
         echo "bitcoind 未在 120s 内退出，发送 SIGTERM..."
-        "${SSH_CMD[@]}" "${REMOTE_TARGET}" "pkill -TERM -f 'bitcoind.*-conf.*Desktop/bitcoind' || pkill -TERM -f 'bitcoin-core.daemon'" 2>/dev/null || true
+        "${SSH_CMD[@]}" "${REMOTE_TARGET}" "pkill -TERM -f '[b]itcoind.*-conf.*Desktop/bitcoind' || pkill -TERM -f '[b]itcoin-core.daemon'" 2>/dev/null || true
         sleep 10
     fi
 else
@@ -226,7 +227,7 @@ if [ "${REMOTE_BITCOIND_WAS_RUNNING}" = true ]; then
     echo "正在重新拉起远端 bitcoind..."
     "${SSH_CMD[@]}" "${REMOTE_TARGET}" "${REMOTE_BITCOIND_START_CMD}"
     sleep 3
-    if "${SSH_CMD[@]}" "${REMOTE_TARGET}" "pgrep -f 'bitcoind.*-conf.*Desktop/bitcoind' > /dev/null 2>&1 || pgrep -f 'bitcoin-core.daemon' > /dev/null 2>&1" 2>/dev/null; then
+    if "${SSH_CMD[@]}" "${REMOTE_TARGET}" "pgrep -f '[b]itcoind.*-conf.*Desktop/bitcoind' > /dev/null 2>&1 || pgrep -f '[b]itcoin-core.daemon' > /dev/null 2>&1" 2>/dev/null; then
         echo "✓ 远端 bitcoind 已重新启动"
     else
         echo "⚠ 远端 bitcoind 可能未成功启动，请手动检查"
