@@ -2,11 +2,11 @@
 
 DAEMON="syslogd"
 PIDFILE="/var/run/$DAEMON.pid"
-LOGDIR="/root/log"
+LOGDIR="/tmp"
 LOGFILE="$LOGDIR/messages"
 
-# Persist system logs on the writable rootfs and let BusyBox rotate them.
-SYSLOGD_ARGS="-O $LOGFILE -s 256 -b 7"
+# Keep verbose system logs in tmpfs and let BusyBox rotate them.
+SYSLOGD_ARGS="-O $LOGFILE -s 256 -b 3"
 
 # shellcheck source=/dev/null
 [ -r "/etc/default/$DAEMON" ] && . "/etc/default/$DAEMON"

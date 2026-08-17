@@ -1,3 +1,2 @@
-# Persist syslog to the writable rootfs with a wider crash-investigation window.
-# 32 x 1 MiB files keeps enough history for multi-day field failures.
-SYSLOGD_ARGS="-O /root/log/messages -s 1024 -b 31"
+# Keep verbose syslog in tmpfs so diagnostics do not add SD-card I/O pressure.
+SYSLOGD_ARGS="-O /tmp/messages -s 256 -b 3"

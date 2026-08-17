@@ -5,7 +5,7 @@
 
 DAEMON=/usr/bin/rockbase-lcdui
 PIDFILE=/var/run/rockbase-lcdui.pid
-LOGFILE=/root/log/lcdui.log
+LOGFILE=/dev/null
 export TZ="${TZ:-CST-8}"
 
 is_running() {
