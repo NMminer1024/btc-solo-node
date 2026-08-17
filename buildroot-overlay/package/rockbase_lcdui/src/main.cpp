@@ -27,6 +27,7 @@ namespace {
 
 constexpr uint32_t kUiWidth = 800;
 constexpr uint32_t kUiHeight = 480;
+constexpr uint32_t kSwipeDragStartThresholdPx = 10;
 constexpr uint32_t kPageSwitchThresholdPx = kUiWidth / 10U;
 constexpr uint32_t kFramePixels = kUiWidth * kUiHeight;
 constexpr uint32_t kTileCount = 4;
@@ -257,6 +258,7 @@ bool g_pager_anim_active = false;
 uint32_t g_pager_anim_start_ms = 0;
 int32_t g_pager_anim_from_x = 0;
 int32_t g_pager_anim_to_x = 0;
+bool g_swipe_drag_started = false;
 bool g_page_cache_dirty[kTileCount] {};
 uint32_t g_last_page_cache_refresh_ms = 0;
 uint32_t g_fps_window_start_ms = 0;
@@ -433,6 +435,12 @@ int32_t clamp_scroll_x(int32_t scroll_x) {
 int32_t visual_scroll_x_from_touch() {
     const int32_t base = static_cast<int32_t>(g_swipe_start_page * kUiWidth);
     const int32_t dx = g_swipe_current_x - g_swipe_start_x;
+    if (!g_swipe_drag_started) {
+        if (std::abs(dx) < static_cast<int32_t>(kSwipeDragStartThresholdPx)) {
+            return base;
+        }
+        g_swipe_drag_started = true;
+    }
     const int32_t target = clamp_scroll_x(base - dx);
     if (std::abs(target - g_visual_scroll_x) <= 1) {
         return g_visual_scroll_x;
@@ -1356,11 +1364,13 @@ void touch_read_cb(lv_indev_t*, lv_indev_data_t* data) {
         g_swipe_start_x = data->point.x;
         g_swipe_start_page = g_active_page;
         g_visual_scroll_x = static_cast<int32_t>(g_swipe_start_page * kUiWidth);
+        g_swipe_drag_started = false;
     }
     if (was_down && !g_touch.down) {
         g_release_page = g_swipe_start_page;
         const int32_t swipe_dx = data->point.x - g_swipe_start_x;
         const int32_t release_scroll_x = visual_scroll_x_from_touch();
+        const bool drag_started = g_swipe_drag_started;
         if (swipe_dx <= -static_cast<int32_t>(kPageSwitchThresholdPx) &&
             g_release_page + 1U < kTileCount) {
             ++g_release_page;
@@ -1369,7 +1379,10 @@ void touch_read_cb(lv_indev_t*, lv_indev_data_t* data) {
             --g_release_page;
         }
         set_active_page(g_release_page);
-        start_pager_snap_anim(release_scroll_x, g_release_page);
+        if (drag_started) {
+            start_pager_snap_anim(release_scroll_x, g_release_page);
+        }
+        g_swipe_drag_started = false;
     }
     was_down = g_touch.down;
 }
@@ -2184,7 +2197,10 @@ int main() {
 
         bool custom_present = false;
         if (g_touch.down) {
-            custom_present = present_pager_frame(visual_scroll_x_from_touch());
+            const int32_t scroll_x = visual_scroll_x_from_touch();
+            if (g_swipe_drag_started) {
+                custom_present = present_pager_frame(scroll_x);
+            }
         }
         else if (g_pager_anim_active) {
             custom_present = present_pager_snap_anim(now_ms);
