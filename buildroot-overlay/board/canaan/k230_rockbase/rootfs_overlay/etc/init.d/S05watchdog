@@ -1,0 +1,11 @@
+#!/bin/sh
+
+case "$1" in
+  start)
+    [ -c /dev/watchdog ] || exit 0
+    watchdog -T 60 -t 10 /dev/watchdog >/dev/null 2>&1 &
+    ;;
+  stop)
+    killall watchdog 2>/dev/null || true
+    ;;
+esac
