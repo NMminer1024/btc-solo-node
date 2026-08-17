@@ -46,7 +46,7 @@ seed/root-block/
 
 ## 带 Seed 构建命令
 
-> **注意**：seed 镜像通常配合默认 `sdio_wifi` 模式；若当前实验是 `usb_eth`，需追加 `K230_NET=usb_eth`。
+> **注意**：seed 镜像通常配合默认 `sdio_wifi` 模式；若当前实验是 `usb`，需追加 `K230_NET=usb`。
 > 完整的 `K230_NET` 说明见 `rockbase-build` skill。
 
 ### 1G 带 seed
@@ -75,16 +75,15 @@ make CONF=k230_rockbase_2g_defconfig buildroot \
 
 ### 网络模式互斥验收（烧录后必须执行）
 
-若本次带 seed 构建使用了 `K230_NET=usb_eth`，烧录后必须确认镜像不含 SDIO WiFi 运行要素：
+若本次带 seed 构建使用了 `K230_NET=usb`，烧录后必须确认镜像不含 SDIO WiFi 驱动：
 
 ```bash
 ssh root@<IP> '
 echo "[release]"; cat /etc/version/release_version
 find /lib/modules -name "8189fs.ko" | head -3
-lsmod | grep 8189 || true
-command -v wpa_supplicant >/dev/null && echo "FAIL:wpa_supplicant present" || echo "OK:no wpa_supplicant"
-command -v iwconfig >/dev/null && echo "FAIL:iwconfig present" || echo "OK:no iwconfig"
-[ -d /sys/class/net/wlan0 ] && echo "FAIL:wlan0 present" || echo "OK:no wlan0"
+[ -f /lib/modules/*/kernel/drivers/net/wireless/8189fs/8189fs.ko ] && echo "FAIL:8189fs.ko present" || echo "OK:no 8189fs.ko"
+command -v wpa_supplicant >/dev/null && echo "OK:wpa_supplicant present" || echo "FAIL:no wpa_supplicant"
+command -v iwconfig >/dev/null && echo "OK:iwconfig present" || echo "FAIL:no iwconfig"
 '
 ```
 
@@ -101,7 +100,7 @@ command -v iwconfig >/dev/null && echo "OK:iwconfig present" || echo "FAIL:no iw
 '
 ```
 
-任一 `FAIL` 都按镜像与模式不一致处理，优先排查是否误烧录了错误后缀目录（`-usbeth-` 或 `-sdio-`）。
+任一 `FAIL` 都按镜像与模式不一致处理，优先排查是否误烧录了错误后缀目录（`-usb-` 或 `-sdio-`）。
 
 ---
 
