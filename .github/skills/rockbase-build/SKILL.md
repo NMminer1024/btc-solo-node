@@ -1,6 +1,6 @@
 ---
 name: rockbase-build
-description: 'Build Rockbase images and export to Windows. Use when: 构建镜像, 编译, make buildroot, rebuild, export image, 导出镜像, 打进镜像, LVGL rebuild, 镜像构建, compile image, K230_NET, usb, sdio_wifi, 网络模式, 有线网卡, USB网卡, 网络接口, 切换网络, 网络变体.'
+description: 'Build Rockbase images and export to Windows. Use when: 构建镜像, 编译, 全量编译, 完整镜像, make buildroot, rebuild, export image, 导出镜像, 打进镜像, LVGL rebuild, 镜像构建, compile image, clean build, K230_NET, usb, sdio_wifi, 网络模式, 有线网卡, USB网卡, 网络接口, 切换网络, 网络变体.'
 ---
 
 # Rockbase 镜像构建与导出
@@ -30,6 +30,8 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 | 规则 | 说明 |
 |------|------|
 | 默认非 seed | 除非用户明确说"带 seed 镜像"，否则永远构建非 seed 最小镜像 |
+| 全量编译 | 清理所有编译产物（保留工具链和 `.config`），完全重新编译；详见下方 **全量编译** 章节 |
+| 完整镜像 | 带 seed 的镜像（`K230_BLOCKDATA_SIZE=24G` + 真实 seed 数据）；详见 `rockbase-seed` skill |
 | LVGL UI 重建 | 任何 LVGL/`rockbase_lcdui` 改动后，必须用 `rockbase_lcdui-rebuild` 单独重建 |
 | WSL 导出 | 使用 `post-image.sh` 自动导出到 `/mnt/d/code/pony/IoT/k230/img/` |
 | 构建前准备 | 非 seed 构建需要 `mkdir -p /tmp/rockbase-empty-seed` |
@@ -206,6 +208,63 @@ make CONF=k230_rockbase_1g_defconfig copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/Io
 
 ---
 
+## 全量编译
+
+**定义**：清理所有编译产物（`build/`、`staging/`、`target/`、`images/`），保留工具链和 `.config`，完全重新编译。
+
+**适用场景**：
+- defconfig 大幅变更后需要干净构建
+- 怀疑增量编译产物不一致
+- 切换 Buildroot 版本或 overlay 结构变更后
+- 排查"改了源码但镜像没变"类问题
+
+**命令**：
+
+```bash
+# 1G 全量编译
+make CONF=k230_rockbase_1g_defconfig clean
+mkdir -p /tmp/rockbase-empty-seed
+make CONF=k230_rockbase_1g_defconfig buildroot \
+  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
+  K230_BLOCKDATA_SIZE=256M \
+  K230_IMAGE_GZIP=0
+
+# 2G 全量编译
+make CONF=k230_rockbase_2g_defconfig clean
+mkdir -p /tmp/rockbase-empty-seed
+make CONF=k230_rockbase_2g_defconfig buildroot \
+  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
+  K230_BLOCKDATA_SIZE=256M \
+  K230_IMAGE_GZIP=0
+```
+
+**说明**：
+- `make clean` 会清理 `output/<CONF>/` 下的 `build/`、`staging/`、`target/`、`images/`，但保留 `.config`
+- 工具链是外部工具链（`BR2_TOOLCHAIN_EXTERNAL`），不在 `output/` 目录内，天然不受影响
+- 全量编译耗时较长（所有包重新编译），仅在必要时使用
+- 如果连 `.config` 也要重置（重新从 defconfig 生成），直接 `rm -rf output/<CONF>/` 再构建
+
+---
+
+## 完整镜像（带 Seed）
+
+**定义**：包含真实 Bitcoin 区块数据的镜像，`K230_BLOCKDATA_SIZE=24G`，seed 数据写入独立 `blockdata.ext4` 分区。
+
+**与最小镜像的区别**：
+
+| 维度 | 最小镜像（默认） | 完整镜像（带 seed） |
+|------|-----------------|-------------------|
+| Seed 数据 | 空目录 | 真实区块数据（`seed/root-block/`） |
+| Blockdata 大小 | 256M | 24G |
+| 镜像总大小 | ~2.4G–2.6G | ~26G+ |
+| 用途 | 开发调试、功能验证 | 生产部署、同步验证 |
+
+**构建命令**：见 `rockbase-seed` skill。
+
+**触发条件**：用户明确说"带 seed"、"完整镜像"、"seed 镜像"时才构建完整镜像。
+
+---
+
 ## 编译陷阱
 
 ### ⚠️ 从 target 手动删除包文件后，Buildroot 不会自动重装
@@ -322,9 +381,9 @@ make CONF=k230_rockbase_2g_defconfig rockbase_lcdui-rebuild
 
 ---
 
-## 种子 (Seed) 镜像
+## 完整镜像（Seed 镜像）
 
-Seed 镜像构建见 `rockbase-seed` skill。除非用户明确说"带 seed"，不触发 seed 流程。
+完整镜像 = 带 seed 的镜像。构建流程、seed 同步、容量规则等详见 `rockbase-seed` skill。除非用户明确说"带 seed"、"完整镜像"，不触发 seed 流程。
 
 ## 板子信息
 
