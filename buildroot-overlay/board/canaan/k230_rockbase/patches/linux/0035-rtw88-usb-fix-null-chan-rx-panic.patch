@@ -1,0 +1,38 @@
+From: RockBase SDK <dev@rockbase.local>
+Subject: [PATCH] rtw88: usb: fix NULL chandef.chan deref panic on RX before start
+
+RTL8821CU USB firmware starts delivering RX frames as soon as the bulk
+IN URB is submitted during probe, before mac80211 calls hw_config to
+assign hw->conf.chandef.chan. rtw_rx_fill_rx_status() then dereferences
+a NULL chan and panics the kernel.
+
+Drop RX frames while the device is not yet running (RTW_FLAG_RUNNING),
+and guard the chan dereference in rtw_rx_fill_rx_status() as a second
+line of defense covering all HCI paths.
+
+---
+--- a/drivers/net/wireless/realtek/rtw88/rx.c
++++ b/drivers/net/wireless/realtek/rtw88/rx.c
+@@ -156,6 +156,8 @@
+ 	u8 path;
+ 
+ 	memset(rx_status, 0, sizeof(*rx_status));
++	if (!hw->conf.chandef.chan)
++		return;
+ 	rx_status->freq = hw->conf.chandef.chan->center_freq;
+ 	rx_status->band = hw->conf.chandef.chan->band;
+ 	if (rtw_fw_feature_check(&rtwdev->fw, FW_FEATURE_SCAN_OFFLOAD) &&
+--- a/drivers/net/wireless/realtek/rtw88/usb.c
++++ b/drivers/net/wireless/realtek/rtw88/usb.c
+@@ -552,6 +552,11 @@
+ 		if (!skb)
+ 			break;
+ 
++		if (!test_bit(RTW_FLAG_RUNNING, rtwdev->flags)) {
++			dev_kfree_skb_any(skb);
++			continue;
++		}
++
+ 		rx_desc = skb->data;
+ 		chip->ops->query_rx_desc(rtwdev, rx_desc, &pkt_stat,
+ 					 &rx_status);
