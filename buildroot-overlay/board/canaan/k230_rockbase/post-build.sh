@@ -158,7 +158,7 @@ EOF
 	# No SDIO WiFi driver in this build: unbind mmc0 host so the chip stops generating spurious interrupts.
 	if ! grep -q 'BR2_PACKAGE_RTL8189FS=y\|BR2_PACKAGE_BCMDHD=y\|BR2_PACKAGE_RTL8733BS=y\|BR2_PACKAGE_BL616_SDIO=y' "${config}"; then
 		cat >> "${auto_boot_f}" <<'SDIO_OFF'
-# Silence unused SDIO WiFi slot (usb_eth / usb_wifi builds without SDIO driver)
+# Silence unused SDIO WiFi slot (usb builds without SDIO driver)
 if [ -d /sys/bus/platform/drivers/sdhci-dwcmshc-kendryte ]; then
     echo "91580000.sdhci0" > /sys/bus/platform/drivers/sdhci-dwcmshc-kendryte/unbind 2>/dev/null || true
 fi

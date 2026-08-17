@@ -289,28 +289,18 @@ sync_image_outputs()
 	local exported_image
 	local CONF=$(basename ${BASE_DIR})
 	local net_mode_file="${BASE_DIR}/.k230_net_mode"
-	local net_mode_state="${K230_NET:-sdio_8189}|debug=${K230_NET_DEBUG_COEXIST:-0}"
+	local net_mode_name="${K230_NET:-sdio_wifi}"
 	if [ -f "${net_mode_file}" ]; then
-		net_mode_state=$(tr -d '\r\n' < "${net_mode_file}")
+		net_mode_name=$(tr -d '\r\n' < "${net_mode_file}")
 	fi
-	local net_mode_name="${net_mode_state%%|*}"
-	local net_mode_debug="$(printf '%s' "${net_mode_state}" | awk -F'debug=' '{print $2}' | cut -d'|' -f1)"
-	net_mode_debug="${net_mode_debug:-0}"
 	# Network-mode suffix (canonical):
-	#   sdio_8189 -> -sdio8189
-	#   sdio_bl616 -> -sdiobl616
-	#   usb_eth -> -usbeth
-	#   usb_wifi -> -usbwifi
-	local net_sfx="-sdio8189"
+	#   sdio_wifi -> -sdio
+	#   usb       -> -usb
+	local net_sfx="-sdio"
 	case "${net_mode_name}" in
-	  sdio_bl616|sdio-bl616) net_sfx="-sdiobl616" ;;
-	  usb_eth|usb-eth)       net_sfx="-usbeth" ;;
-	  usb_wifi|usb-wifi)     net_sfx="-usbwifi" ;;
-	  sdio_wifi|sdio_8189)   net_sfx="-sdio8189" ;;
+	  usb|usb_eth|usb-eth|usb_wifi|usb-wifi) net_sfx="-usb" ;;
+	  *) net_sfx="-sdio" ;;
 	esac
-	if [ "${net_mode_debug}" = "1" ] && [ "${net_mode_name}" = "usb_eth" ]; then
-		net_sfx="-usbethdbg"
-	fi
 	local image_prefix="sysimage-sdcard-rockbase-1g${net_sfx}"
 	# 从 release_version 中提取首个 YYYYMMDD-HHMMSS 时间戳，保证每次导出落到新目录
 	build_stamp=$(grep -m1 ^sdk: "${TARGET_DIR}/etc/version/release_version" | grep -oE [0-9]{8}-[0-9]{6} | head -n1)
