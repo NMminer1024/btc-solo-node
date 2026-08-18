@@ -105,11 +105,19 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 
 ### 镜像目录命名
 
-导出目录格式：`sysimage-sdcard-rockbase-{1g,2g}-{net_suffix}-TIMESTAMP/`
+导出目录格式：`sysimage-sdcard-rockbase-{1g,2g}-{flavor}-{net_suffix}-TIMESTAMP/`
+
+- `{flavor}`：镜像类型标志
+  - `-min-`：最小镜像（非 seed，`K230_BLOCKDATA_SIZE=256M`）
+  - `-full-`：完整镜像（带 seed，`K230_BLOCKDATA_SIZE=24G`）
+- `{net_suffix}`：网络模式后缀（`-sdio` / `-usb`）
+
+判定依据：脚本按 `K230_BLOCKDATA_SIZE` 判断，`>= 1G` 视为完整镜像（`-full-`），否则为最小镜像（`-min-`）。
 
 示例：
-- `sysimage-sdcard-rockbase-1g-sdio-20260817-102416/`
-- `sysimage-sdcard-rockbase-1g-usb-20260817-113037/`
+- `sysimage-sdcard-rockbase-1g-min-sdio-20260817-102416/`（1G 最小镜像，SDIO WiFi）
+- `sysimage-sdcard-rockbase-1g-min-usb-20260817-113037/`（1G 最小镜像，USB）
+- `sysimage-sdcard-rockbase-2g-full-sdio-20260817-120000/`（2G 完整镜像，带 seed）
 
 ### 模式验收
 
@@ -348,6 +356,8 @@ command -v iwconfig >/dev/null && echo "OK:iwconfig present" || echo "FAIL:no iw
 ```
 
 烧录时优先使用目录名带后缀的镜像：
+- `-min-` 对应最小镜像（非 seed，`K230_BLOCKDATA_SIZE=256M`）
+- `-full-` 对应完整镜像（带 seed，`K230_BLOCKDATA_SIZE=24G`）
 - `-sdio-` 对应 `K230_NET=sdio_wifi`
 - `-usb-` 对应 `K230_NET=usb`
 
@@ -373,7 +383,7 @@ make CONF=k230_rockbase_2g_defconfig rockbase_lcdui-rebuild
 | 产物 | 路径 |
 |------|------|
 | 构建中间文件 | `output/<CONF>/images/blockdata.ext4`、`sysimage-sdcard.img` |
-| Windows 导出 | `/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-{1g,2g}-{net}-<timestamp>/sysimage-sdcard.img` |
+| Windows 导出 | `/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-{1g,2g}-{min\|full}-{net}-<timestamp>/sysimage-sdcard.img` |
 
 非 seed 镜像预期大小：`~2.4G ~ 2.6G`（rootfs 2G + blockdata 256M + 分区开销）。
 
