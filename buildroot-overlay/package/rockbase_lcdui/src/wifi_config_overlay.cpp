@@ -210,23 +210,17 @@ void WifiConfigOverlay::build_scanning() {
 
 void WifiConfigOverlay::build_list() {
     lv_obj_t* refresh_btn = lv_btn_create(body_);
-    lv_obj_set_size(refresh_btn, 120, 38);
-    lv_obj_set_pos(refresh_btn, 0, 0);
-    style_button(refresh_btn, 0x263946);
-    button_label(refresh_btn, "Rescan");
+    lv_obj_set_size(refresh_btn, 88, 40);
+    lv_obj_set_pos(refresh_btn, 624, 0);
+    style_button(refresh_btn, 0x1f5f73);
+    lv_obj_t* refresh_label = button_label(refresh_btn, "Rescan");
+    lv_obj_set_style_text_font(refresh_label, &lv_font_montserrat_14, 0);
     lv_obj_add_event_cb(refresh_btn, [](lv_event_t* e) {
         auto* self = static_cast<WifiConfigOverlay*>(lv_event_get_user_data(e));
         if (self == nullptr) return;
         self->set_phase(Phase::Scanning);
         self->start_scan();
     }, LV_EVENT_CLICKED, this);
-
-    message_label_ = lv_label_create(body_);
-    lv_obj_set_pos(message_label_, 142, 8);
-    lv_obj_set_width(message_label_, 546);
-    lv_obj_set_style_text_font(message_label_, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(message_label_, lv_color_hex(0x9aa6ac), 0);
-    lv_label_set_text(message_label_, networks_.empty() ? "No networks found." : "Tap an SSID to configure it.");
 
     lv_obj_t* list = lv_obj_create(body_);
     lv_obj_remove_style_all(list);
@@ -237,6 +231,14 @@ void WifiConfigOverlay::build_list() {
     lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_scroll_dir(list, LV_DIR_VER);
     lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
+
+    if (networks_.empty()) {
+        message_label_ = lv_label_create(list);
+        lv_obj_set_width(message_label_, 420);
+        lv_obj_set_style_text_font(message_label_, &lv_font_montserrat_18, 0);
+        lv_obj_set_style_text_color(message_label_, lv_color_hex(0x9aa6ac), 0);
+        lv_label_set_text(message_label_, "No networks found.");
+    }
 
     for (size_t i = 0; i < networks_.size(); ++i) {
         const Network& net = networks_[i];
@@ -340,10 +342,11 @@ void WifiConfigOverlay::build_password() {
     }, LV_EVENT_CLICKED, this);
 
     lv_obj_t* cancel_btn = lv_btn_create(body_);
-    lv_obj_set_size(cancel_btn, 150, 38);
+    lv_obj_set_size(cancel_btn, 180, 48);
     lv_obj_set_pos(cancel_btn, 0, 88);
     style_button(cancel_btn, 0x35414a);
-    button_label(cancel_btn, "Back");
+    lv_obj_t* cancel_label = button_label(cancel_btn, "Back");
+    lv_obj_set_style_text_font(cancel_label, &lv_font_montserrat_18, 0);
     lv_obj_add_event_cb(cancel_btn, [](lv_event_t* e) {
         auto* self = static_cast<WifiConfigOverlay*>(lv_event_get_user_data(e));
         if (self == nullptr) return;
@@ -352,10 +355,11 @@ void WifiConfigOverlay::build_password() {
     }, LV_EVENT_CLICKED, this);
 
     lv_obj_t* apply_btn = lv_btn_create(body_);
-    lv_obj_set_size(apply_btn, 190, 38);
-    lv_obj_set_pos(apply_btn, 522, 88);
-    style_button(apply_btn, 0xff8c64);
-    button_label(apply_btn, "Apply Now");
+    lv_obj_set_size(apply_btn, 220, 48);
+    lv_obj_set_pos(apply_btn, 492, 88);
+    style_button(apply_btn, 0x2d8f5a);
+    lv_obj_t* apply_label = button_label(apply_btn, "Apply Now");
+    lv_obj_set_style_text_font(apply_label, &lv_font_montserrat_18, 0);
     lv_obj_add_event_cb(apply_btn, [](lv_event_t* e) {
         auto* self = static_cast<WifiConfigOverlay*>(lv_event_get_user_data(e));
         if (self == nullptr) return;
