@@ -6,6 +6,8 @@
 
 当前重点是：降低设备侧采样压力，让网页监控从“请求触发重采样”演进为“后台采样 + 内存缓存 + 轻量 API”。
 
+与配置交互相关的统一模型、schema、adapter 和异步操作约定，已单独整理到 [配置/API 架构记录](rockbase-config-api-architecture.md)。
+
 ## 产品定位
 
 Rockbase 的产品形态是：
@@ -180,6 +182,8 @@ meta：
 - Logs：日志查看，按需请求。
 - Settings：后续配置入口。
 - About：版本和构建信息。
+
+Settings 页最终应通过统一配置 API 读写，而不是直接依赖 CGI 或散落脚本。
 
 Dashboard 边界：
 

@@ -22,6 +22,7 @@
 
 #include "lvgl/lvgl.h"
 #include "lvgl/draw/lv_snapshot.h"
+#include "wifi_config_overlay.h"
 
 namespace {
 
@@ -252,7 +253,9 @@ uint32_t g_active_page = 0;
 uint32_t g_swipe_start_page = 0;
 uint32_t g_release_page = 0;
 int32_t g_swipe_start_x = 0;
+int32_t g_swipe_start_y = 0;
 int32_t g_swipe_current_x = 0;
+int32_t g_swipe_current_y = 0;
 int32_t g_visual_scroll_x = 0;
 bool g_pager_anim_active = false;
 uint32_t g_pager_anim_start_ms = 0;
@@ -265,6 +268,11 @@ uint32_t g_fps_window_start_ms = 0;
 uint32_t g_fps_frame_count = 0;
 bool g_clock_refresh_pending = false;
 bool g_status_refresh_pending = false;
+WifiConfigOverlay g_wifi_config_overlay;
+bool g_wifi_config_overlay_open_pending = false;
+bool g_wifi_config_overlay_wait_release = false;
+int g_pressed_hotspot_index = -1;
+bool g_show_page_indicator = false;
 
 void set_active_page(uint32_t page);
 void refresh_clock_cb(lv_timer_t*);
@@ -279,7 +287,51 @@ uint32_t tick_ms() {
 
 bool ui_interacting(uint32_t now_ms = tick_ms()) {
     (void)now_ms;
-    return g_touch.down || g_pager_anim_active;
+    return g_touch.down || g_pager_anim_active || g_wifi_config_overlay.active();
+}
+
+struct ConfigHotspot {
+    uint32_t page = 0;
+    int32_t x = 0;
+    int32_t y = 0;
+    int32_t w = 0;
+    int32_t h = 0;
+    void (*open)() = nullptr;
+};
+
+void open_wifi_config_overlay() {
+    g_wifi_config_overlay_open_pending = true;
+}
+
+constexpr ConfigHotspot kConfigHotspots[] = {
+    {3, 294, 148, 210, 112, open_wifi_config_overlay},
+};
+
+int find_config_hotspot(uint32_t page, int32_t x, int32_t y) {
+    for (size_t i = 0; i < sizeof(kConfigHotspots) / sizeof(kConfigHotspots[0]); ++i) {
+        const ConfigHotspot& hotspot = kConfigHotspots[i];
+        if (hotspot.page != page || hotspot.open == nullptr) {
+            continue;
+        }
+        if (x >= hotspot.x && x < hotspot.x + hotspot.w &&
+            y >= hotspot.y && y < hotspot.y + hotspot.h) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+bool trigger_config_hotspot(int hotspot_index) {
+    if (hotspot_index < 0 ||
+        hotspot_index >= static_cast<int>(sizeof(kConfigHotspots) / sizeof(kConfigHotspots[0]))) {
+        return false;
+    }
+    const ConfigHotspot& hotspot = kConfigHotspots[hotspot_index];
+    if (hotspot.open == nullptr) {
+        return false;
+    }
+    hotspot.open();
+    return true;
 }
 
 void handle_signal(int) {
@@ -377,6 +429,9 @@ void run_lv_for(uint32_t ms) {
 }
 
 void draw_cached_indicator(uint32_t* dst, uint32_t stride_px) {
+    if (!g_show_page_indicator) {
+        return;
+    }
     constexpr int32_t kDotSize = 10;
     constexpr int32_t kDotStartX = 359;
     constexpr int32_t kDotStepX = 24;
@@ -1355,16 +1410,31 @@ void touch_read_cb(lv_indev_t*, lv_indev_data_t* data) {
 
     data->point.x = clamp_int(phys_y, 0, static_cast<int>(kUiWidth - 1U));
     data->point.y = clamp_int(static_cast<int>(kUiHeight - 1U) - phys_x, 0, static_cast<int>(kUiHeight - 1U));
-    // Phase 2 pager owns swiping. Keep LVGL from applying its own tileview drag.
     data->state = LV_INDEV_STATE_RELEASED;
     g_swipe_current_x = data->point.x;
+    g_swipe_current_y = data->point.y;
 
     static bool was_down = false;
+    if (g_wifi_config_overlay.active()) {
+        if (g_wifi_config_overlay_wait_release) {
+            if (!g_touch.down) {
+                g_wifi_config_overlay_wait_release = false;
+            }
+            was_down = g_touch.down;
+            return;
+        }
+        data->state = g_touch.down ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+        was_down = g_touch.down;
+        return;
+    }
+
     if (!was_down && g_touch.down) {
         g_swipe_start_x = data->point.x;
+        g_swipe_start_y = data->point.y;
         g_swipe_start_page = g_active_page;
         g_visual_scroll_x = static_cast<int32_t>(g_swipe_start_page * kUiWidth);
         g_swipe_drag_started = false;
+        g_pressed_hotspot_index = find_config_hotspot(g_swipe_start_page, data->point.x, data->point.y);
     }
     if (was_down && !g_touch.down) {
         g_release_page = g_swipe_start_page;
@@ -1378,11 +1448,27 @@ void touch_read_cb(lv_indev_t*, lv_indev_data_t* data) {
         else if (swipe_dx >= static_cast<int32_t>(kPageSwitchThresholdPx) && g_release_page > 0) {
             --g_release_page;
         }
+        const int32_t tap_dx = data->point.x - g_swipe_start_x;
+        const int32_t tap_dy = data->point.y - g_swipe_start_y;
+        const bool is_tap = !drag_started &&
+                            std::abs(tap_dx) < static_cast<int32_t>(kSwipeDragStartThresholdPx) &&
+                            std::abs(tap_dy) < static_cast<int32_t>(kSwipeDragStartThresholdPx);
+        const int released_hotspot_index =
+            find_config_hotspot(g_swipe_start_page, data->point.x, data->point.y);
+        if (is_tap && g_pressed_hotspot_index >= 0 &&
+            g_pressed_hotspot_index == released_hotspot_index &&
+            trigger_config_hotspot(g_pressed_hotspot_index)) {
+            g_swipe_drag_started = false;
+            g_pressed_hotspot_index = -1;
+            was_down = g_touch.down;
+            return;
+        }
         set_active_page(g_release_page);
         if (drag_started) {
             start_pager_snap_anim(release_scroll_x, g_release_page);
         }
         g_swipe_drag_started = false;
+        g_pressed_hotspot_index = -1;
     }
     was_down = g_touch.down;
 }
@@ -2184,6 +2270,7 @@ int main() {
     lv_obj_fade_out(boot_layer, kDashboardFadeMs, 0);
     run_lv_for(kDashboardFadeMs + 80);
     lv_obj_delete(boot_layer);
+    g_show_page_indicator = true;
     lv_refr_now(disp);
 
     std::printf("rockbase-lcdui: running lvgl tile UI\n");
@@ -2192,21 +2279,27 @@ int main() {
     while (!g_stop) {
         const uint32_t now_ms = tick_ms();
         const bool interacting = ui_interacting(now_ms);
+        if (g_wifi_config_overlay_open_pending && !g_wifi_config_overlay.active()) {
+            g_wifi_config_overlay.open();
+            g_wifi_config_overlay_open_pending = false;
+            g_wifi_config_overlay_wait_release = true;
+        }
+        g_wifi_config_overlay.update();
         process_deferred_refreshes_if_idle();
         refresh_one_dirty_page_if_idle();
 
         bool custom_present = false;
-        if (g_touch.down) {
+        if (!g_wifi_config_overlay.active() && g_touch.down) {
             const int32_t scroll_x = visual_scroll_x_from_touch();
             if (g_swipe_drag_started) {
                 custom_present = present_pager_frame(scroll_x);
             }
         }
-        else if (g_pager_anim_active) {
+        else if (!g_wifi_config_overlay.active() && g_pager_anim_active) {
             custom_present = present_pager_snap_anim(now_ms);
         }
 
-        g_custom_frame_presenting = g_touch.down || custom_present;
+        g_custom_frame_presenting = !g_wifi_config_overlay.active() && (g_touch.down || custom_present);
         uint32_t next_ms = lv_timer_handler();
         g_custom_frame_presenting = false;
         if (interacting) {
