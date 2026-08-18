@@ -1,6 +1,6 @@
 #!/bin/sh
 
-LOG_DIR=/root/log
+LOG_DIR=/run/rockbase-log
 HEARTBEAT_LOG=${LOG_DIR}/heartbeat.log
 HEARTBEAT_MAX_KB=1024
 HEARTBEAT_ROTATIONS=10
@@ -181,7 +181,6 @@ write_heartbeat() {
         "${ts}" "${uptime_s:-0}" "${load1:-0}" "${load5:-0}" "${mem_avail:-0}" "${swap_used:-0}" "${wlan_ip}" "${rssi}" "${bitcoind_state}" "${ckpool_state}" \
         "${vm_info}" "${mmc_info}" "${block_info}" "${dstate_info}" "${btc_info}" \
         >> "${HEARTBEAT_LOG}"
-    sync "${HEARTBEAT_LOG}" 2>/dev/null || true
 }
 
 case "$1" in

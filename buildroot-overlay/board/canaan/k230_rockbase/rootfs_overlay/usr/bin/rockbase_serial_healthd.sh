@@ -2,7 +2,7 @@
 
 INTERVAL="${1:-10}"
 CONSOLE=/dev/console
-DIAG_LOG_DIR=/root/log
+DIAG_LOG_DIR=/run/rockbase-log
 DIAG_LOG_FILE=${DIAG_LOG_DIR}/serialhealth-diag.log
 DIAG_LOG_MAX_KB=256
 CONSOLE_OUTPUT=${ROCKBASE_SERIAL_HEALTH_CONSOLE:-1}

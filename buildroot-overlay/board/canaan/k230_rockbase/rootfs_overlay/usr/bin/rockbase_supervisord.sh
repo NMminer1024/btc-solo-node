@@ -2,7 +2,7 @@
 # Rockbase lightweight service supervisor.
 # Keeps non-critical web/cache daemons alive without touching bitcoind data paths.
 
-LOG_DIR=${ROCKBASE_SUPERVISOR_LOG_DIR:-/root/log}
+LOG_DIR=${ROCKBASE_SUPERVISOR_LOG_DIR:-/run/rockbase-log}
 LOG_FILE=${ROCKBASE_SUPERVISOR_LOG:-${LOG_DIR}/supervisor.log}
 STATE_DIR=${ROCKBASE_SUPERVISOR_STATE:-/run/rockbase-supervisor}
 PID_FILE=${PID_FILE:-/var/run/rockbase-supervisord.pid}
