@@ -11,6 +11,10 @@ WIFI_DHCP_TRIES=${WIFI_DHCP_TRIES:-12}
 WIFI_LATE_WATCH_TIMEOUT=${WIFI_LATE_WATCH_TIMEOUT:-90}
 WIFI_DHCP_LOG=${WIFI_DHCP_LOG:-/tmp/rockbase-wifi-udhcpc.log}
 USB_WIFI_HELPER=${USB_WIFI_HELPER:-/usr/bin/rockbase_usb_wifi.sh}
+WIFI_WATCHDOG_ENABLE=${WIFI_WATCHDOG_ENABLE:-1}
+WIFI_WATCHDOG_INTERVAL=${WIFI_WATCHDOG_INTERVAL:-20}
+WIFI_WATCHDOG_FAIL_THRESHOLD=${WIFI_WATCHDOG_FAIL_THRESHOLD:-3}
+WIFI_WATCHDOG_PIDFILE=${WIFI_WATCHDOG_PIDFILE:-/var/run/rockbase-wifi-watchdog.pid}
 
 wifi_shell_quote() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
@@ -360,6 +364,7 @@ wifi_start_service() {
 
   iw dev "$WLAN_DEV" set power_save off 2>/dev/null || true
   iwconfig "$WLAN_DEV" power off 2>/dev/null || true
+  wifi_watchdog_start
 
   wifi_load_config
   wifi_console_log "boot wifi config: source=${WIFI_CONFIG_SOURCE} target_ssid=\"${WIFI_SSID}\" hidden=${WIFI_HIDDEN} pass_len=${#WIFI_PASS}"
@@ -408,6 +413,62 @@ wifi_start_service() {
     "$WIFI_ASSOC_TIMEOUT" "$WIFI_DHCP_TRIES" "$WIFI_LATE_WATCH_TIMEOUT"
   wifi_start_late_watcher "$WIFI_SSID"
   return 2
+}
+
+wifi_watchdog_health() {
+  [ -e "/sys/class/net/${WLAN_DEV}" ] || return 1
+  wifi_current_status
+  [ "$WIFI_CONNECTED_STATE" = "COMPLETED" ] && [ "$WIFI_CONNECTED_IP" != "-" ]
+}
+
+wifi_watchdog_reload() {
+  wifi_console_log "watchdog: link down (state=${WIFI_CONNECTED_STATE} ssid=\"${WIFI_CONNECTED_SSID}\" ip=${WIFI_CONNECTED_IP}), reloading driver"
+  wifi_stop_service
+  rmmod rtw88_8821cu 2>/dev/null || true
+  rmmod rtw88_8821c 2>/dev/null || true
+  rmmod rtw88_usb 2>/dev/null || true
+  rmmod rtw88_core 2>/dev/null || true
+  sleep 2
+  wifi_start_service
+}
+
+wifi_watchdog_loop() {
+  fail_count=0
+  while true; do
+    sleep "$WIFI_WATCHDOG_INTERVAL"
+
+    if [ -e "/sys/class/net/${WLAN_DEV}" ]; then
+      iw dev "$WLAN_DEV" set power_save off 2>/dev/null || true
+      iwconfig "$WLAN_DEV" power off 2>/dev/null || true
+    fi
+
+    if wifi_watchdog_health; then
+      fail_count=0
+      continue
+    fi
+
+    fail_count=$((fail_count + 1))
+    wifi_console_log "watchdog: unhealthy (state=${WIFI_CONNECTED_STATE} ip=${WIFI_CONNECTED_IP}) fail=${fail_count}/${WIFI_WATCHDOG_FAIL_THRESHOLD}"
+    if [ "$fail_count" -ge "$WIFI_WATCHDOG_FAIL_THRESHOLD" ]; then
+      wifi_watchdog_reload
+      fail_count=0
+    fi
+  done
+}
+
+wifi_watchdog_start() {
+  [ "$WIFI_WATCHDOG_ENABLE" = "1" ] || return 0
+  if [ -f "$WIFI_WATCHDOG_PIDFILE" ]; then
+    pid=$(cat "$WIFI_WATCHDOG_PIDFILE" 2>/dev/null)
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      return 0
+    fi
+  fi
+  rm -f "$WIFI_WATCHDOG_PIDFILE"
+  mkdir -p "$(dirname "$WIFI_WATCHDOG_PIDFILE")" 2>/dev/null || true
+  ( wifi_watchdog_loop ) >/dev/null 2>&1 &
+  echo $! >"$WIFI_WATCHDOG_PIDFILE" 2>/dev/null || true
+  wifi_console_log "watchdog: started interval=${WIFI_WATCHDOG_INTERVAL}s threshold=${WIFI_WATCHDOG_FAIL_THRESHOLD}"
 }
 
 wifi_stop_service() {
