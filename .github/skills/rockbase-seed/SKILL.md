@@ -53,7 +53,6 @@ seed/root-block/
 
 ```bash
 make CONF=k230_rockbase_1g_defconfig buildroot \
-  BLOCK_SEED_DIR=seed/root-block \
   K230_BLOCKDATA_SIZE=24G \
   K230_IMAGE_GZIP=0
 ```
@@ -62,10 +61,15 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 
 ```bash
 make CONF=k230_rockbase_2g_defconfig buildroot \
-  BLOCK_SEED_DIR=seed/root-block \
   K230_BLOCKDATA_SIZE=24G \
   K230_IMAGE_GZIP=0
 ```
+
+> **⚠️ 不要传相对路径 `BLOCK_SEED_DIR=seed/root-block`**
+> post-build/post-image 脚本的 CWD 是 `output/buildroot-2025.02.1`，相对路径在该目录下不存在，
+> 会导致 seed 被静默跳过（日志出现 `path not found`），生成空 blockdata 分区。
+> 不传 `BLOCK_SEED_DIR` 时脚本默认使用绝对路径 `${K230_SDK_ROOT}/seed/root-block`，即正确值。
+> 如需指定其他 seed 目录，必须传**绝对路径**。
 
 ### 容量规则
 
