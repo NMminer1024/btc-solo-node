@@ -46,6 +46,8 @@ constexpr uint32_t kDisplayRefrPeriodMs = 10;
 constexpr uint32_t kPresentIntervalMs = 20;
 constexpr const char* kBootLogoRawPath = "/usr/share/rockbase-lcdui/boot-logo-800x480.argb";
 constexpr const char* kStatusCachePath = "/tmp/status-api.json";
+constexpr const char* kMinersCachePath = "/run/rockbase/miners.json";
+constexpr const char* kMinersHistoryCachePath = "/run/rockbase/miners-history-node.json";
 volatile sig_atomic_t g_stop = 0;
 display* g_display = nullptr;
 display_plane* g_plane = nullptr;
@@ -98,6 +100,16 @@ struct TileRuntime {
     lv_obj_t* stratum_url_label = nullptr;
     lv_obj_t* stratum_chart = nullptr;
     lv_obj_t* stratum_chart_hint = nullptr;
+    lv_obj_t* stratum_legend_5m = nullptr;
+    lv_obj_t* stratum_legend_6h = nullptr;
+    lv_obj_t* stratum_legend_1d = nullptr;
+    lv_obj_t* stratum_total_hashrate = nullptr;
+    lv_obj_t* stratum_y_unit = nullptr;
+    lv_obj_t* stratum_y_ticks[5] {};
+    lv_obj_t* stratum_x_ticks[3] {};
+    lv_chart_series_t* stratum_series_5m = nullptr;
+    lv_chart_series_t* stratum_series_6h = nullptr;
+    lv_chart_series_t* stratum_series_1d = nullptr;
     lv_obj_t* system_load = nullptr;
     lv_obj_t* system_mem = nullptr;
     lv_obj_t* system_disk = nullptr;
@@ -160,6 +172,13 @@ struct DashboardData {
     std::string ntp_key = "-";
     std::string mac_addr = "-";
     std::string stratum_reach = "-";
+    std::string miners_hashrate_5m = "0";
+    std::string miners_hashrate_6h = "0";
+    std::string miners_hashrate_1d = "0";
+    std::vector<int32_t> miners_history_5m;
+    std::vector<int32_t> miners_history_6h;
+    std::vector<int32_t> miners_history_1d;
+    std::vector<int32_t> miners_history_ts;
 };
 
 struct HeightCardModel {
@@ -187,6 +206,11 @@ struct StratumPageModel {
     std::string url = "--";
     std::string user = "--";
     std::string mode = "--";
+    std::string total_hashrate_5m = "0";
+    std::vector<int32_t> history_5m;
+    std::vector<int32_t> history_6h;
+    std::vector<int32_t> history_1d;
+    std::vector<int32_t> history_ts;
 };
 
 struct SystemPageModel {
@@ -991,6 +1015,58 @@ std::string json_object(const std::string& json, const char* object_name) {
     return "";
 }
 
+std::string json_array(const std::string& json, const char* array_name) {
+    const std::string token = std::string("\"") + array_name + "\"";
+    size_t pos = json.find(token);
+    if (pos == std::string::npos) {
+        return "";
+    }
+
+    pos = json.find(':', pos + token.size());
+    if (pos == std::string::npos) {
+        return "";
+    }
+    pos = skip_ws(json, pos + 1);
+    if (pos >= json.size() || json[pos] != '[') {
+        return "";
+    }
+
+    const size_t start = pos;
+    int depth = 0;
+    bool in_string = false;
+    bool escaped = false;
+    for (; pos < json.size(); ++pos) {
+        const char ch = json[pos];
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+            }
+            else if (ch == '\\') {
+                escaped = true;
+            }
+            else if (ch == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+
+        if (ch == '"') {
+            in_string = true;
+        }
+        else if (ch == '[') {
+            ++depth;
+        }
+        else if (ch == ']') {
+            --depth;
+            if (depth == 0) {
+                return json.substr(start, pos - start + 1);
+            }
+        }
+    }
+
+    return "";
+}
+
 std::string json_value(const std::string& object, const char* key, const char* fallback = "-") {
     const std::string token = std::string("\"") + key + "\"";
     size_t pos = object.find(token);
@@ -1037,6 +1113,199 @@ std::string json_value(const std::string& object, const char* key, const char* f
         return fallback;
     }
     return value;
+}
+
+double parse_hashrate_ghs(const std::string& value) {
+    if (value.empty() || value == "-") {
+        return 0.0;
+    }
+
+    char* end = nullptr;
+    const double magnitude = std::strtod(value.c_str(), &end);
+    if (end == value.c_str()) {
+        return 0.0;
+    }
+
+    while (*end == ' ') {
+        ++end;
+    }
+
+    switch (*end) {
+    case 'P':
+    case 'p':
+        return magnitude * 1000000.0;
+    case 'T':
+    case 't':
+        return magnitude * 1000.0;
+    case 'G':
+    case 'g':
+        return magnitude;
+    case 'M':
+    case 'm':
+        return magnitude / 1000.0;
+    case 'K':
+    case 'k':
+        return magnitude / 1000000.0;
+    default:
+        return magnitude;
+    }
+}
+
+std::vector<std::string> json_array_objects(const std::string& array_json) {
+    std::vector<std::string> out;
+    if (array_json.size() < 2 || array_json.front() != '[') {
+        return out;
+    }
+
+    bool in_string = false;
+    bool escaped = false;
+    int depth = 0;
+    size_t start = std::string::npos;
+    for (size_t pos = 0; pos < array_json.size(); ++pos) {
+        const char ch = array_json[pos];
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+            }
+            else if (ch == '\\') {
+                escaped = true;
+            }
+            else if (ch == '"') {
+                in_string = false;
+            }
+            continue;
+        }
+
+        if (ch == '"') {
+            in_string = true;
+            continue;
+        }
+        if (ch == '{') {
+            if (depth == 0) {
+                start = pos;
+            }
+            ++depth;
+            continue;
+        }
+        if (ch == '}') {
+            --depth;
+            if (depth == 0 && start != std::string::npos) {
+                out.push_back(array_json.substr(start, pos - start + 1));
+                start = std::string::npos;
+            }
+        }
+    }
+
+    return out;
+}
+
+std::vector<int32_t> downsample_history_series(const std::vector<int32_t>& values, size_t max_points) {
+    if (values.size() <= max_points || max_points < 2) {
+        return values;
+    }
+
+    std::vector<int32_t> out;
+    out.reserve(max_points);
+    const double step = static_cast<double>(values.size() - 1) / static_cast<double>(max_points - 1);
+    for (size_t index = 0; index < max_points; ++index) {
+        size_t src = static_cast<size_t>(step * static_cast<double>(index) + 0.5);
+        if (src >= values.size()) {
+            src = values.size() - 1;
+        }
+        out.push_back(values[src]);
+    }
+    return out;
+}
+
+std::vector<int32_t> downsample_history_points(const std::vector<int32_t>& values, size_t max_points) {
+    return downsample_history_series(values, max_points);
+}
+
+struct HashrateDisplay {
+    double scaled = 0.0;
+    const char* unit = "GH/s";
+};
+
+HashrateDisplay format_hashrate_display(double value_ghs) {
+    static constexpr const char* kUnits[] = {"GH/s", "TH/s", "PH/s", "EH/s"};
+    size_t unit_index = 0;
+    double scaled = value_ghs < 0.0 ? 0.0 : value_ghs;
+    while (scaled >= 1000.0 && unit_index + 1 < sizeof(kUnits) / sizeof(kUnits[0])) {
+        scaled /= 1000.0;
+        ++unit_index;
+    }
+    return {scaled, kUnits[unit_index]};
+}
+
+std::string format_hashrate_value(double value_ghs) {
+    const HashrateDisplay display = format_hashrate_display(value_ghs);
+    char buf[32];
+    if (display.scaled >= 100.0) {
+        std::snprintf(buf, sizeof(buf), "%.0f", display.scaled);
+    }
+    else if (display.scaled >= 10.0) {
+        std::snprintf(buf, sizeof(buf), "%.1f", display.scaled);
+    }
+    else {
+        std::snprintf(buf, sizeof(buf), "%.2f", display.scaled);
+    }
+    return buf;
+}
+
+std::string format_chart_time_label(int32_t ts) {
+    if (ts <= 0) {
+        return "--";
+    }
+    char buf[24];
+    time_t raw = static_cast<time_t>(ts);
+    tm local {};
+    localtime_r(&raw, &local);
+    std::strftime(buf, sizeof(buf), "%m-%d %H:%M", &local);
+    return buf;
+}
+
+bool load_miners_chart_data(DashboardData& data) {
+    std::string miners_json;
+    if (!read_text_file(kMinersCachePath, miners_json, 262144)) {
+        return false;
+    }
+
+    const std::string pool = json_object(miners_json, "pool");
+    data.miners_hashrate_5m = json_value(pool, "hashrate5m", "0");
+    data.miners_hashrate_6h = json_value(pool, "hashrate6hr", "0");
+    data.miners_hashrate_1d = json_value(pool, "hashrate1d", "0");
+
+    std::string history_json;
+    if (!read_text_file(kMinersHistoryCachePath, history_json, 262144)) {
+        return true;
+    }
+
+    const std::string points = json_array(history_json, "points");
+    const std::vector<std::string> rows = json_array_objects(points);
+    if (rows.empty()) {
+        return true;
+    }
+
+    std::vector<int32_t> h5m;
+    std::vector<int32_t> h6h;
+    std::vector<int32_t> h1d;
+    std::vector<int32_t> ts_values;
+    h5m.reserve(rows.size());
+    h6h.reserve(rows.size());
+    h1d.reserve(rows.size());
+    ts_values.reserve(rows.size());
+    for (const std::string& row : rows) {
+        ts_values.push_back(std::atoi(json_value(row, "ts", "0").c_str()));
+        h5m.push_back(static_cast<int32_t>(parse_hashrate_ghs(json_value(row, "h5m", "0"))));
+        h6h.push_back(static_cast<int32_t>(parse_hashrate_ghs(json_value(row, "h6h", "0"))));
+        h1d.push_back(static_cast<int32_t>(parse_hashrate_ghs(json_value(row, "h1d", "0"))));
+    }
+
+    data.miners_history_5m = downsample_history_points(h5m, 96);
+    data.miners_history_6h = downsample_history_points(h6h, 96);
+    data.miners_history_1d = downsample_history_points(h1d, 96);
+    data.miners_history_ts = downsample_history_points(ts_values, 96);
+    return true;
 }
 
 std::string join_value(const std::string& left, const char* sep, const std::string& right, const char* fallback = "-") {
@@ -1200,6 +1469,7 @@ bool load_dashboard_data(DashboardData& data) {
     data.ntp_key = json_value(network, "ntp_key");
     data.mac_addr = json_value(network, "mac_addr");
     data.stratum_reach = json_value(network, "stratum_reach");
+    load_miners_chart_data(data);
     return true;
 }
 
@@ -1549,6 +1819,109 @@ void populate_stratum_placeholder_chart(lv_obj_t* chart) {
     lv_chart_refresh(chart);
 }
 
+bool update_stratum_chart(const StratumPageModel& model) {
+    if (g_tiles.stratum_chart == nullptr ||
+        g_tiles.stratum_series_5m == nullptr ||
+        g_tiles.stratum_series_6h == nullptr ||
+        g_tiles.stratum_series_1d == nullptr) {
+        return false;
+    }
+
+    const size_t count = std::max(model.history_5m.size(),
+                         std::max(model.history_6h.size(), model.history_1d.size()));
+    if (count < 2) {
+        bool dirty = false;
+        if (!lv_obj_has_flag(g_tiles.stratum_chart, LV_OBJ_FLAG_HIDDEN)) {
+            lv_obj_add_flag(g_tiles.stratum_chart, LV_OBJ_FLAG_HIDDEN);
+            dirty = true;
+        }
+        if (g_tiles.stratum_chart_hint != nullptr) {
+            if (lv_obj_has_flag(g_tiles.stratum_chart_hint, LV_OBJ_FLAG_HIDDEN)) {
+                lv_obj_clear_flag(g_tiles.stratum_chart_hint, LV_OBJ_FLAG_HIDDEN);
+                dirty = true;
+            }
+            lv_label_set_text(g_tiles.stratum_chart_hint, "Waiting for hashrate history...");
+        }
+        return dirty;
+    }
+
+    std::vector<int32_t> h5m = model.history_5m.empty() ? std::vector<int32_t>(count, 0) : model.history_5m;
+    std::vector<int32_t> h6h = model.history_6h.empty() ? std::vector<int32_t>(count, 0) : model.history_6h;
+    std::vector<int32_t> h1d = model.history_1d.empty() ? std::vector<int32_t>(count, 0) : model.history_1d;
+    if (h5m.size() != count) h5m.resize(count, h5m.empty() ? 0 : h5m.back());
+    if (h6h.size() != count) h6h.resize(count, h6h.empty() ? 0 : h6h.back());
+    if (h1d.size() != count) h1d.resize(count, h1d.empty() ? 0 : h1d.back());
+
+    int32_t max_value = 0;
+    for (size_t i = 0; i < count; ++i) {
+        max_value = std::max(max_value, h5m[i]);
+        max_value = std::max(max_value, h6h[i]);
+        max_value = std::max(max_value, h1d[i]);
+    }
+    if (max_value <= 0) {
+        max_value = 1000;
+    }
+    max_value = ((max_value + 499) / 500) * 500;
+
+    const HashrateDisplay axis_display = format_hashrate_display(static_cast<double>(max_value));
+    if (g_tiles.stratum_total_hashrate != nullptr) {
+        const double total_ghs = parse_hashrate_ghs(model.total_hashrate_5m);
+        const std::string total_value = format_hashrate_value(total_ghs);
+        const HashrateDisplay total_display = format_hashrate_display(total_ghs);
+        std::string total_text = total_value + " " + total_display.unit;
+        lv_label_set_text(g_tiles.stratum_total_hashrate, total_text.c_str());
+    }
+    if (g_tiles.stratum_y_unit != nullptr) {
+        lv_label_set_text(g_tiles.stratum_y_unit, axis_display.unit);
+    }
+    for (size_t i = 0; i < 5; ++i) {
+        if (g_tiles.stratum_y_ticks[i] == nullptr) continue;
+        const double value = (axis_display.scaled * static_cast<double>(4 - static_cast<int32_t>(i))) / 4.0;
+        char buf[16];
+        if (value >= 100.0) {
+            std::snprintf(buf, sizeof(buf), "%.0f", value);
+        }
+        else if (value >= 10.0) {
+            std::snprintf(buf, sizeof(buf), "%.1f", value);
+        }
+        else {
+            std::snprintf(buf, sizeof(buf), "%.2f", value);
+        }
+        lv_label_set_text(g_tiles.stratum_y_ticks[i], buf);
+    }
+    const size_t ts_count = model.history_ts.size();
+    const size_t ts_index[3] = {
+        0,
+        ts_count > 0 ? ts_count / 2 : 0,
+        ts_count > 1 ? ts_count - 1 : 0
+    };
+    for (size_t i = 0; i < 3; ++i) {
+        if (g_tiles.stratum_x_ticks[i] == nullptr) continue;
+        const int32_t ts = ts_count > ts_index[i] ? model.history_ts[ts_index[i]] : 0;
+        lv_label_set_text(g_tiles.stratum_x_ticks[i], format_chart_time_label(ts).c_str());
+    }
+
+    bool dirty = false;
+    if (lv_obj_has_flag(g_tiles.stratum_chart, LV_OBJ_FLAG_HIDDEN)) {
+        lv_obj_clear_flag(g_tiles.stratum_chart, LV_OBJ_FLAG_HIDDEN);
+        dirty = true;
+    }
+    if (g_tiles.stratum_chart_hint != nullptr) {
+        if (!lv_obj_has_flag(g_tiles.stratum_chart_hint, LV_OBJ_FLAG_HIDDEN)) {
+            lv_obj_add_flag(g_tiles.stratum_chart_hint, LV_OBJ_FLAG_HIDDEN);
+            dirty = true;
+        }
+    }
+
+    lv_chart_set_point_count(g_tiles.stratum_chart, count);
+    lv_chart_set_axis_range(g_tiles.stratum_chart, LV_CHART_AXIS_PRIMARY_Y, 0, max_value);
+    lv_chart_set_series_values(g_tiles.stratum_chart, g_tiles.stratum_series_5m, h5m.data(), h5m.size());
+    lv_chart_set_series_values(g_tiles.stratum_chart, g_tiles.stratum_series_6h, h6h.data(), h6h.size());
+    lv_chart_set_series_values(g_tiles.stratum_chart, g_tiles.stratum_series_1d, h1d.data(), h1d.size());
+    lv_chart_refresh(g_tiles.stratum_chart);
+    return true;
+}
+
 lv_obj_t* create_card(lv_obj_t* parent, int32_t x, int32_t y, int32_t w, int32_t h,
                       const char* title, const char* value, lv_color_t accent,
                       lv_obj_t** title_label = nullptr) {
@@ -1751,6 +2124,11 @@ bool build_ui_model(UiModel& model) {
     model.stratum.url = data.stratum_url;
     model.stratum.user = data.btc_address != "-" ? data.btc_address : data.user_hint;
     model.stratum.mode = data.recommended_mode;
+    model.stratum.total_hashrate_5m = data.miners_hashrate_5m;
+    model.stratum.history_5m = data.miners_history_5m;
+    model.stratum.history_6h = data.miners_history_6h;
+    model.stratum.history_1d = data.miners_history_1d;
+    model.stratum.history_ts = data.miners_history_ts;
 
     model.system.cpu_busy = data.load_pct != "-" ? data.load_pct + "%" : "--";
     if (data.load_avg_1 != "-" && data.load_avg_5 != "-") {
@@ -1926,19 +2304,17 @@ void build_stratum_tile(lv_obj_t* tv) {
     const lv_color_t accent = lv_color_hex(spec.accent);
     lv_obj_t* tile = create_tile_base(tv, 1, spec);
 
-    g_tiles.stratum_state_dot = create_status_dot(tile, 42, 108, 18);
-    g_tiles.stratum_state_label = add_label(tile, "ckpool", 68, 102, &lv_font_montserrat_22, lv_color_hex(0xf4efe2));
+    g_tiles.stratum_state_dot = create_status_dot(tile, 626, 82, 16);
+    g_tiles.stratum_state_label = add_label(tile, "Running", 652, 76, &lv_font_montserrat_22, lv_color_hex(0xf4efe2));
     lv_obj_set_style_text_letter_space(g_tiles.stratum_state_label, 1, 0);
-
-    g_tiles.stratum_url_label = add_label(tile, "--", 292, 106, &lv_font_montserrat_18, lv_color_hex(0xf4efe2));
-    lv_obj_set_width(g_tiles.stratum_url_label, 458);
-    lv_label_set_long_mode(g_tiles.stratum_url_label, LV_LABEL_LONG_MODE_SCROLL_CIRCULAR);
-    lv_obj_set_style_text_align(g_tiles.stratum_url_label, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_width(g_tiles.stratum_state_label, 112);
+    lv_obj_set_style_text_align(g_tiles.stratum_state_label, LV_TEXT_ALIGN_RIGHT, 0);
+    g_tiles.stratum_url_label = nullptr;
 
     lv_obj_t* chart_panel = lv_obj_create(tile);
     make_static(chart_panel);
-    lv_obj_set_pos(chart_panel, 42, 140);
-    lv_obj_set_size(chart_panel, 716, 286);
+    lv_obj_set_pos(chart_panel, 42, 118);
+    lv_obj_set_size(chart_panel, 716, 308);
     lv_obj_set_style_radius(chart_panel, 20, 0);
     lv_obj_set_style_bg_color(chart_panel, lv_color_hex(0x0f171d), 0);
     lv_obj_set_style_bg_opa(chart_panel, LV_OPA_70, 0);
@@ -1946,25 +2322,72 @@ void build_stratum_tile(lv_obj_t* tv) {
     lv_obj_set_style_border_color(chart_panel, lv_color_hex(0x2f4250), 0);
     lv_obj_set_style_pad_all(chart_panel, 16, 0);
 
-    add_label(chart_panel, "Total Hashrate", 0, 0, &lv_font_montserrat_18, lv_color_hex(0xf0b44c));
-    g_tiles.stratum_chart_hint = add_label(chart_panel, "placeholder curve", 0, 0, &lv_font_montserrat_16,
-                                           lv_color_hex(0x78848b));
-    lv_obj_align_to(g_tiles.stratum_chart_hint, chart_panel, LV_ALIGN_TOP_RIGHT, -2, 4);
+    g_tiles.stratum_legend_5m = add_label(chart_panel, "5m", 0, 0, &lv_font_montserrat_16, lv_color_hex(0x51c7a3));
+    g_tiles.stratum_legend_6h = add_label(chart_panel, "6h", 0, 0, &lv_font_montserrat_16, lv_color_hex(0x7fa16c));
+    g_tiles.stratum_legend_1d = add_label(chart_panel, "1d", 0, 0, &lv_font_montserrat_16, lv_color_hex(0xc66f4f));
+    lv_obj_align(g_tiles.stratum_legend_1d, LV_ALIGN_TOP_RIGHT, -2, 0);
+    lv_obj_align_to(g_tiles.stratum_legend_6h, g_tiles.stratum_legend_1d, LV_ALIGN_OUT_LEFT_MID, -18, 0);
+    lv_obj_align_to(g_tiles.stratum_legend_5m, g_tiles.stratum_legend_6h, LV_ALIGN_OUT_LEFT_MID, -18, 0);
+    g_tiles.stratum_total_hashrate = add_label(chart_panel, "--", 0, 0, &lv_font_montserrat_22, lv_color_hex(0xf4efe2));
+    lv_obj_set_width(g_tiles.stratum_total_hashrate, 260);
+    lv_obj_set_style_text_align(g_tiles.stratum_total_hashrate, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(g_tiles.stratum_total_hashrate, LV_ALIGN_TOP_MID, 0, -2);
+    g_tiles.stratum_chart_hint = add_label(chart_panel, "Waiting for hashrate history...", 0, 126,
+                                           &lv_font_montserrat_18, lv_color_hex(0x78848b));
+    lv_obj_set_width(g_tiles.stratum_chart_hint, 684);
+    lv_obj_set_style_text_align(g_tiles.stratum_chart_hint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_add_flag(g_tiles.stratum_chart_hint, LV_OBJ_FLAG_HIDDEN);
 
     g_tiles.stratum_chart = lv_chart_create(chart_panel);
     make_static(g_tiles.stratum_chart);
-    lv_obj_set_pos(g_tiles.stratum_chart, 0, 34);
-    lv_obj_set_size(g_tiles.stratum_chart, 684, 218);
+    lv_obj_set_pos(g_tiles.stratum_chart, 56, 34);
+    lv_obj_set_size(g_tiles.stratum_chart, 628, 214);
     lv_obj_set_style_radius(g_tiles.stratum_chart, 0, 0);
     lv_obj_set_style_bg_color(g_tiles.stratum_chart, lv_color_hex(0x0f171d), 0);
     lv_obj_set_style_bg_opa(g_tiles.stratum_chart, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(g_tiles.stratum_chart, 0, 0);
-    lv_obj_set_style_line_width(g_tiles.stratum_chart, 2, LV_PART_ITEMS);
-    lv_obj_set_style_line_color(g_tiles.stratum_chart, lv_color_hex(0x51c7a3), LV_PART_ITEMS);
+    lv_obj_set_style_size(g_tiles.stratum_chart, 0, 0, LV_PART_INDICATOR);
     lv_obj_set_style_line_width(g_tiles.stratum_chart, 1, LV_PART_MAIN);
     lv_obj_set_style_line_color(g_tiles.stratum_chart, lv_color_hex(0x26333b), LV_PART_MAIN);
-    lv_chart_set_div_line_count(g_tiles.stratum_chart, 4, 6);
-    populate_stratum_placeholder_chart(g_tiles.stratum_chart);
+    lv_chart_set_type(g_tiles.stratum_chart, LV_CHART_TYPE_LINE);
+    lv_chart_set_update_mode(g_tiles.stratum_chart, LV_CHART_UPDATE_MODE_SHIFT);
+    lv_chart_set_div_line_count(g_tiles.stratum_chart, 4, 4);
+    lv_chart_set_point_count(g_tiles.stratum_chart, 32);
+    lv_chart_set_axis_range(g_tiles.stratum_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 20000);
+    g_tiles.stratum_series_5m = lv_chart_add_series(g_tiles.stratum_chart, lv_color_hex(0x51c7a3), LV_CHART_AXIS_PRIMARY_Y);
+    g_tiles.stratum_series_6h = lv_chart_add_series(g_tiles.stratum_chart, lv_color_hex(0x7fa16c), LV_CHART_AXIS_PRIMARY_Y);
+    g_tiles.stratum_series_1d = lv_chart_add_series(g_tiles.stratum_chart, lv_color_hex(0xc66f4f), LV_CHART_AXIS_PRIMARY_Y);
+    std::vector<int32_t> zeros(32, 0);
+    lv_chart_set_series_values(g_tiles.stratum_chart, g_tiles.stratum_series_5m, zeros.data(), zeros.size());
+    lv_chart_set_series_values(g_tiles.stratum_chart, g_tiles.stratum_series_6h, zeros.data(), zeros.size());
+    lv_chart_set_series_values(g_tiles.stratum_chart, g_tiles.stratum_series_1d, zeros.data(), zeros.size());
+    lv_chart_refresh(g_tiles.stratum_chart);
+
+    g_tiles.stratum_y_unit = add_label(chart_panel, "GH/s", 8, 34, &lv_font_montserrat_14, lv_color_hex(0x9aa6ac));
+    lv_obj_set_width(g_tiles.stratum_y_unit, 44);
+    lv_obj_set_style_text_align(g_tiles.stratum_y_unit, LV_TEXT_ALIGN_LEFT, 0);
+    for (size_t i = 0; i < 5; ++i) {
+        g_tiles.stratum_y_ticks[i] = add_label(chart_panel, "0", 0, 0, &lv_font_montserrat_14, lv_color_hex(0x78848b));
+        lv_obj_set_width(g_tiles.stratum_y_ticks[i], 44);
+        lv_obj_set_style_text_align(g_tiles.stratum_y_ticks[i], LV_TEXT_ALIGN_RIGHT, 0);
+    }
+    lv_obj_set_pos(g_tiles.stratum_y_ticks[0], 0, 50);
+    lv_obj_set_pos(g_tiles.stratum_y_ticks[1], 0, 102);
+    lv_obj_set_pos(g_tiles.stratum_y_ticks[2], 0, 154);
+    lv_obj_set_pos(g_tiles.stratum_y_ticks[3], 0, 206);
+    lv_obj_set_pos(g_tiles.stratum_y_ticks[4], 0, 248);
+
+    g_tiles.stratum_x_ticks[0] = add_label(chart_panel, "--", 56, 258, &lv_font_montserrat_14, lv_color_hex(0x78848b));
+    g_tiles.stratum_x_ticks[1] = add_label(chart_panel, "--", 0, 258, &lv_font_montserrat_14, lv_color_hex(0x78848b));
+    g_tiles.stratum_x_ticks[2] = add_label(chart_panel, "--", 0, 258, &lv_font_montserrat_14, lv_color_hex(0x78848b));
+    lv_obj_set_width(g_tiles.stratum_x_ticks[0], 120);
+    lv_obj_set_width(g_tiles.stratum_x_ticks[1], 120);
+    lv_obj_set_width(g_tiles.stratum_x_ticks[2], 120);
+    lv_obj_set_style_text_align(g_tiles.stratum_x_ticks[0], LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_set_style_text_align(g_tiles.stratum_x_ticks[1], LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_align(g_tiles.stratum_x_ticks[2], LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align_to(g_tiles.stratum_x_ticks[1], g_tiles.stratum_chart, LV_ALIGN_OUT_BOTTOM_MID, 0, 6);
+    lv_obj_align_to(g_tiles.stratum_x_ticks[2], g_tiles.stratum_chart, LV_ALIGN_OUT_BOTTOM_RIGHT, 0, 6);
 }
 
 void build_system_tile(lv_obj_t* tv) {
@@ -2074,7 +2497,7 @@ uint32_t apply_ui_model(const UiModel& model) {
     }
 
     dirty = false;
-    dirty |= set_label(g_tiles.stratum_url_label, model.stratum.url);
+    dirty |= update_stratum_chart(model.stratum);
     set_stratum_state_visual(model.stratum.state_class, model.stratum.state);
     if (dirty) {
         dirty_mask |= page_dirty_bit(1);
