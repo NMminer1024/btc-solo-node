@@ -217,11 +217,6 @@ latest_peer_blocks_from_log() {
     tail -n 400 "${DEBUG_LOG}" 2>/dev/null | sed -n 's/.*blocks=\([0-9][0-9]*\).*/\1/p' | tail -n1
 }
 
-latest_block_tree_size_from_log() {
-    [ -r "${DEBUG_LOG}" ] || return 0
-    tail -n 400 "${DEBUG_LOG}" 2>/dev/null | sed -n 's/.*block tree size = \([0-9][0-9]*\).*/\1/p' | tail -n1
-}
-
 load_state_file() {
     [ -r "$1" ] && . "$1"
 }
@@ -459,9 +454,8 @@ collect_bitcoin_log() {
             ;;
     esac
 
-    tree_headers=$(latest_block_tree_size_from_log)
     peer_headers=$(latest_peer_blocks_from_log)
-    log_headers=$(max_int "${tree_headers}" "${peer_headers}" "${stage_height_num}")
+    log_headers=$(max_int "${peer_headers}" "${stage_height_num}")
 
     {
         state_num updated_at "$(now_epoch)"
