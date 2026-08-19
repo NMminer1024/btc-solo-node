@@ -37,15 +37,15 @@ lv_obj_t* ModalOverlay::show(const char* title) {
     lv_label_set_long_mode(title_label, LV_LABEL_LONG_DOT);
 
     lv_obj_t* close_btn = lv_btn_create(content_);
-    lv_obj_set_size(close_btn, 88, 40);
-    lv_obj_set_pos(close_btn, 648, 14);
-    lv_obj_set_style_radius(close_btn, 16, 0);
+    lv_obj_set_size(close_btn, 108, 52);
+    lv_obj_set_pos(close_btn, 628, 10);
+    lv_obj_set_style_radius(close_btn, 18, 0);
     lv_obj_set_style_bg_color(close_btn, lv_color_hex(0x22313a), 0);
     lv_obj_set_style_bg_opa(close_btn, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(close_btn, 0, 0);
     lv_obj_t* close_label = lv_label_create(close_btn);
     lv_label_set_text(close_label, LV_SYMBOL_CLOSE);
-    lv_obj_set_style_text_font(close_label, &lv_font_montserrat_18, 0);
+    lv_obj_set_style_text_font(close_label, &lv_font_montserrat_22, 0);
     lv_obj_set_style_text_color(close_label, lv_color_hex(0xc7d2d8), 0);
     lv_obj_center(close_label);
     lv_obj_add_event_cb(close_btn, [](lv_event_t* e) {

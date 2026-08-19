@@ -202,6 +202,30 @@ chain_from_conf() {
     esac
 }
 
+timezone_from_system() {
+    if [ -L /etc/localtime ]; then
+        target=$(readlink /etc/localtime 2>/dev/null || true)
+        case "${target}" in
+            /usr/share/zoneinfo/*)
+                printf '%s\n' "${target#/usr/share/zoneinfo/}"
+                return 0
+                ;;
+        esac
+    fi
+
+    if [ -r /etc/TZ ]; then
+        tz=$(sed 's/[[:space:]]//g' </etc/TZ 2>/dev/null || true)
+        case "${tz}" in
+            CST-8) printf '%s\n' 'Asia/Shanghai'; return 0 ;;
+            UTC|UTC0|Etc/UTC) printf '%s\n' 'UTC'; return 0 ;;
+            '') ;;
+            *) printf '%s\n' "${tz}"; return 0 ;;
+        esac
+    fi
+
+    printf '%s\n' 'UTC'
+}
+
 latest_tip_date_from_log() {
     [ -r "${DEBUG_LOG}" ] || return 0
     tail -n 200 "${DEBUG_LOG}" 2>/dev/null | sed -n "s/.*date='\([^']*\)'.*/\1/p" | tail -n1 | sed 's/T/ /; s/Z$/ UTC/'
@@ -360,6 +384,91 @@ collect_system() {
     } | write_state_file "${SYSTEM_STATE}"
 }
 
+collect_network() {
+    ensure_state_dir
+
+    wifi_ssid=$(iwconfig 2>/dev/null | grep -o 'ESSID:"[^"]*"' | cut -d'"' -f2 | head -n1)
+    [ -n "${wifi_ssid}" ] || wifi_ssid="-"
+
+    iface="wlan0"
+    if [ ! -e /sys/class/net/wlan0 ]; then
+        iface="eth0"
+    fi
+
+    ip_addr=$(ip addr show "${iface}" 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -n1)
+    [ -n "${ip_addr}" ] || ip_addr="-"
+
+    mac_addr=$(cat "/sys/class/net/${iface}/address" 2>/dev/null | tr 'a-z' 'A-Z')
+    [ -n "${mac_addr}" ] || mac_addr="-"
+
+    rssi_display="N/A"
+    rssi_pct=0
+    signal_level=0
+    if [ "${iface}" = "wlan0" ]; then
+        rssi_dbm=
+        if command -v iw >/dev/null 2>&1; then
+            rssi_dbm=$(iw dev wlan0 link 2>/dev/null | awk '/signal:/{print int($2); exit}')
+        fi
+        if [ -z "${rssi_dbm}" ]; then
+            rssi_dbm=$(iwconfig wlan0 2>/dev/null | awk '
+                /Signal level=/ {
+                    for (i = 1; i <= NF; i++) {
+                        if ($i ~ /^level=/) {
+                            sub(/^level=/, "", $i)
+                            print int($i)
+                            exit
+                        }
+                    }
+                }')
+        fi
+        if echo "${rssi_dbm}" | grep -Eq '^-?[0-9]+$'; then
+            rssi_display="${rssi_dbm} dBm"
+            rssi_pct=$(awk -v s="${rssi_dbm}" 'BEGIN{p=(s+100)*2;if(p<0)p=0;if(p>100)p=100;printf "%.0f",p}')
+        fi
+        if [ "${rssi_pct}" -ge 76 ]; then signal_level=4
+        elif [ "${rssi_pct}" -ge 51 ]; then signal_level=3
+        elif [ "${rssi_pct}" -ge 26 ]; then signal_level=2
+        elif [ "${rssi_pct}" -ge 1 ]; then signal_level=1
+        fi
+    fi
+
+    ntp_running=0
+    ps | grep -v grep | grep -q ntpd && ntp_running=1
+    if [ "${ntp_running}" = "1" ]; then
+        ntp_key=running
+        ntp_class=ok
+    else
+        ntp_key=not_synced
+        ntp_class=err
+    fi
+
+    gateway_ip=$(ip route show default 2>/dev/null | awk '/default/ {for(i=1;i<=NF;i++) if($i=="via"){print $(i+1); exit}}')
+    [ -n "${gateway_ip}" ] || gateway_ip="-"
+
+    set -- $(awk '/^nameserver /{print $2}' /etc/resolv.conf 2>/dev/null | head -n 2)
+    dns_primary=${1:--}
+    dns_secondary=${2:--}
+
+    timezone_key=$(timezone_from_system)
+
+    {
+        state_num updated_at "$(now_epoch)"
+        state_str wifi_ssid "${wifi_ssid}"
+        state_str ip_addr "${ip_addr}"
+        state_str iface "${iface}"
+        state_str mac_addr "${mac_addr}"
+        state_str rssi_display "${rssi_display}"
+        state_num rssi_pct "${rssi_pct}"
+        state_num signal_level "${signal_level}"
+        state_str timezone_key "${timezone_key}"
+        state_str gateway_ip "${gateway_ip}"
+        state_str dns_primary "${dns_primary}"
+        state_str dns_secondary "${dns_secondary}"
+        state_str ntp_class "${ntp_class}"
+        state_str ntp_key "${ntp_key}"
+    } | write_state_file "${NETWORK_STATE}"
+}
+
 collect_bitcoin_chain() {
     ensure_state_dir
     pidof bitcoind >/dev/null 2>&1 || return 1
@@ -509,64 +618,6 @@ collect_stratum() {
     } | write_state_file "${STRATUM_STATE}"
 }
 
-collect_network() {
-    ensure_state_dir
-
-    wifi_ssid=$(iwconfig 2>/dev/null | grep -o 'ESSID:"[^"]*"' | cut -d'"' -f2 | head -n1)
-    [ -n "${wifi_ssid}" ] || wifi_ssid="-"
-    ip_addr=$(ip addr show wlan0 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -n1)
-    iface=wlan0
-    if [ -z "${ip_addr}" ]; then
-        iface=eth0
-        ip_addr=$(ip addr show eth0 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -n1)
-    fi
-    [ -n "${ip_addr}" ] || ip_addr="N/A"
-    mac_addr=$(cat /sys/class/net/wlan0/address 2>/dev/null | tr 'a-z' 'A-Z')
-    [ -n "${mac_addr}" ] || mac_addr=$(cat /sys/class/net/eth0/address 2>/dev/null | tr 'a-z' 'A-Z')
-    [ -n "${mac_addr}" ] || mac_addr="N/A"
-
-    rssi_dbm=$(iw dev wlan0 link 2>/dev/null | awk '/signal:/{print int($2); exit}')
-    if [ -z "${rssi_dbm}" ]; then
-        rssi_dbm=$(iwconfig wlan0 2>/dev/null | awk -F'[ =]+' '/Signal level=/{print int($7); exit}')
-    fi
-    if echo "${rssi_dbm}" | grep -Eq '^-?[0-9]+$'; then
-        rssi_display="${rssi_dbm} dBm"
-        rssi_pct=$(awk -v s="${rssi_dbm}" 'BEGIN{p=(s+100)*2;if(p<0)p=0;if(p>100)p=100;printf "%.0f",p}')
-    else
-        rssi_display="N/A"
-        rssi_pct=0
-    fi
-    if [ "${rssi_pct}" -ge 76 ]; then signal_level=4
-    elif [ "${rssi_pct}" -ge 51 ]; then signal_level=3
-    elif [ "${rssi_pct}" -ge 26 ]; then signal_level=2
-    elif [ "${rssi_pct}" -ge 1 ]; then signal_level=1
-    else signal_level=0
-    fi
-
-    ntp_running=0
-    ps | grep -v grep | grep -q ntpd && ntp_running=1
-    if [ "${ntp_running}" = "1" ]; then
-        ntp_key=running
-        ntp_class=ok
-    else
-        ntp_key=not_synced
-        ntp_class=err
-    fi
-
-    {
-        state_num updated_at "$(now_epoch)"
-        state_str wifi_ssid "${wifi_ssid}"
-        state_str ip_addr "${ip_addr}"
-        state_str iface "${iface}"
-        state_str mac_addr "${mac_addr}"
-        state_str rssi_display "${rssi_display}"
-        state_num rssi_pct "${rssi_pct}"
-        state_num signal_level "${signal_level}"
-        state_str ntp_key "${ntp_key}"
-        state_str ntp_class "${ntp_class}"
-    } | write_state_file "${NETWORK_STATE}"
-}
-
 render_status_json() {
     cpu_model="K230 RISC-V"
     uptime_fmt="-"
@@ -622,6 +673,10 @@ render_status_json() {
     rssi_display="N/A"
     rssi_pct=0
     signal_level=0
+    timezone_key="UTC"
+    gateway_ip="-"
+    dns_primary="-"
+    dns_secondary="-"
     ntp_key=not_synced
     ntp_class=err
 
@@ -958,7 +1013,10 @@ render_status_json() {
     printf '    "rssi_display": %s,\n' "$(json_str "${rssi_display}")"
     printf '    "rssi_pct": %s,\n' "$(json_num "${rssi_pct}")"
     printf '    "signal_level": %s,\n' "$(json_num "${signal_level}")"
-    printf '    "stratum_reach": %s,\n' "$(json_str "${stratum_reach}")"
+    printf '    "timezone_key": %s,\n' "$(json_str "${timezone_key}")"
+    printf '    "gateway_ip": %s,\n' "$(json_str "${gateway_ip}")"
+    printf '    "dns_primary": %s,\n' "$(json_str "${dns_primary}")"
+    printf '    "dns_secondary": %s,\n' "$(json_str "${dns_secondary}")"
     printf '    "ntp_class": %s,\n' "$(json_str "${ntp_class}")"
     printf '    "ntp_key": %s\n' "$(json_str "${ntp_key}")"
     printf '  }\n'

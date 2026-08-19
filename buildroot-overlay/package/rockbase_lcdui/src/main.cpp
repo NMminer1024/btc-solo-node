@@ -22,6 +22,7 @@
 
 #include "lvgl/lvgl.h"
 #include "lvgl/draw/lv_snapshot.h"
+#include "timezone_overlay.h"
 #include "wifi_config_overlay.h"
 
 namespace {
@@ -48,6 +49,7 @@ constexpr const char* kBootLogoRawPath = "/usr/share/rockbase-lcdui/boot-logo-80
 constexpr const char* kStatusCachePath = "/tmp/status-api.json";
 constexpr const char* kMinersCachePath = "/run/rockbase/miners.json";
 constexpr const char* kMinersHistoryCachePath = "/run/rockbase/miners-history-node.json";
+constexpr const char* kTimezoneFilePath = "/etc/TZ";
 volatile sig_atomic_t g_stop = 0;
 display* g_display = nullptr;
 display_plane* g_plane = nullptr;
@@ -119,9 +121,11 @@ struct TileRuntime {
     lv_obj_t* network_ip = nullptr;
     lv_obj_t* network_ssid = nullptr;
     lv_obj_t* network_rssi = nullptr;
+    lv_obj_t* network_timezone = nullptr;
+    lv_obj_t* network_timezone_offset = nullptr;
+    lv_obj_t* network_gateway = nullptr;
+    lv_obj_t* network_dns = nullptr;
     lv_obj_t* network_ntp = nullptr;
-    lv_obj_t* network_mac = nullptr;
-    lv_obj_t* network_reach = nullptr;
 };
 
 struct TileSpec {
@@ -169,9 +173,13 @@ struct DashboardData {
     std::string ip_addr = "-";
     std::string wifi_ssid = "-";
     std::string rssi_display = "-";
+    int signal_level = 0;
     std::string ntp_key = "-";
     std::string mac_addr = "-";
-    std::string stratum_reach = "-";
+    std::string timezone_key = "-";
+    std::string gateway_ip = "-";
+    std::string dns_primary = "-";
+    std::string dns_secondary = "-";
     std::string miners_hashrate_5m = "0";
     std::string miners_hashrate_6h = "0";
     std::string miners_hashrate_1d = "0";
@@ -226,9 +234,12 @@ struct NetworkPageModel {
     std::string ip = "--";
     std::string ssid = "--";
     std::string rssi = "--";
+    int signal_level = 0;
+    std::string timezone = "--";
+    std::string timezone_offset = "--";
+    std::string gateway = "--";
+    std::string dns = "--";
     std::string ntp = "--";
-    std::string mac = "--";
-    std::string reach = "--";
 };
 
 struct UiModel {
@@ -247,7 +258,7 @@ constexpr TileSpec kTiles[kTileCount] = {
     {"Bitcoind", "Local Bitcoin solo node overview", 0x0a141b, 0xf0b44c, true},
     {"Stratum", "Local stratum status and fleet hashrate", 0x101418, 0x51c7a3, true},
     {"System", "CPU, memory, disk and process placeholder", 0x13151e, 0x8fb7ff, true},
-    {"Network", "WiFi, LAN and peer status placeholder", 0x101719, 0xff8c64, true},
+    {"Network", "WiFi, timezone and network details", 0x101719, 0xff8c64, true},
 };
 
 constexpr const char* kPageBgRawPaths[kTileCount] = {
@@ -295,6 +306,8 @@ bool g_status_refresh_pending = false;
 WifiConfigOverlay g_wifi_config_overlay;
 bool g_wifi_config_overlay_open_pending = false;
 bool g_wifi_config_overlay_wait_release = false;
+TimezoneOverlay g_timezone_overlay;
+bool g_timezone_overlay_open_pending = false;
 int g_pressed_hotspot_index = -1;
 bool g_show_page_indicator = false;
 
@@ -302,6 +315,7 @@ void set_active_page(uint32_t page);
 void refresh_clock_cb(lv_timer_t*);
 void refresh_status_cb(lv_timer_t*);
 int present_display_buffer();
+void request_status_refresh();
 
 uint32_t tick_ms() {
     timespec ts {};
@@ -311,7 +325,7 @@ uint32_t tick_ms() {
 
 bool ui_interacting(uint32_t now_ms = tick_ms()) {
     (void)now_ms;
-    return g_touch.down || g_pager_anim_active || g_wifi_config_overlay.active();
+    return g_touch.down || g_pager_anim_active || g_wifi_config_overlay.active() || g_timezone_overlay.active();
 }
 
 struct ConfigHotspot {
@@ -327,8 +341,13 @@ void open_wifi_config_overlay() {
     g_wifi_config_overlay_open_pending = true;
 }
 
+void open_timezone_overlay() {
+    g_timezone_overlay_open_pending = true;
+}
+
 constexpr ConfigHotspot kConfigHotspots[] = {
-    {3, 294, 148, 210, 112, open_wifi_config_overlay},
+    {3, 420, 148, 338, 84, open_wifi_config_overlay},
+    {3, 42, 244, 338, 84, open_timezone_overlay},
 };
 
 int find_config_hotspot(uint32_t page, int32_t x, int32_t y) {
@@ -738,6 +757,10 @@ int present_display_buffer() {
     return 0;
 }
 
+void request_status_refresh() {
+    g_status_refresh_pending = true;
+}
+
 void flush_cb(lv_display_t* disp, const lv_area_t* area, uint8_t* px_map) {
     if (g_buffer == nullptr || g_buffer->map == nullptr || area == nullptr || px_map == nullptr) {
         lv_display_flush_ready(disp);
@@ -916,6 +939,71 @@ bool read_text_file(const char* path, std::string& out, size_t max_size = 65536)
 
     close(fd);
     return !out.empty();
+}
+
+std::string read_timezone_key() {
+    std::string tz;
+    if (!read_text_file(kTimezoneFilePath, tz, 256)) {
+        return "";
+    }
+    while (!tz.empty() && (tz.back() == '\n' || tz.back() == '\r' || tz.back() == ' ' || tz.back() == '\t')) {
+        tz.pop_back();
+    }
+    while (!tz.empty() && (tz.front() == ' ' || tz.front() == '\t')) {
+        tz.erase(tz.begin());
+    }
+    if (tz == "CST-8") {
+        return "Asia/Shanghai";
+    }
+    if (tz == "UTC0" || tz == "Etc/UTC") {
+        return "UTC";
+    }
+    return tz;
+}
+
+std::string timezone_posix_spec(const std::string& key) {
+    if (key.empty() || key == "UTC") return "UTC0";
+    if (key == "Asia/Shanghai") return "CST-8";
+    if (key == "Asia/Tokyo") return "JST-9";
+    if (key == "Asia/Seoul") return "KST-9";
+    if (key == "Asia/Bangkok") return "<+07>-7";
+    if (key == "Asia/Singapore") return "<+08>-8";
+    if (key == "Asia/Dubai") return "<+04>-4";
+    if (key == "Asia/Kolkata") return "IST-5:30";
+    if (key == "Europe/London") return "GMT0BST,M3.5.0/1,M10.5.0/2";
+    if (key == "Europe/Berlin") return "CET-1CEST,M3.5.0/2,M10.5.0/3";
+    if (key == "Europe/Moscow") return "MSK-3";
+    if (key == "Europe/Istanbul") return "<+03>-3";
+    if (key == "Africa/Cairo") return "EET-2";
+    if (key == "Africa/Johannesburg") return "SAST-2";
+    if (key == "America/New_York") return "EST5EDT,M3.2.0/2,M11.1.0/2";
+    if (key == "America/Chicago") return "CST6CDT,M3.2.0/2,M11.1.0/2";
+    if (key == "America/Denver") return "MST7MDT,M3.2.0/2,M11.1.0/2";
+    if (key == "America/Los_Angeles") return "PST8PDT,M3.2.0/2,M11.1.0/2";
+    if (key == "America/Mexico_City") return "CST6";
+    if (key == "America/Sao_Paulo") return "<+03>3";
+    if (key == "America/Santiago") return "<+04>4<+03>,M9.1.6/24,M4.1.6/24";
+    if (key == "America/Anchorage") return "AKST9AKDT,M3.2.0/2,M11.1.0/2";
+    if (key == "Pacific/Honolulu") return "HST10";
+    if (key == "Pacific/Auckland") return "NZST-12NZDT,M9.5.0/2,M4.1.0/3";
+    if (key == "Australia/Perth") return "AWST-8";
+    if (key == "Australia/Sydney") return "AEST-10AEDT,M10.1.0/2,M4.1.0/3";
+    return "UTC0";
+}
+
+void sync_process_timezone() {
+    static std::string applied_tz;
+    std::string tz = read_timezone_key();
+    if (tz.empty()) {
+        tz = "UTC";
+    }
+    const std::string posix_tz = timezone_posix_spec(tz);
+    if (posix_tz == applied_tz) {
+        return;
+    }
+    setenv("TZ", posix_tz.c_str(), 1);
+    tzset();
+    applied_tz = posix_tz;
 }
 
 size_t skip_ws(const std::string& s, size_t pos) {
@@ -1113,6 +1201,19 @@ std::string json_value(const std::string& object, const char* key, const char* f
         return fallback;
     }
     return value;
+}
+
+int json_int_value(const std::string& object, const char* key, int fallback = 0) {
+    const std::string value = json_value(object, key, "");
+    if (value.empty()) {
+        return fallback;
+    }
+    char* end = nullptr;
+    const long parsed = std::strtol(value.c_str(), &end, 10);
+    if (end == value.c_str()) {
+        return fallback;
+    }
+    return static_cast<int>(parsed);
 }
 
 double parse_hashrate_ghs(const std::string& value) {
@@ -1407,6 +1508,47 @@ std::string ntp_label(const std::string& key) {
     return "NTP Unsynced";
 }
 
+std::string timezone_label(const std::string& key) {
+    if (key == "-" || key.empty()) {
+        return "UTC";
+    }
+    if (key == "CST-8") {
+        return "Asia/Shanghai";
+    }
+    return key;
+}
+
+std::string timezone_offset_label(const std::string& key) {
+    const std::string zone = timezone_label(key);
+    if (zone == "UTC") return "+0.0";
+    if (zone == "Africa/Cairo") return "+3.0";
+    if (zone == "Africa/Johannesburg") return "+2.0";
+    if (zone == "America/Anchorage") return "-8.0";
+    if (zone == "America/Chicago") return "-5.0";
+    if (zone == "America/Denver") return "-6.0";
+    if (zone == "America/Los_Angeles") return "-7.0";
+    if (zone == "America/Mexico_City") return "-6.0";
+    if (zone == "America/New_York") return "-4.0";
+    if (zone == "America/Santiago") return "-4.0";
+    if (zone == "America/Sao_Paulo") return "-3.0";
+    if (zone == "Asia/Bangkok") return "+7.0";
+    if (zone == "Asia/Dubai") return "+4.0";
+    if (zone == "Asia/Kolkata") return "+5.5";
+    if (zone == "Asia/Seoul") return "+9.0";
+    if (zone == "Asia/Shanghai") return "+8.0";
+    if (zone == "Asia/Singapore") return "+8.0";
+    if (zone == "Asia/Tokyo") return "+9.0";
+    if (zone == "Australia/Perth") return "+8.0";
+    if (zone == "Australia/Sydney") return "+10.0";
+    if (zone == "Europe/Berlin") return "+2.0";
+    if (zone == "Europe/Istanbul") return "+3.0";
+    if (zone == "Europe/London") return "+1.0";
+    if (zone == "Europe/Moscow") return "+3.0";
+    if (zone == "Pacific/Auckland") return "+12.0";
+    if (zone == "Pacific/Honolulu") return "-10.0";
+    return "--";
+}
+
 std::string current_time_text(const char* fmt) {
     char buf[32];
     const time_t now = time(nullptr);
@@ -1466,9 +1608,13 @@ bool load_dashboard_data(DashboardData& data) {
     data.ip_addr = json_value(network, "ip_addr");
     data.wifi_ssid = json_value(network, "wifi_ssid");
     data.rssi_display = json_value(network, "rssi_display");
+    data.signal_level = json_int_value(network, "signal_level", 0);
     data.ntp_key = json_value(network, "ntp_key");
     data.mac_addr = json_value(network, "mac_addr");
-    data.stratum_reach = json_value(network, "stratum_reach");
+    data.timezone_key = json_value(network, "timezone_key");
+    data.gateway_ip = json_value(network, "gateway_ip");
+    data.dns_primary = json_value(network, "dns_primary");
+    data.dns_secondary = json_value(network, "dns_secondary");
     load_miners_chart_data(data);
     return true;
 }
@@ -1685,8 +1831,8 @@ void touch_read_cb(lv_indev_t*, lv_indev_data_t* data) {
     g_swipe_current_y = data->point.y;
 
     static bool was_down = false;
-    if (g_wifi_config_overlay.active()) {
-        if (g_wifi_config_overlay_wait_release) {
+    if (g_wifi_config_overlay.active() || g_timezone_overlay.active()) {
+        if (g_wifi_config_overlay.active() && g_wifi_config_overlay_wait_release) {
             if (!g_touch.down) {
                 g_wifi_config_overlay_wait_release = false;
             }
@@ -1922,9 +2068,12 @@ bool update_stratum_chart(const StratumPageModel& model) {
     return true;
 }
 
-lv_obj_t* create_card(lv_obj_t* parent, int32_t x, int32_t y, int32_t w, int32_t h,
-                      const char* title, const char* value, lv_color_t accent,
-                      lv_obj_t** title_label = nullptr) {
+lv_obj_t* create_card_ex(lv_obj_t* parent, int32_t x, int32_t y, int32_t w, int32_t h,
+                         const char* title, const char* value, lv_color_t accent,
+                         const lv_font_t* value_font,
+                         int32_t value_y,
+                         lv_obj_t** card_obj,
+                         lv_obj_t** title_label) {
     lv_obj_t* card = lv_obj_create(parent);
     make_static(card);
     lv_obj_set_pos(card, x, y);
@@ -1941,12 +2090,25 @@ lv_obj_t* create_card(lv_obj_t* parent, int32_t x, int32_t y, int32_t w, int32_t
         *title_label = title_obj;
     }
     if (value != nullptr && value[0] != '\0') {
-        lv_obj_t* value_label = add_label(card, value, 0, 34, &lv_font_montserrat_22, lv_color_hex(0xf4efe2));
+        lv_obj_t* value_label = add_label(card, value, 0, value_y, value_font, lv_color_hex(0xf4efe2));
         lv_obj_set_width(value_label, w - 32);
         lv_label_set_long_mode(value_label, LV_LABEL_LONG_MODE_DOTS);
+        if (card_obj != nullptr) {
+            *card_obj = card;
+        }
         return value_label;
     }
+    if (card_obj != nullptr) {
+        *card_obj = card;
+    }
     return nullptr;
+}
+
+lv_obj_t* create_card(lv_obj_t* parent, int32_t x, int32_t y, int32_t w, int32_t h,
+                      const char* title, const char* value, lv_color_t accent,
+                      lv_obj_t** title_label = nullptr) {
+    return create_card_ex(parent, x, y, w, h, title, value, accent,
+                          &lv_font_montserrat_22, 34, nullptr, title_label);
 }
 
 lv_obj_t* create_card_frame(lv_obj_t* parent, int32_t x, int32_t y, int32_t w, int32_t h,
@@ -1979,6 +2141,36 @@ bool set_label(lv_obj_t* label, const std::string& value) {
     }
     lv_label_set_text(label, value.c_str());
     return true;
+}
+
+bool set_text_color(lv_obj_t* obj, uint32_t color) {
+    if (obj == nullptr) {
+        return false;
+    }
+    lv_obj_set_style_text_color(obj, lv_color_hex(color), 0);
+    return true;
+}
+
+bool set_network_rssi_visual(const std::string& text, int signal_level) {
+    bool dirty = false;
+    dirty |= set_label(g_tiles.network_rssi, text);
+
+    uint32_t color = 0x78848b;
+    if (signal_level >= 4) {
+        color = 0x59d79b;
+    }
+    else if (signal_level == 3) {
+        color = 0x8fdc6b;
+    }
+    else if (signal_level == 2) {
+        color = 0xf0b44c;
+    }
+    else if (signal_level == 1) {
+        color = 0xff8c64;
+    }
+
+    dirty |= set_text_color(g_tiles.network_rssi, color);
+    return dirty;
 }
 
 bool set_hidden(lv_obj_t* obj, bool hidden) {
@@ -2145,9 +2337,12 @@ bool build_ui_model(UiModel& model) {
     model.network.ip = data.ip_addr;
     model.network.ssid = data.wifi_ssid;
     model.network.rssi = data.rssi_display;
+    model.network.signal_level = data.signal_level;
+    model.network.timezone = timezone_label(data.timezone_key);
+    model.network.timezone_offset = timezone_offset_label(data.timezone_key);
+    model.network.gateway = data.gateway_ip;
+    model.network.dns = join_value(data.dns_primary, " / ", data.dns_secondary);
     model.network.ntp = ntp_label(data.ntp_key);
-    model.network.mac = data.mac_addr;
-    model.network.reach = data.stratum_reach;
     return true;
 }
 
@@ -2408,12 +2603,30 @@ void build_network_tile(lv_obj_t* tv) {
     const lv_color_t accent = lv_color_hex(spec.accent);
     lv_obj_t* tile = create_tile_base(tv, 3, spec);
 
-    g_tiles.network_ip = create_card(tile, 42, 148, 210, 112, "IP", "--", accent);
-    g_tiles.network_ssid = create_card(tile, 294, 148, 210, 112, "WiFi SSID", "--", accent);
-    g_tiles.network_rssi = create_card(tile, 546, 148, 210, 112, "Signal", "--", accent);
-    g_tiles.network_ntp = create_card(tile, 42, 294, 154, 104, "NTP", "--", accent);
-    g_tiles.network_mac = create_card(tile, 218, 294, 286, 104, "MAC", "--", accent);
-    g_tiles.network_reach = create_card(tile, 526, 294, 230, 104, "Stratum Reach", "--", accent);
+    lv_obj_t* wifi_card = create_card_frame(tile, 420, 148, 338, 84, "WiFi", accent);
+    lv_obj_t* timezone_card = create_card_frame(tile, 42, 244, 338, 84, "Timezone", accent);
+    g_tiles.network_ip = create_card(tile, 42, 148, 338, 84, "IP", "--", accent);
+    g_tiles.network_ssid = add_label(wifi_card, "--", 0, 30, &lv_font_montserrat_18, lv_color_hex(0xf4efe2));
+    lv_obj_set_width(g_tiles.network_ssid, 222);
+    lv_label_set_long_mode(g_tiles.network_ssid, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_set_style_text_align(g_tiles.network_ssid, LV_TEXT_ALIGN_LEFT, 0);
+    g_tiles.network_rssi = add_label(wifi_card, "--", 0, 30, &lv_font_montserrat_16, lv_color_hex(0xffb16d));
+    lv_obj_set_width(g_tiles.network_rssi, 84);
+    lv_obj_set_style_text_align(g_tiles.network_rssi, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align(g_tiles.network_rssi, LV_ALIGN_TOP_RIGHT, 0, 30);
+
+    g_tiles.network_timezone = add_label(timezone_card, "--", 0, 30, &lv_font_montserrat_18, lv_color_hex(0xf4efe2));
+    lv_obj_set_width(g_tiles.network_timezone, 222);
+    lv_label_set_long_mode(g_tiles.network_timezone, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_set_style_text_align(g_tiles.network_timezone, LV_TEXT_ALIGN_LEFT, 0);
+    g_tiles.network_timezone_offset = add_label(timezone_card, "--", 0, 30, &lv_font_montserrat_16, lv_color_hex(0xffb16d));
+    lv_obj_set_width(g_tiles.network_timezone_offset, 84);
+    lv_obj_set_style_text_align(g_tiles.network_timezone_offset, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align(g_tiles.network_timezone_offset, LV_ALIGN_TOP_RIGHT, 0, 30);
+
+    g_tiles.network_gateway = create_card(tile, 420, 244, 338, 84, "Gateway", "--", accent);
+    g_tiles.network_dns = create_card(tile, 42, 340, 338, 84, "DNS", "--", accent);
+    g_tiles.network_ntp = create_card(tile, 420, 340, 338, 84, "NTP", "--", accent);
 }
 
 void set_active_page(uint32_t page) {
@@ -2429,6 +2642,7 @@ void refresh_clock_cb(lv_timer_t*) {
         return;
     }
 
+    sync_process_timezone();
     const std::string time_text = current_time_text("%H:%M:%S");
     const std::string date_text = current_time_text("%Y-%m-%d");
     bool dirty = false;
@@ -2517,10 +2731,12 @@ uint32_t apply_ui_model(const UiModel& model) {
     dirty = false;
     dirty |= set_label(g_tiles.network_ip, model.network.ip);
     dirty |= set_label(g_tiles.network_ssid, model.network.ssid);
-    dirty |= set_label(g_tiles.network_rssi, model.network.rssi);
+    dirty |= set_network_rssi_visual(model.network.rssi, model.network.signal_level);
+    dirty |= set_label(g_tiles.network_timezone, model.network.timezone);
+    dirty |= set_label(g_tiles.network_timezone_offset, model.network.timezone_offset);
+    dirty |= set_label(g_tiles.network_gateway, model.network.gateway);
+    dirty |= set_label(g_tiles.network_dns, model.network.dns);
     dirty |= set_label(g_tiles.network_ntp, model.network.ntp);
-    dirty |= set_label(g_tiles.network_mac, model.network.mac);
-    dirty |= set_label(g_tiles.network_reach, model.network.reach);
     if (dirty) {
         dirty_mask |= page_dirty_bit(3);
     }
@@ -2607,6 +2823,7 @@ void build_tile_stage(lv_obj_t* screen) {
     build_network_tile(tv);
 
     lv_tileview_set_tile_by_index(tv, 0, 0, LV_ANIM_OFF);
+    g_timezone_overlay.set_status_refresh_request(request_status_refresh);
     refresh_clock_cb(nullptr);
     refresh_status_cb(nullptr);
     cache_tile_pages();
@@ -2642,6 +2859,7 @@ lv_obj_t* build_boot_scene(lv_obj_t* screen) {
 int main() {
     std::signal(SIGINT, handle_signal);
     std::signal(SIGTERM, handle_signal);
+    sync_process_timezone();
 
     const bool backlight_ready = init_backlight_gpio(0);
 
@@ -2707,22 +2925,28 @@ int main() {
             g_wifi_config_overlay_open_pending = false;
             g_wifi_config_overlay_wait_release = true;
         }
+        if (g_timezone_overlay_open_pending && !g_timezone_overlay.active()) {
+            g_timezone_overlay.open();
+            g_timezone_overlay_open_pending = false;
+        }
         g_wifi_config_overlay.update();
+        g_timezone_overlay.update();
         process_deferred_refreshes_if_idle();
         refresh_one_dirty_page_if_idle();
 
         bool custom_present = false;
-        if (!g_wifi_config_overlay.active() && g_touch.down) {
+        if (!g_wifi_config_overlay.active() && !g_timezone_overlay.active() && g_touch.down) {
             const int32_t scroll_x = visual_scroll_x_from_touch();
             if (g_swipe_drag_started) {
                 custom_present = present_pager_frame(scroll_x);
             }
         }
-        else if (!g_wifi_config_overlay.active() && g_pager_anim_active) {
+        else if (!g_wifi_config_overlay.active() && !g_timezone_overlay.active() && g_pager_anim_active) {
             custom_present = present_pager_snap_anim(now_ms);
         }
 
-        g_custom_frame_presenting = !g_wifi_config_overlay.active() && (g_touch.down || custom_present);
+        g_custom_frame_presenting = !g_wifi_config_overlay.active() && !g_timezone_overlay.active() &&
+                                    (g_touch.down || custom_present);
         uint32_t next_ms = lv_timer_handler();
         g_custom_frame_presenting = false;
         if (interacting) {

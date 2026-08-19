@@ -6,7 +6,39 @@
 DAEMON=/usr/bin/rockbase-lcdui
 PIDFILE=/var/run/rockbase-lcdui.pid
 LOGFILE=/dev/null
-export TZ="${TZ:-CST-8}"
+if [ -r /etc/TZ ]; then
+	TZ="$(sed 's/[[:space:]]//g' </etc/TZ 2>/dev/null)"
+	case "${TZ}" in
+		""|UTC|UTC0|Etc/UTC) TZ="UTC0" ;;
+		CST-8|Asia/Shanghai) TZ="CST-8" ;;
+		Asia/Tokyo) TZ="JST-9" ;;
+		Asia/Seoul) TZ="KST-9" ;;
+		Asia/Bangkok) TZ="<+07>-7" ;;
+		Asia/Singapore) TZ="<+08>-8" ;;
+		Asia/Dubai) TZ="<+04>-4" ;;
+		Asia/Kolkata) TZ="IST-5:30" ;;
+		Europe/London) TZ="GMT0BST,M3.5.0/1,M10.5.0/2" ;;
+		Europe/Berlin) TZ="CET-1CEST,M3.5.0/2,M10.5.0/3" ;;
+		Europe/Moscow) TZ="MSK-3" ;;
+		Europe/Istanbul) TZ="<+03>-3" ;;
+		Africa/Cairo) TZ="EET-2" ;;
+		Africa/Johannesburg) TZ="SAST-2" ;;
+		America/New_York) TZ="EST5EDT,M3.2.0/2,M11.1.0/2" ;;
+		America/Chicago) TZ="CST6CDT,M3.2.0/2,M11.1.0/2" ;;
+		America/Denver) TZ="MST7MDT,M3.2.0/2,M11.1.0/2" ;;
+		America/Los_Angeles) TZ="PST8PDT,M3.2.0/2,M11.1.0/2" ;;
+		America/Mexico_City) TZ="CST6" ;;
+		America/Sao_Paulo) TZ="<+03>3" ;;
+		America/Santiago) TZ="<+04>4<+03>,M9.1.6/24,M4.1.6/24" ;;
+		America/Anchorage) TZ="AKST9AKDT,M3.2.0/2,M11.1.0/2" ;;
+		Pacific/Honolulu) TZ="HST10" ;;
+		Pacific/Auckland) TZ="NZST-12NZDT,M9.5.0/2,M4.1.0/3" ;;
+		Australia/Perth) TZ="AWST-8" ;;
+		Australia/Sydney) TZ="AEST-10AEDT,M10.1.0/2,M4.1.0/3" ;;
+		*) TZ="UTC0" ;;
+	esac
+	export TZ
+fi
 
 is_running() {
 	[ -f "${PIDFILE}" ] || return 1

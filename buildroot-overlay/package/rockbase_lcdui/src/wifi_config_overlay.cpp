@@ -86,7 +86,7 @@ void style_button(lv_obj_t* btn, uint32_t color) {
 lv_obj_t* button_label(lv_obj_t* btn, const char* text) {
     lv_obj_t* label = lv_label_create(btn);
     lv_label_set_text(label, text);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_22, 0);
     lv_obj_set_style_text_color(label, lv_color_hex(0xffffff), 0);
     lv_obj_center(label);
     return label;
@@ -108,6 +108,20 @@ void WifiConfigOverlay::open() {
 }
 
 void WifiConfigOverlay::update() {
+    confirm_.update();
+    if (confirm_.active()) {
+        const ConfirmOverlay::Result result = confirm_.consume_result();
+        if (result == ConfirmOverlay::Result::Confirmed) {
+            confirm_.close();
+            cleanup_keyboard();
+            set_phase(Phase::Applying);
+            start_apply();
+        }
+        else if (result == ConfirmOverlay::Result::Cancelled) {
+            confirm_.close();
+            show_keyboard();
+        }
+    }
     if (close_requested_ || overlay_.close_requested()) {
         close();
         return;
@@ -171,6 +185,7 @@ void WifiConfigOverlay::request_close() {
 }
 
 void WifiConfigOverlay::close() {
+    confirm_.close();
     cleanup_keyboard();
     overlay_.hide();
     phase_ = Phase::Hidden;
@@ -188,6 +203,7 @@ void WifiConfigOverlay::rebuild() {
         case Phase::Scanning: build_scanning(); break;
         case Phase::List: build_list(); break;
         case Phase::Password: build_password(); break;
+        case Phase::Confirm: build_confirm(); break;
         case Phase::Applying: build_applying(); break;
         case Phase::Result: build_result(); break;
         case Phase::Hidden: break;
@@ -209,23 +225,10 @@ void WifiConfigOverlay::build_scanning() {
 }
 
 void WifiConfigOverlay::build_list() {
-    lv_obj_t* refresh_btn = lv_btn_create(body_);
-    lv_obj_set_size(refresh_btn, 88, 40);
-    lv_obj_set_pos(refresh_btn, 624, 0);
-    style_button(refresh_btn, 0x1f5f73);
-    lv_obj_t* refresh_label = button_label(refresh_btn, "Rescan");
-    lv_obj_set_style_text_font(refresh_label, &lv_font_montserrat_14, 0);
-    lv_obj_add_event_cb(refresh_btn, [](lv_event_t* e) {
-        auto* self = static_cast<WifiConfigOverlay*>(lv_event_get_user_data(e));
-        if (self == nullptr) return;
-        self->set_phase(Phase::Scanning);
-        self->start_scan();
-    }, LV_EVENT_CLICKED, this);
-
     lv_obj_t* list = lv_obj_create(body_);
     lv_obj_remove_style_all(list);
-    lv_obj_set_pos(list, 0, 52);
-    lv_obj_set_size(list, 712, 324);
+    lv_obj_set_pos(list, 0, 0);
+    lv_obj_set_size(list, 712, 376);
     lv_obj_set_style_pad_all(list, 0, 0);
     lv_obj_set_style_pad_row(list, 8, 0);
     lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
@@ -342,11 +345,10 @@ void WifiConfigOverlay::build_password() {
     }, LV_EVENT_CLICKED, this);
 
     lv_obj_t* cancel_btn = lv_btn_create(body_);
-    lv_obj_set_size(cancel_btn, 180, 48);
-    lv_obj_set_pos(cancel_btn, 0, 88);
+    lv_obj_set_size(cancel_btn, 198, 60);
+    lv_obj_set_pos(cancel_btn, 0, 102);
     style_button(cancel_btn, 0x35414a);
-    lv_obj_t* cancel_label = button_label(cancel_btn, "Back");
-    lv_obj_set_style_text_font(cancel_label, &lv_font_montserrat_18, 0);
+    button_label(cancel_btn, "Back");
     lv_obj_add_event_cb(cancel_btn, [](lv_event_t* e) {
         auto* self = static_cast<WifiConfigOverlay*>(lv_event_get_user_data(e));
         if (self == nullptr) return;
@@ -355,20 +357,21 @@ void WifiConfigOverlay::build_password() {
     }, LV_EVENT_CLICKED, this);
 
     lv_obj_t* apply_btn = lv_btn_create(body_);
-    lv_obj_set_size(apply_btn, 220, 48);
-    lv_obj_set_pos(apply_btn, 492, 88);
+    lv_obj_set_size(apply_btn, 198, 60);
+    lv_obj_set_pos(apply_btn, 514, 102);
     style_button(apply_btn, 0x2d8f5a);
-    lv_obj_t* apply_label = button_label(apply_btn, "Apply Now");
-    lv_obj_set_style_text_font(apply_label, &lv_font_montserrat_18, 0);
+    button_label(apply_btn, "Apply");
     lv_obj_add_event_cb(apply_btn, [](lv_event_t* e) {
         auto* self = static_cast<WifiConfigOverlay*>(lv_event_get_user_data(e));
         if (self == nullptr) return;
         if (self->password_ta_ != nullptr) {
             self->pending_password_ = lv_textarea_get_text(self->password_ta_);
         }
-        self->cleanup_keyboard();
-        self->set_phase(Phase::Applying);
-        self->start_apply();
+        self->hide_keyboard();
+        self->set_phase(Phase::Confirm);
+        self->rebuild();
+        std::string message = "Connect to \"" + self->pending_ssid_ + "\" now?";
+        self->confirm_.open("Confirm Wi-Fi", message.c_str(), "OK", "Cancel");
     }, LV_EVENT_CLICKED, this);
 
     keyboard_ = lv_keyboard_create(lv_layer_top());
@@ -389,6 +392,15 @@ void WifiConfigOverlay::build_password() {
             self->hide_keyboard();
         }
     }, LV_EVENT_CANCEL, this);
+}
+
+void WifiConfigOverlay::build_confirm() {
+    message_label_ = lv_label_create(body_);
+    std::string text = "Waiting for confirmation...";
+    lv_label_set_text(message_label_, text.c_str());
+    lv_obj_set_style_text_font(message_label_, &lv_font_montserrat_22, 0);
+    lv_obj_set_style_text_color(message_label_, lv_color_hex(0xc7d2d8), 0);
+    lv_obj_center(message_label_);
 }
 
 void WifiConfigOverlay::build_applying() {
@@ -415,7 +427,7 @@ void WifiConfigOverlay::build_result() {
     lv_obj_align(message_label_, LV_ALIGN_CENTER, 0, -34);
 
     lv_obj_t* done_btn = lv_btn_create(body_);
-    lv_obj_set_size(done_btn, 160, 44);
+    lv_obj_set_size(done_btn, 220, 72);
     lv_obj_align(done_btn, LV_ALIGN_CENTER, 0, 72);
     style_button(done_btn, 0x263946);
     button_label(done_btn, "Done");

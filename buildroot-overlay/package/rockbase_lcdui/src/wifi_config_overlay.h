@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "confirm_overlay.h"
 #include "lvgl/lvgl.h"
 #include "modal_overlay.h"
 
@@ -26,6 +27,7 @@ private:
         Scanning,
         List,
         Password,
+        Confirm,
         Applying,
         Result,
     };
@@ -35,6 +37,7 @@ private:
     void build_scanning();
     void build_list();
     void build_password();
+    void build_confirm();
     void build_applying();
     void build_result();
     void start_scan();
@@ -66,6 +69,7 @@ private:
     std::string pending_ssid_;
     std::string pending_password_;
     std::string worker_message_;
+    ConfirmOverlay confirm_;
     lv_obj_t* body_ = nullptr;
     lv_obj_t* message_label_ = nullptr;
     lv_obj_t* password_ta_ = nullptr;

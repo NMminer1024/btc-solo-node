@@ -166,27 +166,45 @@ wifi_scan_cache_valid() {
   [ $((now - mtime)) -lt "$WIFI_SCAN_CACHE_TTL" ]
 }
 
+wifi_scan_result_count() {
+  printf '%s\n' "$1" | awk 'NR > 1 && NF >= 5 { c++ } END { print c + 0 }'
+}
+
 wifi_scan_raw() {
   if wifi_scan_cache_valid; then
-    cat "$WIFI_SCAN_CACHE"
-    return 0
+    cached=$(cat "$WIFI_SCAN_CACHE" 2>/dev/null || true)
+    cached_count=$(wifi_scan_result_count "$cached")
+    if [ "$cached_count" -gt 1 ]; then
+      printf '%s\n' "$cached"
+      return 0
+    fi
   fi
 
   command -v wpa_cli >/dev/null 2>&1 || return 1
   wpa_cli -i "$WLAN_DEV" scan >/dev/null 2>&1 || return 1
 
   results=""
+  best_results=""
+  best_count=0
   i=0
-  while [ "$i" -lt 6 ]; do
+  while [ "$i" -lt 8 ]; do
     sleep 1
     results=$(wpa_cli -i "$WLAN_DEV" scan_results 2>/dev/null || true)
-    printf '%s\n' "$results" | grep -q '^bssid' && break
+    count=$(wifi_scan_result_count "$results")
+    if [ "$count" -gt "$best_count" ]; then
+      best_results="$results"
+      best_count="$count"
+    fi
+    if [ "$best_count" -gt 1 ] && [ "$count" -eq "$best_count" ]; then
+      break
+    fi
     i=$((i + 1))
   done
 
-  [ -n "$results" ] || return 1
-  printf '%s\n' "$results" >"$WIFI_SCAN_CACHE" 2>/dev/null || true
-  printf '%s\n' "$results"
+  [ -n "$best_results" ] || best_results="$results"
+  [ -n "$best_results" ] || return 1
+  printf '%s\n' "$best_results" >"$WIFI_SCAN_CACHE" 2>/dev/null || true
+  printf '%s\n' "$best_results"
 }
 
 wifi_scan_json() {
