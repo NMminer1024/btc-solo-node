@@ -1,6 +1,8 @@
 #!/bin/sh
 # Rockbase lightweight service supervisor.
-# Keeps non-critical web/cache daemons alive without touching bitcoind data paths.
+# Keeps core daemons (including bitcoind) alive. bitcoind is monitored so
+# that an OOM kill or crash is recovered automatically instead of staying
+# down until the next reboot.
 
 LOG_DIR=${ROCKBASE_SUPERVISOR_LOG_DIR:-/run/rockbase-log}
 LOG_FILE=${ROCKBASE_SUPERVISOR_LOG:-${LOG_DIR}/supervisor.log}
@@ -13,6 +15,7 @@ LOG_MAX_KB=${ROCKBASE_SUPERVISOR_LOG_MAX_KB:-512}
 LOG_ROTATIONS=${ROCKBASE_SUPERVISOR_LOG_ROTATIONS:-5}
 
 SERVICES="
+bitcoind|bitcoind -conf|/etc/init.d/S61bitcoind
 statusd|rockbase_statusd.sh daemon|/etc/init.d/S43statusd
 miners-cache|rockbase_miners_cache.sh daemon|/etc/init.d/S63miners-cache
 miners-history|rockbase_miners_historyd.sh daemon|/etc/init.d/S64miners-history
