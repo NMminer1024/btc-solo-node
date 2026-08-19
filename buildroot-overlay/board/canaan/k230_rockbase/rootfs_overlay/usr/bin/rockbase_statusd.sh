@@ -261,7 +261,9 @@ collect_system() {
     cpu_idle_1=$2
     [ -n "${cpu_total_1}" ] || cpu_total_1=0
     [ -n "${cpu_idle_1}" ] || cpu_idle_1=0
-    sleep 0.2
+    # 2s 采样窗口：单核过载机器上 0.2s 窗口过于敏感（0.2s 内无 idle tick 即显示 100%），
+    # 拉长到 2s 可摊平忙闲脉冲，显示值更接近真实平均水位（与 cpu_page.sh 60s 均值口径一致）
+    sleep 2
     set -- $(awk '/^cpu /{total=0; for(i=2;i<=8;i++) total+=$i; idle=$5+$6; print total, idle; exit}' /proc/stat 2>/dev/null)
     cpu_total_2=$1
     cpu_idle_2=$2
