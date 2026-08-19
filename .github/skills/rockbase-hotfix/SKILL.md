@@ -25,6 +25,8 @@ description: 'Hot-deploy files to live Rockbase boards for validation, then soli
 | `192.168.124.15` | 1G | mmc0=WiFi, mmc1=SD |
 | `192.168.124.21` | 1G | mmc0=WiFi, mmc1=SD |
 | `192.168.124.23` | 2G | mmc0=SD, mmc1=WiFi |
+| `192.168.124.30` | 1G | mmc0=WiFi, mmc1=SD（usb 模式镜像） |
+| `192.168.124.35` | 1G | mmc0=WiFi, mmc1=SD (SD64G) |
 
 ### Step 2: 部署 Web 文件到板子
 
