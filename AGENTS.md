@@ -75,6 +75,7 @@ Seed 同步流程见 skill: `rockbase-seed`。
 | LVGL/LCD UI 开发 | `rockbase-lvgl-ui` |
 | Web/API 开发 | `rockbase-web` |
 | 网络测速（停服务→验CPU→SSH吞吐测试） | `rockbase-netspeed` |
+| CPU 压力分布测试（按页面/进程，`/root/script/cpu_page.sh`） | `rockbase-cpupress` |
 
 ## 参考文档
 

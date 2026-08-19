@@ -42,9 +42,9 @@ constexpr uint32_t kBacklightGpioLine = 25;
 constexpr uint32_t kBacklightFadeMs = 1000;
 constexpr uint32_t kBootLogoHoldMs = 3000;
 constexpr uint32_t kDashboardFadeMs = 500;
-constexpr uint32_t kTouchReadPeriodMs = 1;
+constexpr uint32_t kTouchReadPeriodMs = 10;  // 100Hz 触摸采样，配合 O_NONBLOCK 轮询，滑动依然顺滑
 constexpr uint32_t kPagerSnapAnimMs = 300;
-constexpr uint32_t kMaxLvSleepUs = 2000;
+constexpr uint32_t kMaxLvSleepUs = 10000;    // 空闲时最多睡 10ms，避免 1ms timer 导致主循环空转烧 CPU
 constexpr uint32_t kMinLvSleepUs = 500;
 constexpr uint32_t kDisplayRefrPeriodMs = 10;
 constexpr uint32_t kPresentIntervalMs = 20;
@@ -2258,6 +2258,7 @@ bool set_text_color(lv_obj_t* obj, uint32_t color) {
     return true;
 }
 
+#if 0  // 2026-08-19: 禁用 Stratum 状态点呼吸动画（无限循环动画每 10ms 触发重绘，单核 CPU 高占用热点）
 void set_obj_opa_anim(void* obj, int32_t value) {
     lv_obj_set_style_opa(static_cast<lv_obj_t*>(obj), static_cast<lv_opa_t>(value), 0);
 }
@@ -2275,6 +2276,7 @@ void set_status_dot_green_anim(void* obj, int32_t value) {
     lv_obj_set_style_border_color(dot, lv_color_hex(0xcaf9d6), 0);
     lv_obj_set_style_opa(dot, static_cast<lv_opa_t>(opa), 0);
 }
+#endif  // #if 0 禁用呼吸动画
 
 void set_status_dot_anchor(int32_t x, int32_t y) {
     if (g_tiles.stratum_state_dot == nullptr) {
@@ -2294,10 +2296,14 @@ void start_status_dot_breathing(lv_obj_t* dot) {
         return;
     }
     g_tiles.stratum_state_anim_running = true;
+    // 静态绿点（呼吸动画已被 #if 0 禁用）
+    lv_obj_set_style_bg_color(dot, lv_color_hex(0x37e88b), 0);
+    lv_obj_set_style_border_color(dot, lv_color_hex(0xcaf9d6), 0);
+    lv_obj_set_style_opa(dot, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(dot, LV_OBJ_FLAG_HIDDEN);
+#if 0  // 呼吸动画禁用，避免每 10ms 无限重绘
     lv_anim_delete(dot, set_obj_opa_anim);
     lv_anim_delete(dot, set_status_dot_green_anim);
-    lv_obj_clear_flag(dot, LV_OBJ_FLAG_HIDDEN);
-
     lv_anim_t color_anim;
     lv_anim_init(&color_anim);
     lv_anim_set_var(&color_anim, dot);
@@ -2307,14 +2313,17 @@ void start_status_dot_breathing(lv_obj_t* dot) {
     lv_anim_set_playback_duration(&color_anim, 0);
     lv_anim_set_repeat_count(&color_anim, LV_ANIM_REPEAT_INFINITE);
     lv_anim_start(&color_anim);
+#endif  // #if 0 禁用呼吸动画
 }
 
 void stop_status_dot_breathing(lv_obj_t* dot, lv_opa_t opa = LV_OPA_COVER) {
     if (dot == nullptr) {
         return;
     }
+#if 0  // 呼吸动画禁用
     lv_anim_delete(dot, set_obj_opa_anim);
     lv_anim_delete(dot, set_status_dot_green_anim);
+#endif  // #if 0 禁用呼吸动画
     g_tiles.stratum_state_anim_running = false;
     lv_obj_set_size(dot, 14, 14);
     lv_obj_set_style_opa(dot, opa, 0);
