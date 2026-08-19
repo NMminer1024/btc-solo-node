@@ -27,11 +27,13 @@
 
 ### 修复后（呼吸动画禁用，2026-08-19 复测）
 
-| 页面 | 整机 CPU | **rockbase-lcdui** | bitcoind | ckpool | 判定 |
+| 配置 | 整机 CPU | **rockbase-lcdui** | bitcoind | ckpool | 判定 |
 |------|---------|--------------------|----------|--------|------|
-| **Stratum** | **73.4%** | **3.6%** | 2.8% | 2.7% | ✅ 已修复 |
+| 触摸 10ms + 睡眠上限 10ms | **73.4%** | **3.6%** | 2.8% | 2.7% | ✅ 已修复 |
+| 触摸 20ms + 睡眠上限 20ms | **71.3%** | **3.1%** | 2.5% | 1.5% | ✅ 已修复（最终采用） |
 
 （RSS 参考: rockbase-lcdui ~26MB, bitcoind ~620-650MB, ckpool ~150-170MB）
+（当前源码参数: `kTouchReadPeriodMs=20`（50Hz）、`kMaxLvSleepUs=20000`、`kMinLvSleepUs=500`）
 
 ## 关键结论
 
@@ -52,7 +54,8 @@
 - **UI 页 CPU 异常高 → 先查无限动画**：`grep -n "LV_ANIM_REPEAT_INFINITE" main.cpp`，LVGL 无限动画即使页面被裁剪/切走，exec_cb 仍每 10ms 执行
 - **注意 RISC-V 无硬件浮点**：动画 exec_cb 里的 `std::cos`/`std::sin` 等双精度浮点非常昂贵，应避免在每帧回调里使用
 - **busybox top 列对齐问题**：板子上 `top -bn1` 是 busybox 版，进程 CPU% 列需要按 `/proc/[pid]/stat` 快照差值精确计算（`cpu_page.sh` 已封装），不要直接解析 top 输出列
-- **触摸轮询 1ms 空转**：`lv_timer_set_period(indev_read_timer, 1)` 会让 `lv_timer_handler()` 永远返回 ≤1ms，主循环 sleep 被锁死在 0.5~2ms，空闲空转烧 CPU；已改为 10ms（100Hz）并放宽主循环睡眠上限到 10ms（`kMaxLvSleepUs`）。此项对 Stratum 热点无贡献，但对空闲 CPU 有益
+- **触摸轮询 1ms 空转**：`lv_timer_set_period(indev_read_timer, 1)` 会让 `lv_timer_handler()` 永远返回 ≤1ms，主循环 sleep 被锁死在 0.5~2ms，空闲空转烧 CPU；先改为 10ms（100Hz）再降到 **20ms（50Hz）**（`kTouchReadPeriodMs`），主循环睡眠上限相应放宽到 `kMaxLvSleepUs=20000`（20ms）。此项对 Stratum 热点无贡献，但对空闲 CPU 有益
+- **触摸降频的边际收益**：20ms/20ms vs 10ms/10ms，Stratum 页 lcdui CPU 仅 3.6% → 3.1%（-0.5pp），整机 73.4% → 71.3%。**注意代价**：`kMaxLvSleepUs=20000` 把 LVGL 动画帧率上限压到 ~50fps（`kPagerSnapAnimMs=300` snap 动画约 15 帧），快速滑动手感略钝。收益小但无碍，已作为最终参数固化
 
 ## 复测指引（给后续 agent）
 
@@ -68,3 +71,4 @@
 |------|------|
 | 2026-08-19 | 首次基线：4 页测试，发现 Stratum 页 UI 进程 CPU 34.7%（×4.7 异常），初始怀疑图表刷新热点 |
 | 2026-08-19 | 定位根因：Stratum 状态点无限呼吸动画（`LV_ANIM_REPEAT_INFINITE`），`#if 0` 禁用改静态绿点；复测 Stratum 页 lcdui CPU 降至 3.6%，整机 73.4% ✅ |
+| 2026-08-19 | 触摸降频 20ms/20ms（`kTouchReadPeriodMs=20`, `kMaxLvSleepUs=20000`）：lcdui 3.6% → 3.1%，整机 73.4% → 71.3%；收益边际但无副作用，固化提交 |

@@ -84,14 +84,16 @@ ssh -o StrictHostKeyChecking=no root@192.168.124.XX 'sh /root/script/cpu_page.sh
 
 ### 修复后（呼吸动画 `#if 0` 禁用，静态绿点）
 
-| 页面 | 整机 CPU | **rockbase-lcdui** | bitcoind | ckpool | 判定 |
+| 配置 | 整机 CPU | **rockbase-lcdui** | bitcoind | ckpool | 判定 |
 |------|---------|--------------------|----------|--------|------|
-| **Stratum** | **73.4%** | **3.6%** | 2.8% | 2.7% | ✅ 已修复 |
+| 触摸 10ms + 睡眠上限 10ms | **73.4%** | **3.6%** | 2.8% | 2.7% | ✅ 已修复 |
+| 触摸 20ms + 睡眠上限 20ms | **71.3%** | **3.1%** | 2.5% | 1.5% | ✅ 已修复（当前源码参数） |
 
 **结论**：
 - 除 Stratum 外各页 UI 进程稳定在 **6.7%~7.3%**
 - **Stratum 页热点根因 = 状态点无限呼吸动画**（`start_status_dot_breathing` 的 `LV_ANIM_REPEAT_INFINITE`，每 10ms 一帧 `std::cos` 浮点 + 改透明度触发重绘），**不是图表刷新**（图表仅 32 点 × 3 序列、5s 刷一次）
 - 修复：`#if 0` 禁用呼吸动画，在线显示静态绿点；Stratum 页 lcdui CPU **34.7% → 3.6%**，整机 97.5% → 73.4%
+- 触摸参数最终定为 **20ms（50Hz）+ 睡眠上限 20ms**（`kTouchReadPeriodMs=20`, `kMaxLvSleepUs=20000`）：lcdui 3.6% → 3.1%、整机 73.4% → 71.3%，收益边际但无副作用；注意动画帧率上限相应降到 ~50fps，快速滑动略钝
 - 背景压力：整机 sys 态 ~40-48% 偏高，与内存耗尽（free ~10M、无 swap、kswapd 持续回收）相关，属各页共有背景
 
 > 详细基线数据、根因分析与排查经验见 `docs/rockbase-cpu-baseline.md`。

@@ -5,7 +5,7 @@
 
 PSTORE_MNT=/sys/fs/pstore
 LOG_DIR=/root/log/pstore
-ARCHIVE_PARENT=/root
+ARCHIVE_PARENT=/root/log/pstore-archive
 ARCHIVE_PREFIX=pstore-boot-
 MAX_ARCHIVES=8
 
