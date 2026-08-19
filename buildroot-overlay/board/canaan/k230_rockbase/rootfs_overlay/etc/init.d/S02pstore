@@ -71,7 +71,7 @@ archive_pstore() {
         ls -l "${dest}" 2>/dev/null
     } >> "${LOG_DIR}/pstore.log"
 
-    ln -sfn "${dest}" "${ARCHIVE_PARENT}/pstore-boot-latest" 2>/dev/null || true
+    ln -sfn "${dest}" "${ARCHIVE_PARENT}/latest" 2>/dev/null || true
     sync "${dest}" "${LOG_DIR}/pstore.log" 2>/dev/null || sync 2>/dev/null || true
 
     # Clear records after archiving so the next boot only reports new failures.
