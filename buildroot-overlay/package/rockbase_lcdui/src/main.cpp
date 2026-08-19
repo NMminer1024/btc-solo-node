@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cmath>
 #include <csignal>
 #include <cstdint>
 #include <cstdio>
@@ -103,6 +104,9 @@ struct TileRuntime {
     lv_obj_t* stratum_state_dot = nullptr;
     lv_obj_t* stratum_state_label = nullptr;
     lv_obj_t* stratum_url_label = nullptr;
+    int32_t stratum_state_dot_anchor_x = 0;
+    int32_t stratum_state_dot_anchor_y = 0;
+    bool stratum_state_anim_running = false;
     lv_obj_t* stratum_chart = nullptr;
     lv_obj_t* stratum_chart_hint = nullptr;
     lv_obj_t* stratum_legend_5m = nullptr;
@@ -669,6 +673,34 @@ void build_tile_caches_from_snapshots() {
     }
 }
 
+bool is_live_page_overlay(uint32_t index, lv_obj_t* child) {
+    return index == 1 && child != nullptr && child == g_tiles.stratum_state_dot;
+}
+
+void set_live_page_overlays_hidden(uint32_t index, bool hidden) {
+    if (index >= kTileCount) {
+        return;
+    }
+    lv_obj_t* page = g_tiles.page[index];
+    if (page == nullptr) {
+        return;
+    }
+    const uint32_t child_count = lv_obj_get_child_count(page);
+    for (uint32_t child_index = 0; child_index < child_count; ++child_index) {
+        lv_obj_t* child = lv_obj_get_child(page, child_index);
+        if (!is_live_page_overlay(index, child)) {
+            continue;
+        }
+        if (hidden) {
+            lv_obj_add_flag(child, LV_OBJ_FLAG_HIDDEN);
+        }
+        else {
+            lv_obj_clear_flag(child, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_move_foreground(child);
+        }
+    }
+}
+
 bool refresh_page_cache(uint32_t index) {
     if (index >= kTileCount || g_tiles.page[index] == nullptr ||
         g_tiles.page_image[index] == nullptr || g_tiles.page_snapshot[index] == nullptr) {
@@ -679,9 +711,10 @@ bool refresh_page_cache(uint32_t index) {
     lv_obj_t* image = g_tiles.page_image[index];
     const uint32_t child_count = lv_obj_get_child_count(page);
     lv_obj_add_flag(image, LV_OBJ_FLAG_HIDDEN);
+    set_live_page_overlays_hidden(index, true);
     for (uint32_t child_index = 0; child_index < child_count; ++child_index) {
         lv_obj_t* child = lv_obj_get_child(page, child_index);
-        if (child != image) {
+        if (child != image && !is_live_page_overlay(index, child)) {
             lv_obj_clear_flag(child, LV_OBJ_FLAG_HIDDEN);
         }
     }
@@ -689,12 +722,13 @@ bool refresh_page_cache(uint32_t index) {
     lv_draw_buf_t* snapshot = lv_snapshot_take(page, LV_COLOR_FORMAT_ARGB8888);
     for (uint32_t child_index = 0; child_index < child_count; ++child_index) {
         lv_obj_t* child = lv_obj_get_child(page, child_index);
-        if (child != image) {
+        if (child != image && !is_live_page_overlay(index, child)) {
             lv_obj_add_flag(child, LV_OBJ_FLAG_HIDDEN);
         }
     }
 
     if (snapshot == nullptr) {
+        set_live_page_overlays_hidden(index, false);
         lv_obj_clear_flag(image, LV_OBJ_FLAG_HIDDEN);
         return false;
     }
@@ -703,6 +737,7 @@ bool refresh_page_cache(uint32_t index) {
     g_tiles.page_snapshot[index] = snapshot;
     lv_image_set_src(image, snapshot);
     lv_obj_clear_flag(image, LV_OBJ_FLAG_HIDDEN);
+    set_live_page_overlays_hidden(index, false);
     lv_draw_buf_destroy(old_snapshot);
     if (!build_tile_cache_from_snapshot(index)) {
         return false;
@@ -2223,6 +2258,70 @@ bool set_text_color(lv_obj_t* obj, uint32_t color) {
     return true;
 }
 
+void set_obj_opa_anim(void* obj, int32_t value) {
+    lv_obj_set_style_opa(static_cast<lv_obj_t*>(obj), static_cast<lv_opa_t>(value), 0);
+}
+
+void set_status_dot_green_anim(void* obj, int32_t value) {
+    lv_obj_t* dot = static_cast<lv_obj_t*>(obj);
+    if (dot == nullptr) {
+        return;
+    }
+    constexpr double kPi = 3.14159265358979323846;
+    const double phase = static_cast<double>(clamp_int(value, 0, 360)) * kPi / 180.0;
+    const double wave = (1.0 - std::cos(phase)) * 0.5;
+    const uint32_t opa = static_cast<uint32_t>(LV_OPA_30 + (LV_OPA_COVER - LV_OPA_30) * wave);
+    lv_obj_set_style_bg_color(dot, lv_color_hex(0x37e88b), 0);
+    lv_obj_set_style_border_color(dot, lv_color_hex(0xcaf9d6), 0);
+    lv_obj_set_style_opa(dot, static_cast<lv_opa_t>(opa), 0);
+}
+
+void set_status_dot_anchor(int32_t x, int32_t y) {
+    if (g_tiles.stratum_state_dot == nullptr) {
+        return;
+    }
+    g_tiles.stratum_state_dot_anchor_x = x;
+    g_tiles.stratum_state_dot_anchor_y = y;
+    const int32_t size = lv_obj_get_width(g_tiles.stratum_state_dot);
+    lv_obj_set_pos(g_tiles.stratum_state_dot, x - (size / 2), y - (size / 2));
+}
+
+void start_status_dot_breathing(lv_obj_t* dot) {
+    if (dot == nullptr) {
+        return;
+    }
+    if (g_tiles.stratum_state_anim_running) {
+        return;
+    }
+    g_tiles.stratum_state_anim_running = true;
+    lv_anim_delete(dot, set_obj_opa_anim);
+    lv_anim_delete(dot, set_status_dot_green_anim);
+    lv_obj_clear_flag(dot, LV_OBJ_FLAG_HIDDEN);
+
+    lv_anim_t color_anim;
+    lv_anim_init(&color_anim);
+    lv_anim_set_var(&color_anim, dot);
+    lv_anim_set_exec_cb(&color_anim, set_status_dot_green_anim);
+    lv_anim_set_values(&color_anim, 0, 360);
+    lv_anim_set_duration(&color_anim, 1000);
+    lv_anim_set_playback_duration(&color_anim, 0);
+    lv_anim_set_repeat_count(&color_anim, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_start(&color_anim);
+}
+
+void stop_status_dot_breathing(lv_obj_t* dot, lv_opa_t opa = LV_OPA_COVER) {
+    if (dot == nullptr) {
+        return;
+    }
+    lv_anim_delete(dot, set_obj_opa_anim);
+    lv_anim_delete(dot, set_status_dot_green_anim);
+    g_tiles.stratum_state_anim_running = false;
+    lv_obj_set_size(dot, 14, 14);
+    lv_obj_set_style_opa(dot, opa, 0);
+    lv_obj_clear_flag(dot, LV_OBJ_FLAG_HIDDEN);
+    set_status_dot_anchor(g_tiles.stratum_state_dot_anchor_x, g_tiles.stratum_state_dot_anchor_y);
+}
+
 bool set_network_rssi_visual(const std::string& text, int signal_level) {
     bool dirty = false;
     dirty |= set_label(g_tiles.network_rssi, text);
@@ -2263,33 +2362,33 @@ bool set_hidden(lv_obj_t* obj, bool hidden) {
 }
 
 void set_stratum_state_visual(const std::string& state_class, const std::string& state_text) {
-    uint32_t fill = 0x5d6770;
-    uint32_t border = 0x8a949d;
-    uint32_t text = 0xb7c2c8;
-
-    if (state_class == "ok") {
-        fill = 0x37e88b;
-        border = 0xd7ffee;
-        text = 0xf4efe2;
-    }
-    else if (state_class == "warn") {
-        fill = 0xf0b44c;
-        border = 0xffe2aa;
-        text = 0xf4efe2;
-    }
-    else if (state_class == "err") {
-        fill = 0xd65a5a;
-        border = 0xffc1c1;
-        text = 0xf4efe2;
-    }
+    (void)state_text;
+    const bool online = (state_class == "ok");
 
     if (g_tiles.stratum_state_dot != nullptr) {
-        lv_obj_set_style_bg_color(g_tiles.stratum_state_dot, lv_color_hex(fill), 0);
-        lv_obj_set_style_border_color(g_tiles.stratum_state_dot, lv_color_hex(border), 0);
+        lv_obj_set_style_bg_opa(g_tiles.stratum_state_dot, LV_OPA_COVER, 0);
+        if (online) {
+            lv_obj_set_style_border_color(g_tiles.stratum_state_dot, lv_color_hex(0xcaf9d6), 0);
+            start_status_dot_breathing(g_tiles.stratum_state_dot);
+        }
+        else {
+            lv_obj_set_style_bg_color(g_tiles.stratum_state_dot, lv_color_hex(0xd65a5a), 0);
+            lv_obj_set_style_border_color(g_tiles.stratum_state_dot, lv_color_hex(0xffc1c1), 0);
+            stop_status_dot_breathing(g_tiles.stratum_state_dot, LV_OPA_COVER);
+        }
     }
-    if (g_tiles.stratum_state_label != nullptr) {
-        lv_obj_set_style_text_color(g_tiles.stratum_state_label, lv_color_hex(text), 0);
-        set_label(g_tiles.stratum_state_label, state_text);
+    if (g_tiles.stratum_url_label != nullptr) {
+        lv_obj_set_style_text_color(g_tiles.stratum_url_label, lv_color_hex(online ? 0xf4efe2 : 0x7f8990), 0);
+        if (g_tiles.stratum_state_dot != nullptr) {
+            lv_point_t text_size {};
+            lv_text_get_size(&text_size,
+                             lv_label_get_text(g_tiles.stratum_url_label),
+                             &lv_font_montserrat_18,
+                             0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+            const int32_t dot_x = lv_obj_get_x(g_tiles.stratum_url_label) + text_size.x + 15;
+            const int32_t dot_y = lv_obj_get_y(g_tiles.stratum_url_label) + (text_size.y / 2);
+            set_status_dot_anchor(dot_x, dot_y);
+        }
     }
 }
 
@@ -2578,11 +2677,8 @@ void build_stratum_tile(lv_obj_t* tv) {
     lv_obj_set_width(g_tiles.stratum_url_label, 560);
     lv_label_set_long_mode(g_tiles.stratum_url_label, LV_LABEL_LONG_MODE_DOTS);
 
-    g_tiles.stratum_state_dot = create_status_dot(tile, 626, 82, 16);
-    g_tiles.stratum_state_label = add_label(tile, "Running", 652, 76, &lv_font_montserrat_22, lv_color_hex(0xf4efe2));
-    lv_obj_set_style_text_letter_space(g_tiles.stratum_state_label, 1, 0);
-    lv_obj_set_width(g_tiles.stratum_state_label, 112);
-    lv_obj_set_style_text_align(g_tiles.stratum_state_label, LV_TEXT_ALIGN_RIGHT, 0);
+    g_tiles.stratum_state_dot = create_status_dot(tile, 613, 85, 14);
+    g_tiles.stratum_state_label = nullptr;
 
     lv_obj_t* chart_panel = lv_obj_create(tile);
     make_static(chart_panel);
@@ -2863,15 +2959,20 @@ void cache_tile_pages() {
             continue;
         }
 
+        set_live_page_overlays_hidden(index, true);
         lv_draw_buf_t* snapshot = lv_snapshot_take(page, LV_COLOR_FORMAT_ARGB8888);
         if (snapshot == nullptr) {
             std::fprintf(stderr, "rockbase-lcdui: snapshot failed for page %u\n", index);
+            set_live_page_overlays_hidden(index, false);
             continue;
         }
 
         const uint32_t child_count = lv_obj_get_child_count(page);
         for (uint32_t child_index = 0; child_index < child_count; ++child_index) {
-            lv_obj_add_flag(lv_obj_get_child(page, child_index), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_t* child = lv_obj_get_child(page, child_index);
+            if (!is_live_page_overlay(index, child)) {
+                lv_obj_add_flag(child, LV_OBJ_FLAG_HIDDEN);
+            }
         }
 
         lv_obj_t* image = lv_image_create(page);
@@ -2883,6 +2984,7 @@ void cache_tile_pages() {
         g_tiles.page_snapshot[index] = snapshot;
         g_tiles.page_image[index] = image;
         g_page_cache_dirty[index] = false;
+        set_live_page_overlays_hidden(index, false);
     }
 }
 
