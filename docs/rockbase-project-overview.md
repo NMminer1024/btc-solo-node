@@ -17,10 +17,10 @@ Rockbase 是基于 K230 的 Bitcoin 剪枝验证节点与本地 Stratum/solo min
 
 当前 4 台真实板：
 
-- `192.168.124.8`：1G Rockbase 真板。
 - `192.168.124.15`：1G Rockbase 真板。
-- `192.168.124.21`：1G Rockbase 真板。
 - `192.168.124.23`：2G Rockbase 真板。
+- `192.168.124.30`：1G Rockbase 真板（usb 模式镜像）。
+- `192.168.124.35`：1G Rockbase 真板。
 
 Seed 源设备：
 
@@ -28,7 +28,7 @@ Seed 源设备：
 
 重要 MMC host 拓扑：
 
-- 1G / `124.8`、`124.15`、`124.21`：`mmc0=SDIO WiFi`，`mmc1=SD 卡`。
+- 1G / `124.15`、`124.30`、`124.35`：`mmc0=SDIO WiFi`，`mmc1=SD 卡`。
 - 2G / `124.23`：`mmc0=SD 卡`，`mmc1=SDIO WiFi`。
 
 这个编号差异非常重要。分析日志时不要固定假设 `mmc0` 或 `mmc1`，必须结合当次启动日志确认哪个 host 是 WiFi SDIO。

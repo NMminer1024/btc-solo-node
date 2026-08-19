@@ -22,7 +22,7 @@ description: 'Debug Rockbase board freeze/lockup/hang issues. Collect logs, psto
 
 ### 2. 硬复位后第一时间捞 pstore
 
-**1G 板子 (124.8/124.15/124.21)**：
+**1G 板子 (124.15/124.30/124.35)**：
 
 ```bash
 ssh root@<IP> 'ls -lah /root/log/pstore-archive/latest; cat /root/log/pstore-archive/latest/* 2>/dev/null' > pstore-<IP>.txt

@@ -113,7 +113,7 @@ done
 ### 双板同测（SDIO WiFi vs USB ETH 对比）
 
 ```bash
-IP_SDIO=192.168.124.21   # SDIO WiFi 板子
+IP_SDIO=192.168.124.15   # SDIO WiFi 板子
 IP_ETH=192.168.124.30    # USB ETH 板子
 SERVER=192.168.124.20
 

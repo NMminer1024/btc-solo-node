@@ -11,9 +11,7 @@
 
 | IP | 型号 | MMC 拓扑 |
 |----|------|----------|
-| `192.168.124.8` | 1G | mmc0=SDIO WiFi, mmc1=SD card |
 | `192.168.124.15` | 1G | mmc0=SDIO WiFi, mmc1=SD card |
-| `192.168.124.21` | 1G | mmc0=SDIO WiFi, mmc1=SD card |
 | `192.168.124.23` | 2G | mmc0=SD card, mmc1=SDIO WiFi |
 | `192.168.124.30` | 1G | mmc0=SDIO WiFi, mmc1=SD card；当前烧 usb 模式镜像 |
 | `192.168.124.35` | 1G | mmc0=SDIO WiFi, mmc1=SD card (SD64G) |
