@@ -1,5 +1,7 @@
 #include "display.h"
+#include "miners_overlay.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <csignal>
 #include <cstdint>
@@ -45,6 +47,7 @@ constexpr uint32_t kMaxLvSleepUs = 2000;
 constexpr uint32_t kMinLvSleepUs = 500;
 constexpr uint32_t kDisplayRefrPeriodMs = 10;
 constexpr uint32_t kPresentIntervalMs = 20;
+constexpr size_t kStratumChartMaxPoints = 500;
 constexpr const char* kBootLogoRawPath = "/usr/share/rockbase-lcdui/boot-logo-800x480.argb";
 constexpr const char* kStatusCachePath = "/tmp/status-api.json";
 constexpr const char* kMinersCachePath = "/run/rockbase/miners.json";
@@ -187,6 +190,7 @@ struct DashboardData {
     std::vector<int32_t> miners_history_6h;
     std::vector<int32_t> miners_history_1d;
     std::vector<int32_t> miners_history_ts;
+    MinersOverlay::Snapshot miners_snapshot;
 };
 
 struct HeightCardModel {
@@ -219,6 +223,7 @@ struct StratumPageModel {
     std::vector<int32_t> history_6h;
     std::vector<int32_t> history_1d;
     std::vector<int32_t> history_ts;
+    MinersOverlay::Snapshot miners_snapshot;
 };
 
 struct SystemPageModel {
@@ -256,7 +261,7 @@ constexpr uint32_t page_dirty_bit(uint32_t page) {
 
 constexpr TileSpec kTiles[kTileCount] = {
     {"Bitcoind", "Local Bitcoin solo node overview", 0x0a141b, 0xf0b44c, true},
-    {"Stratum", "Local stratum status and fleet hashrate", 0x101418, 0x51c7a3, true},
+    {"Stratum", "", 0x101418, 0x51c7a3, true},
     {"System", "CPU, memory, disk and process placeholder", 0x13151e, 0x8fb7ff, true},
     {"Network", "WiFi, timezone and network details", 0x101719, 0xff8c64, true},
 };
@@ -308,6 +313,8 @@ bool g_wifi_config_overlay_open_pending = false;
 bool g_wifi_config_overlay_wait_release = false;
 TimezoneOverlay g_timezone_overlay;
 bool g_timezone_overlay_open_pending = false;
+MinersOverlay g_miners_overlay;
+bool g_miners_overlay_open_pending = false;
 int g_pressed_hotspot_index = -1;
 bool g_show_page_indicator = false;
 
@@ -325,7 +332,8 @@ uint32_t tick_ms() {
 
 bool ui_interacting(uint32_t now_ms = tick_ms()) {
     (void)now_ms;
-    return g_touch.down || g_pager_anim_active || g_wifi_config_overlay.active() || g_timezone_overlay.active();
+    return g_touch.down || g_pager_anim_active || g_wifi_config_overlay.active() ||
+           g_timezone_overlay.active() || g_miners_overlay.active();
 }
 
 struct ConfigHotspot {
@@ -345,7 +353,12 @@ void open_timezone_overlay() {
     g_timezone_overlay_open_pending = true;
 }
 
+void open_miners_overlay() {
+    g_miners_overlay_open_pending = true;
+}
+
 constexpr ConfigHotspot kConfigHotspots[] = {
+    {1, 42, 118, 716, 308, open_miners_overlay},
     {3, 420, 148, 338, 84, open_wifi_config_overlay},
     {3, 42, 244, 338, 84, open_timezone_overlay},
 };
@@ -1353,6 +1366,31 @@ std::string format_hashrate_value(double value_ghs) {
     return buf;
 }
 
+std::string format_share_value(double value) {
+    if (value <= 0.0) {
+        return "--";
+    }
+    static constexpr struct {
+        double divisor;
+        const char* suffix;
+    } kUnits[] = {
+        {1e12, "T"},
+        {1e9, "G"},
+        {1e6, "M"},
+        {1e3, "K"},
+    };
+    for (const auto& unit : kUnits) {
+        if (value >= unit.divisor) {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "%.2f%s", value / unit.divisor, unit.suffix);
+            return buf;
+        }
+    }
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%.0f", value);
+    return buf;
+}
+
 std::string format_chart_time_label(int32_t ts) {
     if (ts <= 0) {
         return "--";
@@ -1375,6 +1413,40 @@ bool load_miners_chart_data(DashboardData& data) {
     data.miners_hashrate_5m = json_value(pool, "hashrate5m", "0");
     data.miners_hashrate_6h = json_value(pool, "hashrate6hr", "0");
     data.miners_hashrate_1d = json_value(pool, "hashrate1d", "0");
+    data.miners_snapshot.total_workers = json_int_value(pool, "workers", 0);
+    data.miners_snapshot.total_hashrate_5m = data.miners_hashrate_5m;
+
+    const std::string miners = json_array(miners_json, "miners");
+    const std::vector<std::string> miner_rows = json_array_objects(miners);
+    data.miners_snapshot.miners.clear();
+    data.miners_snapshot.miners.reserve(miner_rows.size());
+    for (const std::string& miner_row : miner_rows) {
+        MinersOverlay::Miner miner;
+        miner.address = json_value(miner_row, "address");
+        miner.online = json_value(miner_row, "online", "false") == "true";
+        miner.workers = std::max(json_int_value(miner_row, "worker_detail_count", 0),
+                                 json_int_value(miner_row, "workers", 0));
+        miner.hashrate_5m = json_value(miner_row, "hashrate5m", "--");
+        miner.last_share_ago = json_value(miner_row, "lastshare_ago", "-");
+        miner.best_share = format_share_value(std::strtod(json_value(miner_row, "bestshare", "0").c_str(), nullptr));
+        data.miners_snapshot.miners.push_back(miner);
+        if (miner.online) {
+            ++data.miners_snapshot.online_miners;
+        }
+    }
+    std::sort(data.miners_snapshot.miners.begin(), data.miners_snapshot.miners.end(),
+              [](const MinersOverlay::Miner& left, const MinersOverlay::Miner& right) {
+                  if (left.online != right.online) {
+                      return left.online > right.online;
+                  }
+                  const double left_hash = parse_hashrate_ghs(left.hashrate_5m);
+                  const double right_hash = parse_hashrate_ghs(right.hashrate_5m);
+                  if (left_hash != right_hash) {
+                      return left_hash > right_hash;
+                  }
+                  return left.address < right.address;
+              });
+    data.miners_snapshot.total_miners = static_cast<int>(data.miners_snapshot.miners.size());
 
     std::string history_json;
     if (!read_text_file(kMinersHistoryCachePath, history_json, 262144)) {
@@ -1402,10 +1474,10 @@ bool load_miners_chart_data(DashboardData& data) {
         h1d.push_back(static_cast<int32_t>(parse_hashrate_ghs(json_value(row, "h1d", "0"))));
     }
 
-    data.miners_history_5m = downsample_history_points(h5m, 96);
-    data.miners_history_6h = downsample_history_points(h6h, 96);
-    data.miners_history_1d = downsample_history_points(h1d, 96);
-    data.miners_history_ts = downsample_history_points(ts_values, 96);
+    data.miners_history_5m = downsample_history_points(h5m, kStratumChartMaxPoints);
+    data.miners_history_6h = downsample_history_points(h6h, kStratumChartMaxPoints);
+    data.miners_history_1d = downsample_history_points(h1d, kStratumChartMaxPoints);
+    data.miners_history_ts = downsample_history_points(ts_values, kStratumChartMaxPoints);
     return true;
 }
 
@@ -1831,7 +1903,7 @@ void touch_read_cb(lv_indev_t*, lv_indev_data_t* data) {
     g_swipe_current_y = data->point.y;
 
     static bool was_down = false;
-    if (g_wifi_config_overlay.active() || g_timezone_overlay.active()) {
+    if (g_wifi_config_overlay.active() || g_timezone_overlay.active() || g_miners_overlay.active()) {
         if (g_wifi_config_overlay.active() && g_wifi_config_overlay_wait_release) {
             if (!g_touch.down) {
                 g_wifi_config_overlay_wait_release = false;
@@ -2321,6 +2393,7 @@ bool build_ui_model(UiModel& model) {
     model.stratum.history_6h = data.miners_history_6h;
     model.stratum.history_1d = data.miners_history_1d;
     model.stratum.history_ts = data.miners_history_ts;
+    model.stratum.miners_snapshot = data.miners_snapshot;
 
     model.system.cpu_busy = data.load_pct != "-" ? data.load_pct + "%" : "--";
     if (data.load_avg_1 != "-" && data.load_avg_5 != "-") {
@@ -2392,7 +2465,9 @@ void style_tile(lv_obj_t* tile, lv_color_t bg, lv_color_t /*accent*/) {
 
 void add_page_header(lv_obj_t* tile, const char* title, const char* subtitle, lv_color_t accent) {
     add_label(tile, title, 36, 30, &lv_font_montserrat_36, accent);
-    add_label(tile, subtitle, 38, 82, &lv_font_montserrat_18, lv_color_hex(0xb7c2c8));
+    if (subtitle != nullptr && subtitle[0] != '\0') {
+        add_label(tile, subtitle, 38, 82, &lv_font_montserrat_18, lv_color_hex(0xb7c2c8));
+    }
 }
 
 lv_dir_t tile_dir_for(uint32_t col) {
@@ -2499,12 +2574,15 @@ void build_stratum_tile(lv_obj_t* tv) {
     const lv_color_t accent = lv_color_hex(spec.accent);
     lv_obj_t* tile = create_tile_base(tv, 1, spec);
 
+    g_tiles.stratum_url_label = add_label(tile, "stratum+tcp://-", 38, 82, &lv_font_montserrat_18, lv_color_hex(0xf4efe2));
+    lv_obj_set_width(g_tiles.stratum_url_label, 560);
+    lv_label_set_long_mode(g_tiles.stratum_url_label, LV_LABEL_LONG_MODE_DOTS);
+
     g_tiles.stratum_state_dot = create_status_dot(tile, 626, 82, 16);
     g_tiles.stratum_state_label = add_label(tile, "Running", 652, 76, &lv_font_montserrat_22, lv_color_hex(0xf4efe2));
     lv_obj_set_style_text_letter_space(g_tiles.stratum_state_label, 1, 0);
     lv_obj_set_width(g_tiles.stratum_state_label, 112);
     lv_obj_set_style_text_align(g_tiles.stratum_state_label, LV_TEXT_ALIGN_RIGHT, 0);
-    g_tiles.stratum_url_label = nullptr;
 
     lv_obj_t* chart_panel = lv_obj_create(tile);
     make_static(chart_panel);
@@ -2712,7 +2790,9 @@ uint32_t apply_ui_model(const UiModel& model) {
 
     dirty = false;
     dirty |= update_stratum_chart(model.stratum);
+    dirty |= set_label(g_tiles.stratum_url_label, model.stratum.url.empty() ? "-" : model.stratum.url);
     set_stratum_state_visual(model.stratum.state_class, model.stratum.state);
+    g_miners_overlay.set_snapshot(model.stratum.miners_snapshot);
     if (dirty) {
         dirty_mask |= page_dirty_bit(1);
     }
@@ -2929,23 +3009,29 @@ int main() {
             g_timezone_overlay.open();
             g_timezone_overlay_open_pending = false;
         }
+        if (g_miners_overlay_open_pending && !g_miners_overlay.active()) {
+            g_miners_overlay.open();
+            g_miners_overlay_open_pending = false;
+        }
         g_wifi_config_overlay.update();
         g_timezone_overlay.update();
+        g_miners_overlay.update();
         process_deferred_refreshes_if_idle();
         refresh_one_dirty_page_if_idle();
 
         bool custom_present = false;
-        if (!g_wifi_config_overlay.active() && !g_timezone_overlay.active() && g_touch.down) {
+        if (!g_wifi_config_overlay.active() && !g_timezone_overlay.active() && !g_miners_overlay.active() && g_touch.down) {
             const int32_t scroll_x = visual_scroll_x_from_touch();
             if (g_swipe_drag_started) {
                 custom_present = present_pager_frame(scroll_x);
             }
         }
-        else if (!g_wifi_config_overlay.active() && !g_timezone_overlay.active() && g_pager_anim_active) {
+        else if (!g_wifi_config_overlay.active() && !g_timezone_overlay.active() && !g_miners_overlay.active() && g_pager_anim_active) {
             custom_present = present_pager_snap_anim(now_ms);
         }
 
         g_custom_frame_presenting = !g_wifi_config_overlay.active() && !g_timezone_overlay.active() &&
+                                    !g_miners_overlay.active() &&
                                     (g_touch.down || custom_present);
         uint32_t next_ms = lv_timer_handler();
         g_custom_frame_presenting = false;
