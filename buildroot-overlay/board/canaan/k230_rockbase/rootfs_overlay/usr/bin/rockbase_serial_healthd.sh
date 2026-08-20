@@ -12,6 +12,12 @@ DIAG_LAST_FILE=/tmp/rockbase-serial-healthd.diag
 SYSRQ_LAST_FILE=/tmp/rockbase-serial-healthd.sysrq
 SYSRQ_COOLDOWN_SEC=${ROCKBASE_SERIAL_HEALTH_SYSRQ_COOLDOWN_SEC:-120}
 SYSRQ_KEYS=${ROCKBASE_SERIAL_HEALTH_SYSRQ_KEYS:-w}
+# 软挂死兜底: 关键 I/O 进程持续 D 或 wbusy 持续超高 -> 主动 panic 自动重启
+PANIC_AFTER_SEC=${ROCKBASE_SERIAL_HEALTH_PANIC_AFTER_SEC:-60}
+PANIC_MIN_WBUSY=${ROCKBASE_SERIAL_HEALTH_PANIC_MIN_WBUSY:-800}
+PANIC_COOLDOWN_SEC=${ROCKBASE_SERIAL_HEALTH_PANIC_COOLDOWN_SEC:-600}
+PANIC_STARTUP_GRACE=${ROCKBASE_SERIAL_HEALTH_STARTUP_GRACE:-180}
+PANIC_LAST_FILE=/tmp/rockbase-serial-healthd.panic
 export TZ="${TZ:-CST-8}"
 
 log_console() {
@@ -51,6 +57,14 @@ DIAG_COOLDOWN_SEC="$(num_or_zero "${DIAG_COOLDOWN_SEC}")"
 [ "${DIAG_COOLDOWN_SEC}" -gt 0 ] || DIAG_COOLDOWN_SEC=10
 SYSRQ_COOLDOWN_SEC="$(num_or_zero "${SYSRQ_COOLDOWN_SEC}")"
 [ "${SYSRQ_COOLDOWN_SEC}" -gt 0 ] || SYSRQ_COOLDOWN_SEC=120
+PANIC_AFTER_SEC="$(num_or_zero "${PANIC_AFTER_SEC}")"
+[ "${PANIC_AFTER_SEC}" -gt 0 ] || PANIC_AFTER_SEC=60
+PANIC_MIN_WBUSY="$(num_or_zero "${PANIC_MIN_WBUSY}")"
+[ "${PANIC_MIN_WBUSY}" -gt 0 ] || PANIC_MIN_WBUSY=800
+PANIC_COOLDOWN_SEC="$(num_or_zero "${PANIC_COOLDOWN_SEC}")"
+[ "${PANIC_COOLDOWN_SEC}" -gt 0 ] || PANIC_COOLDOWN_SEC=600
+PANIC_STARTUP_GRACE="$(num_or_zero "${PANIC_STARTUP_GRACE}")"
+[ "${PANIC_STARTUP_GRACE}" -gt 0 ] || PANIC_STARTUP_GRACE=180
 
 read_disk() {
     awk -v dev="$1" '$3 == dev { print $6, $10, $13, $14, $12 }' /proc/diskstats 2>/dev/null
@@ -293,6 +307,26 @@ dump_d_stacks() {
     done
 }
 
+# 是否存在卡在 D 状态的关键 I/O 进程 (SD 卡 / WiFi SDIO / 文件系统)
+critical_d_process() {
+    for f in /proc/[0-9]*/stat; do
+        [ -r "${f}" ] || continue
+        pid="${f#/proc/}"
+        pid="${pid%/stat}"
+        line="$(cat "${f}" 2>/dev/null)" || continue
+        rest="${line#*) }"
+        state="${rest%% *}"
+        [ "${state}" = "D" ] || continue
+        comm="$(cat "/proc/${pid}/comm" 2>/dev/null)"
+        case "${comm}" in
+            *kblockd*|jbd2/*|flush-*|mmcqd*|RTW_*|*sdhci*|*8189*)
+                return 0
+                ;;
+        esac
+    done
+    return 1
+}
+
 dump_mmc_sysfs() {
     count=0
     for host in /sys/class/mmc_host/mmc*; do
@@ -375,6 +409,28 @@ maybe_trigger_sysrq() {
     done
 }
 
+# 软挂死兜底: 持续异常达到 PANIC_AFTER_SEC 后主动 panic, 借 kernel.panic=10 自动重启
+maybe_panic_soft_hang() {
+    reason="$1"
+    now="$2"
+    last=0
+
+    [ -w /proc/sysrq-trigger ] || return 0
+    [ "${now}" -lt "${PANIC_STARTUP_GRACE}" ] && return 0
+    [ -r "${PANIC_LAST_FILE}" ] && last="$(cat "${PANIC_LAST_FILE}" 2>/dev/null)"
+    last="$(num_or_zero "${last}")"
+    if [ $((now - last)) -lt "${PANIC_COOLDOWN_SEC}" ]; then
+        return 0
+    fi
+
+    printf '%s\n' "${now}" >"${PANIC_LAST_FILE}" 2>/dev/null || true
+    log_console "FATAL soft-hang (${reason}) sustained ${PANIC_AFTER_SEC}s -> triggering panic for auto-recovery"
+    log_diag "diag fatal reason=${reason} sustained=${PANIC_AFTER_SEC}s action=panic"
+    d="$(tasks_d_count "$(tasks_line)")"
+    dump_io_diag "panic-${reason}" "${d}" "${disk_wbusy}" "${block_wbusy}"
+    printf 'c' >/proc/sysrq-trigger 2>/dev/null || true
+}
+
 root_dev="$(sed -n 's/.*root=\/dev\/\([^ ]*\).*/\1/p' /proc/cmdline)"
 [ -n "${root_dev}" ] || root_dev=mmcblk0p2
 case "${root_dev}" in
@@ -401,9 +457,10 @@ prev_block_wio="${4:-0}"
 prev_irq="$(read_irq_groups)"
 prev_softirq="$(read_softirqs)"
 
-log_console "start interval=${INTERVAL}s summary_interval=${CONSOLE_SUMMARY_INTERVAL}s root=${root_dev} disk=${disk_dev} block=${block_dev} sysrq=$(cat /proc/sys/kernel/sysrq 2>/dev/null) sysrq_keys=${SYSRQ_KEYS}"
+log_console "start interval=${INTERVAL}s summary_interval=${CONSOLE_SUMMARY_INTERVAL}s root=${root_dev} disk=${disk_dev} block=${block_dev} sysrq=$(cat /proc/sys/kernel/sysrq 2>/dev/null) sysrq_keys=${SYSRQ_KEYS} panic_after=${PANIC_AFTER_SEC}s panic_min_wbusy=${PANIC_MIN_WBUSY}%"
 
 summary_last=0
+PANIC_STUCK_SINCE=""
 
 while :; do
     sleep "${INTERVAL}"
@@ -458,6 +515,25 @@ while :; do
             dump_io_diag "wbusy" "${d_count}" "${disk_wbusy}" "${block_wbusy}"
             maybe_trigger_sysrq "wbusy" "${up}"
         fi
+    fi
+
+    # 软挂死兜底: 关键 I/O 进程持续 D 或 wbusy 持续超高 -> 主动 panic
+    if [ "${d_count}" -gt 0 ] && critical_d_process; then
+        stuck_now=1
+    elif [ "${disk_wbusy}" -gt "${PANIC_MIN_WBUSY}" ] || [ "${block_wbusy}" -gt "${PANIC_MIN_WBUSY}" ]; then
+        stuck_now=1
+    else
+        stuck_now=0
+    fi
+    if [ "${stuck_now}" = "1" ]; then
+        if [ -z "${PANIC_STUCK_SINCE}" ]; then
+            PANIC_STUCK_SINCE="${up}"
+        elif [ $((up - PANIC_STUCK_SINCE)) -ge "${PANIC_AFTER_SEC}" ]; then
+            maybe_panic_soft_hang "stuck" "${up}"
+            PANIC_STUCK_SINCE=""
+        fi
+    else
+        PANIC_STUCK_SINCE=""
     fi
     prev_irq="${curr_irq}"
     prev_softirq="${curr_softirq}"
