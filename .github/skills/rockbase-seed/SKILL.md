@@ -52,7 +52,7 @@ seed/root-block/
 ### 1G 带 seed
 
 ```bash
-make CONF=k230_rockbase_1g_defconfig buildroot \
+make CONF=k230_rockbase_1g_defconfig buildroot -j$(nproc) \
   K230_BLOCKDATA_SIZE=24G \
   K230_IMAGE_GZIP=0
 ```
@@ -60,7 +60,7 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 ### 2G 带 seed
 
 ```bash
-make CONF=k230_rockbase_2g_defconfig buildroot \
+make CONF=k230_rockbase_2g_defconfig buildroot -j$(nproc) \
   K230_BLOCKDATA_SIZE=24G \
   K230_IMAGE_GZIP=0
 ```

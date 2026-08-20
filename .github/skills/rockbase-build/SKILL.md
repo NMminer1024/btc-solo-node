@@ -25,6 +25,17 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 
 ---
 
+## 并行编译（强制）
+
+> **所有编译——无论全量还是增量——都必须使用最快的编译方式：多核 CPU 并行化。**
+
+- 顶层 `make` 命令**必须显式追加 `-j$(nproc)`**，启用多核并行
+- Buildroot 内部默认已是 `nproc+1` 并行（`BR2_JLEVEL=0` 时），但显式指定可避免歧义、保证跨环境行为一致
+- 禁止使用 `-j1` 或任何串行编译方式
+- 本规则适用于所有构建入口：`buildroot`、`clean`、`linux-dirclean`、`rockbase_lcdui-rebuild` 等
+
+---
+
 ## 构建规则总览
 
 | 规则 | 说明 |
@@ -35,6 +46,7 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 | LVGL UI 重建 | 任何 LVGL/`rockbase_lcdui` 改动后，必须用 `rockbase_lcdui-rebuild` 单独重建 |
 | WSL 导出 | 使用 `post-image.sh` 自动导出到 `/mnt/d/code/pony/IoT/k230/img/` |
 | 构建前准备 | 非 seed 构建需要 `mkdir -p /tmp/rockbase-empty-seed` |
+| 并行编译 | 所有编译（全量/增量）必须显式多核并行：make 命令追加 `-j$(nproc)`；详见下方 **并行编译（强制）** 章节 |
 | Kernel patch 变更 | 只要改了 `buildroot-overlay/board/canaan/k230_rockbase/patches/linux/`，每个目标 defconfig 都必须先执行一次 `linux-dirclean` 再重编 |
 | 网络接口 | 统一镜像（USB + SDIO 驱动都在，运行时 `rockbase_netsel.sh` 自动选择）；`K230_NET` 仅作测试开关；详见下方 **网络接口模式（统一镜像，K230_NET）** 章节 |
 
@@ -68,7 +80,7 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 ```bash
 # 统一镜像（默认，不写 K230_NET 也等价）
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_1g_defconfig buildroot \
+make CONF=k230_rockbase_1g_defconfig buildroot -j$(nproc) \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
@@ -153,7 +165,7 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 ```bash
 make CONF=k230_rockbase_1g_defconfig linux-dirclean
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_1g_defconfig buildroot \
+make CONF=k230_rockbase_1g_defconfig buildroot -j$(nproc) \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
@@ -164,7 +176,7 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 ```bash
 make CONF=k230_rockbase_2g_defconfig linux-dirclean
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_2g_defconfig buildroot \
+make CONF=k230_rockbase_2g_defconfig buildroot -j$(nproc) \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
@@ -176,7 +188,7 @@ make CONF=k230_rockbase_2g_defconfig buildroot \
 
 ```bash
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_1g_defconfig buildroot \
+make CONF=k230_rockbase_1g_defconfig buildroot -j$(nproc) \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
@@ -186,7 +198,7 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 
 ```bash
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_2g_defconfig buildroot \
+make CONF=k230_rockbase_2g_defconfig buildroot -j$(nproc) \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
@@ -224,7 +236,7 @@ make CONF=k230_rockbase_1g_defconfig copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/Io
 # 1G 全量编译
 make CONF=k230_rockbase_1g_defconfig clean
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_1g_defconfig buildroot \
+make CONF=k230_rockbase_1g_defconfig buildroot -j$(nproc) \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
@@ -232,7 +244,7 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 # 2G 全量编译
 make CONF=k230_rockbase_2g_defconfig clean
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_2g_defconfig buildroot \
+make CONF=k230_rockbase_2g_defconfig buildroot -j$(nproc) \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
@@ -364,8 +376,8 @@ echo "[netsel log]"; tail -5 /tmp/rockbase-netsel.log
 任何 `rockbase_lcdui`/LVGL UI 源码改动后，**必须**在构建镜像前单独重建：
 
 ```bash
-make CONF=k230_rockbase_1g_defconfig rockbase_lcdui-rebuild
-make CONF=k230_rockbase_2g_defconfig rockbase_lcdui-rebuild
+make CONF=k230_rockbase_1g_defconfig rockbase_lcdui-rebuild -j$(nproc)
+make CONF=k230_rockbase_2g_defconfig rockbase_lcdui-rebuild -j$(nproc)
 ```
 
 ---

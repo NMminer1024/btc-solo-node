@@ -64,8 +64,8 @@ description: 'Develop and debug Rockbase LVGL LCD UI. Covers tileview, swipe, DR
 LVGL UI 改动后必须单独重建：
 
 ```bash
-make CONF=k230_rockbase_1g_defconfig rockbase_lcdui-rebuild
-make CONF=k230_rockbase_2g_defconfig rockbase_lcdui-rebuild
+make CONF=k230_rockbase_1g_defconfig rockbase_lcdui-rebuild -j$(nproc)
+make CONF=k230_rockbase_2g_defconfig rockbase_lcdui-rebuild -j$(nproc)
 ```
 
 然后再构建完整镜像。详见 `rockbase-build` skill。
