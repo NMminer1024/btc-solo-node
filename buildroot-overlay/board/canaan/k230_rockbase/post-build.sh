@@ -168,4 +168,12 @@ prepare_block_seed_mountpoint
 rm -f "${TARGET_DIR}/etc/init.d/S50telnet"
 rm -f "${TARGET_DIR}/etc/init.d/S31canaan_isp"
 rm -f "${TARGET_DIR}/etc/init.d/S41adb_mtp"
+
+# Keep the runtime network selector executable in the final rootfs; some
+# overlay sync/build steps preserve the file content but drop the x-bit.
+chmod 755 "${TARGET_DIR}/etc/init.d/S37netsel" 2>/dev/null || true
+chmod 755 "${TARGET_DIR}/etc/init.d/S38wifi" 2>/dev/null || true
+chmod 755 "${TARGET_DIR}/usr/bin/rockbase_netsel.sh" 2>/dev/null || true
+chmod 755 "${TARGET_DIR}/usr/bin/rockbase_usb_wifi.sh" 2>/dev/null || true
+
 cd ${TARGET_DIR}; rm -rf app; ln -s root/app app; cd -

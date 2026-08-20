@@ -118,9 +118,16 @@ netsel_detect_usb_wifi() {
   return 1
 }
 
-# Poll for a USB network path (wired first, then WiFi dongle) for up to
-# NETSEL_USB_WAIT_SEC seconds, so late USB enumeration is not misread as
-# "no USB device". Prints "usb_eth <iface>" or "usb_wifi <iface>".
+# Poll for a USB network path (wired first, then WiFi dongle) so late USB
+# enumeration is not misread as "no USB device". Prints "usb_eth <iface>" or
+# "usb_wifi <iface>".
+#
+# Timing: the wired check is fast (built-in driver) and is polled every second
+# for NETSEL_USB_WAIT_SEC. The WiFi helper (rockbase_usb_wifi.sh detect
+# --autoload) has its OWN internal USB_WIFI_WAIT_SEC poll for the wlan iface,
+# so it is invoked only ONCE (on the last iteration) to avoid multiplying that
+# wait across the loop — worst case is ~NETSEL_USB_WAIT_SEC + USB_WIFI_WAIT_SEC
+# instead of NETSEL_USB_WAIT_SEC * USB_WIFI_WAIT_SEC.
 netsel_detect_usb() {
   t=0
   while [ "$t" -lt "$NETSEL_USB_WAIT_SEC" ]; do
@@ -129,10 +136,12 @@ netsel_detect_usb() {
       printf 'usb_eth %s\n' "$iface"
       return 0
     fi
-    iface=$(netsel_detect_usb_wifi 2>/dev/null || true)
-    if [ -n "$iface" ]; then
-      printf 'usb_wifi %s\n' "$iface"
-      return 0
+    if [ "$t" -eq $((NETSEL_USB_WAIT_SEC - 1)) ]; then
+      iface=$(netsel_detect_usb_wifi 2>/dev/null || true)
+      if [ -n "$iface" ]; then
+        printf 'usb_wifi %s\n' "$iface"
+        return 0
+      fi
     fi
     sleep 1
     t=$((t + 1))
