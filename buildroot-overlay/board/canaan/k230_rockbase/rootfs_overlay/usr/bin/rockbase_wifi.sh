@@ -331,8 +331,10 @@ wifi_ensure_device() {
     wifi_select_iface && return 0
   fi
 
+  # sdio_wifi probe on this DMA baseline can take >12s from modprobe to
+  # netdev registration; widen the wait so first boot doesn't skip start.
   i=0
-  while [ "$i" -lt 10 ]; do
+  while [ "$i" -lt 30 ]; do
     [ -e "/sys/class/net/${WLAN_DEV}" ] && return 0
     # usb_wifi: re-detect via helper (modules already autoloaded by netsel).
     if [ "$NET_MODE" = "usb_wifi" ] && [ -x "$USB_WIFI_HELPER" ]; then
