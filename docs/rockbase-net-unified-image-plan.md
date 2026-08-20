@@ -1,6 +1,15 @@
 # Rockbase 网络接口合并方案：单镜像 USB 优先 + SDIO 回退
 
-状态：**已评审，未开始实施**（2026-08-20 与用户确认思路，等待后续 agent 接手落地）
+状态：**一期已实施并热部署验证通过**（2026-08-20）。构建层 + 运行时 netsel + wifi 联动 + 镜像命名统一均已完成，三种硬件组合（USB 有线 / USB WiFi / 无 USB）在真实板子上验证通过。二期热插拔未做。
+
+## 实施记录（2026-08-20）
+
+- 已落地文件：`tools/rockbase_net_mode.sh`（统一镜像，K230_NET 默认 `auto`）、`post-build.sh`（去掉编译期 unbind/无条件 modprobe）、新增 `rootfs_overlay/usr/bin/rockbase_netsel.sh` + `etc/init.d/S37netsel`、`rockbase_wifi.sh`（读取 netsel 决策）、`Makefile`/`post-image.sh`（镜像后缀统一为 `-net`）。
+- **安全修正（重要，偏离原方案）**：原方案第 4 节要求 USB 路径下运行时 unbind SDIO 控制器。实测发现**运行时 `rmmod 8189fs` 会触发历史 freeze 嫌疑路径**（RTW 线程 + SDIO host claim，且通过该 WiFi 管理时还会杀掉 SSH 链路），1G 板（124.15）实测卡死一次，看门狗重启恢复。因此 `rockbase_netsel.sh` 的最终行为是：
+  - 8189fs **未加载**时（统一镜像的正常启动路径：S37netsel 早于 S38wifi，8189fs 不再无条件加载）→ 直接 unbind SDIO 控制器，等价于原构建期安全行为；
+  - 8189fs **已加载**时（热插拔等场景）→ **跳过 unbind 并告警**，绝不运行时 rmmod。热插拔重选路留给二期。
+- SDIO WiFi 控制器设备名按板型不同（1G: `91580000.sdhci0`/mmc0，2G: `91581000.sdhci1`/mmc1），脚本通过扫描 `/sys/bus/mmc/devices/mmc*:0001` 的 vendor（0x024c=Realtek）动态定位，不硬编码。
+- 验证结果：124.15（无 USB）→ `sdio_wifi`，8189fs 加载、wlan0 正常；124.30（USB 有线）→ `usb_eth`，eth0 识别、S38wifi 跳过；124.35（USB WiFi 狗 0bda:c820）→ `usb_wifi`，wlan0 正常连接。
 
 ## 背景 / 目标
 
@@ -87,7 +96,7 @@
 
 1. **两个 wlan 设备命名冲突**：8189fs 与 USB WiFi 若都注册为 `wlan0` 可能抢名。决策逻辑必须保证同一时刻只 `modprobe` 需要的那一个驱动。
 2. **USB 枚举时序**：USB 设备内核态已探测完成，但用户态脚本执行时节点可能还没建好，需要短超时轮询而非一次性判断。
-3. **回归 SDIO freeze 风险**：若决策逻辑有误导致 USB 存在时 8189fs 仍被加载/SDIO 控制器仍绑定，等于走回历史 freeze 老路。验收必须严格检查这一点。
+3. **回归 SDIO freeze 风险**：若决策逻辑有误导致 USB 存在时 8189fs 仍被加载/SDIO 控制器仍绑定，等于走回历史 freeze 老路。验收必须严格检查这一点。**实施中已实测证实**：运行时 `rmmod 8189fs` + unbind 控制器会卡死（124.15 实测，pstore 显示卡死前 RTW_XMIT/RTW_CMD 线程活跃）。最终实现改为"8189fs 未加载才 unbind，已加载则跳过"，见上方实施记录。
 4. **镜像体积/内存**：全功能镜像会比单一模式略大（多带一份 `8189fs.ko` 或反之），量级为几十到几百 KB，可忽略。
 5. **非网络 USB 设备（如 U 盘）不会被误判**：探测逻辑是按接口类型/白名单精确匹配（扫描 `/sys/class/net` + `/etc/rockbase-usb-wifi.map` 的 VID:PID 白名单），不是"检测到任意 USB 设备就当网络设备"，U 盘走 `usb-storage` 驱动不会出现在 `/sys/class/net`，也不在 WiFi VID:PID 表里，会被正确判定为"无网络设备"并回退 SDIO。**实现时必须保持这种精确匹配的判定方式，不要简化成"lsusb 有设备就走 USB 模式"**。
    - 边界情况 1：板子只有一个 USB Host 口且无 Hub 时，插 U 盘会物理占满唯一端口，此时"探测不到网络设备"是硬件限制导致的正常结果，验收时需区分是硬件占用还是探测逻辑本身有问题。

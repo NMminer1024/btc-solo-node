@@ -11,6 +11,7 @@ WIFI_DHCP_TRIES=${WIFI_DHCP_TRIES:-12}
 WIFI_LATE_WATCH_TIMEOUT=${WIFI_LATE_WATCH_TIMEOUT:-90}
 WIFI_DHCP_LOG=${WIFI_DHCP_LOG:-/tmp/rockbase-wifi-udhcpc.log}
 USB_WIFI_HELPER=${USB_WIFI_HELPER:-/usr/bin/rockbase_usb_wifi.sh}
+NETSEL_STATE_FILE=${NETSEL_STATE_FILE:-/tmp/rockbase-net-mode}
 WIFI_WATCHDOG_ENABLE=${WIFI_WATCHDOG_ENABLE:-1}
 WIFI_WATCHDOG_INTERVAL=${WIFI_WATCHDOG_INTERVAL:-20}
 WIFI_WATCHDOG_FAIL_THRESHOLD=${WIFI_WATCHDOG_FAIL_THRESHOLD:-3}
@@ -34,20 +35,53 @@ wifi_console_log() {
   printf '%s\n' "$line" >/dev/console 2>/dev/null || printf '%s\n' "$line"
 }
 
+# Read the unified network path decision written by rockbase_netsel.sh
+# (init.d/S37netsel). Sets NET_MODE (usb_eth / usb_wifi / sdio_wifi) and,
+# when available, NET_IFACE. Falls back to sdio_wifi when the state file is
+# missing (e.g. netsel not yet deployed).
+wifi_load_netsel() {
+  NET_MODE="sdio_wifi"
+  NET_IFACE=""
+  if [ -f "$NETSEL_STATE_FILE" ]; then
+    . "$NETSEL_STATE_FILE" 2>/dev/null || true
+  fi
+  case "$NET_MODE" in
+    usb_eth|usb_wifi|sdio_wifi) ;;
+    *) NET_MODE="sdio_wifi" ;;
+  esac
+}
+
 wifi_select_iface() {
+  wifi_load_netsel
+
+  # usb_eth: no WiFi backend at all; S38wifi skips startup.
+  if [ "$NET_MODE" = "usb_eth" ]; then
+    return 1
+  fi
+
   if [ -e "/sys/class/net/${WLAN_DEV}" ]; then
     return 0
   fi
 
-  if [ -x "$USB_WIFI_HELPER" ]; then
-    usb_iface=$($USB_WIFI_HELPER detect --autoload 2>/dev/null | head -n1)
-    if [ -n "$usb_iface" ] && [ -e "/sys/class/net/${usb_iface}" ]; then
-      wifi_console_log "usb wifi detected: iface=${usb_iface}"
-      WLAN_DEV="$usb_iface"
+  # usb_wifi: use the interface chosen by netsel (or re-detect via helper).
+  if [ "$NET_MODE" = "usb_wifi" ]; then
+    if [ -n "$NET_IFACE" ] && [ -e "/sys/class/net/${NET_IFACE}" ]; then
+      WLAN_DEV="$NET_IFACE"
+      wifi_console_log "netsel: using usb wifi iface=${WLAN_DEV}"
       return 0
     fi
+    if [ -x "$USB_WIFI_HELPER" ]; then
+      usb_iface=$($USB_WIFI_HELPER detect 2>/dev/null | head -n1)
+      if [ -n "$usb_iface" ] && [ -e "/sys/class/net/${usb_iface}" ]; then
+        wifi_console_log "usb wifi detected: iface=${usb_iface}"
+        WLAN_DEV="$usb_iface"
+        return 0
+      fi
+    fi
+    return 1
   fi
 
+  # sdio_wifi: default path (wlan0 via 8189fs).
   return 1
 }
 
@@ -278,20 +312,31 @@ wifi_get_json() {
 }
 
 wifi_ensure_device() {
-  wifi_select_iface && return 0
+  wifi_load_netsel
 
-  if ! lsmod 2>/dev/null | grep -q '^8189fs'; then
-    modprobe 8189fs 2>/dev/null || true
-    sleep 2
+  # usb_eth: no WiFi backend by design (USB wired NIC is the network path).
+  if [ "$NET_MODE" = "usb_eth" ]; then
+    return 2
   fi
 
   wifi_select_iface && return 0
 
+  # sdio_wifi: load 8189fs (netsel already did this at boot; this is a
+  # safety net for manual restarts after rmmod).
+  if [ "$NET_MODE" = "sdio_wifi" ]; then
+    if ! lsmod 2>/dev/null | grep -q '^8189fs'; then
+      modprobe 8189fs 2>/dev/null || true
+      sleep 2
+    fi
+    wifi_select_iface && return 0
+  fi
+
   i=0
   while [ "$i" -lt 10 ]; do
     [ -e "/sys/class/net/${WLAN_DEV}" ] && return 0
-    if [ -x "$USB_WIFI_HELPER" ]; then
-      usb_iface=$($USB_WIFI_HELPER detect --autoload 2>/dev/null | head -n1)
+    # usb_wifi: re-detect via helper (modules already autoloaded by netsel).
+    if [ "$NET_MODE" = "usb_wifi" ] && [ -x "$USB_WIFI_HELPER" ]; then
+      usb_iface=$($USB_WIFI_HELPER detect 2>/dev/null | head -n1)
       if [ -n "$usb_iface" ] && [ -e "/sys/class/net/${usb_iface}" ]; then
         WLAN_DEV="$usb_iface"
         return 0

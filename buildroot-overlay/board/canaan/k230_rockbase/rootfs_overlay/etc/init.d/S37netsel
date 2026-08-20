@@ -1,0 +1,34 @@
+#!/bin/sh
+#
+# Select the network path (USB wired > USB WiFi > SDIO WiFi) before S38wifi.
+# Writes /tmp/rockbase-net-mode for rockbase_wifi.sh / S38wifi to consume.
+#
+
+LIB=/usr/bin/rockbase_netsel.sh
+
+case "$1" in
+  start)
+        printf "Selecting network path: "
+        if [ -x "$LIB" ]; then
+                "$LIB"
+                rc=$?
+                mode=$(grep '^NET_MODE=' /tmp/rockbase-net-mode 2>/dev/null | cut -d= -f2)
+                [ -n "$mode" ] && echo "$mode" || echo "unknown"
+        else
+                echo "skip (no $LIB)"
+                rc=0
+        fi
+        ;;
+  stop)
+        # Nothing to stop; the decision is a one-shot boot probe (phase 1).
+        echo "OK"
+        ;;
+  restart)
+        "$0" start
+        ;;
+  *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+esac
+
+exit $?

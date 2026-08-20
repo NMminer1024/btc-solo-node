@@ -71,39 +71,29 @@ ssh root@192.168.124.X '<验证命令>'
 
 ---
 
-## 固化后若需编译镜像（网络模式验收）
+## 固化后若需编译镜像（统一网络镜像验收）
 
-若本次固化后还要编译并烧录镜像，且涉及 `K230_NET`，烧录后必须做互斥验收：
+2026-08-20 起为统一网络镜像（USB + SDIO 驱动都在，运行时 `rockbase_netsel.sh` 自动选择，目录后缀 `-net-`）。烧录后验收：
 
-- `usb` 目标：`8189fs.ko` 不存在、有 `wpa_supplicant/iwconfig`
-- `sdio_wifi` 目标：`8189fs.ko` 存在、`lsmod` 有 `8189fs`、有 `wlan0`、有 `wpa_supplicant/iwconfig`
-
-`usb` 验收命令：
-
-```bash
-ssh root@<IP> '
-echo "[release]"; cat /etc/version/release_version
-find /lib/modules -name "8189fs.ko" | head -3
-[ -f /lib/modules/*/kernel/drivers/net/wireless/8189fs/8189fs.ko ] && echo "FAIL:8189fs.ko present" || echo "OK:no 8189fs.ko"
-command -v wpa_supplicant >/dev/null && echo "OK:wpa_supplicant present" || echo "FAIL:no wpa_supplicant"
-command -v iwconfig >/dev/null && echo "OK:iwconfig present" || echo "FAIL:no iwconfig"
-'
-```
-
-`sdio_wifi` 验收命令：
+- 镜像层：`8189fs.ko` 存在、有 `wpa_supplicant/iwconfig`、有 `/usr/bin/rockbase_netsel.sh`
+- 运行时：`/tmp/rockbase-net-mode` 的 `NET_MODE` 与所插硬件匹配
+  - 插 USB 有线网卡 → `usb_eth`，`eth*` up，`lsmod` 无 `8189fs`
+  - 插 USB WiFi 狗 → `usb_wifi`，`wlan*` 连接，`lsmod` 无 `8189fs`
+  - 什么都不插 → `sdio_wifi`，`lsmod` 有 `8189fs`，`wlan0` 走 SDIO
 
 ```bash
 ssh root@<IP> '
 echo "[release]"; cat /etc/version/release_version
+echo "[netsel]"; cat /tmp/rockbase-net-mode 2>/dev/null
 find /lib/modules -name "8189fs.ko" | head -3
-lsmod | grep 8189 || true
+lsmod | grep 8189fs || echo "(8189fs not loaded)"
 command -v wpa_supplicant >/dev/null && echo "OK:wpa_supplicant present" || echo "FAIL:no wpa_supplicant"
 command -v iwconfig >/dev/null && echo "OK:iwconfig present" || echo "FAIL:no iwconfig"
-[ -d /sys/class/net/wlan0 ] && echo "OK:wlan0 present" || echo "FAIL:no wlan0"
+[ -x /usr/bin/rockbase_netsel.sh ] && echo "OK:netsel present" || echo "FAIL:no netsel"
 '
 ```
 
-任一 `FAIL` 都按"镜像模式不一致"处理，先排查误烧录（目录后缀 `-usb-` / `-sdio-`）再继续业务验证。
+任一 `FAIL` 都按"镜像与模式不一致"处理，先排查误烧录（目录后缀 `-net-`；旧镜像为 `-usb-`/`-sdio-`）再继续业务验证。
 
 ---
 

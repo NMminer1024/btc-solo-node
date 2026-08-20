@@ -143,27 +143,15 @@ auto_boot_proc()
 EOF
 	BR2_CANAAN_AUTO_RUN_CMD=$(cat ${config} | grep BR2_CANAAN_AUTO_RUN_CMD | cut -d= -f2 | tr -d '"')
 
-	if $(cat ${config} | grep BR2_PACKAGE_RTL8189FS=y >/dev/null 2>&1); then
-		echo " modprobe 8189fs " >> "${auto_boot_f}"
-	fi
-
-	if $(cat ${config} | grep BR2_PACKAGE_BCMDHD=y >/dev/null 2>&1); then
-		echo " modprobe bcmdhd " >> "${auto_boot_f}"
-	fi
-
-	if $(cat ${config} | grep BR2_PACKAGE_RTL8733BS=y >/dev/null 2>&1); then
-		echo " modprobe 8733bs " >> "${auto_boot_f}"
-	fi
-
-	# No SDIO WiFi driver in this build: unbind mmc0 host so the chip stops generating spurious interrupts.
-	if ! grep -q 'BR2_PACKAGE_RTL8189FS=y\|BR2_PACKAGE_BCMDHD=y\|BR2_PACKAGE_RTL8733BS=y\|BR2_PACKAGE_BL616_SDIO=y' "${config}"; then
-		cat >> "${auto_boot_f}" <<'SDIO_OFF'
-# Silence unused SDIO WiFi slot (usb builds without SDIO driver)
-if [ -d /sys/bus/platform/drivers/sdhci-dwcmshc-kendryte ]; then
-    echo "91580000.sdhci0" > /sys/bus/platform/drivers/sdhci-dwcmshc-kendryte/unbind 2>/dev/null || true
-fi
-SDIO_OFF
-	fi
+	# Unified network image (docs/rockbase-net-unified-image-plan.md):
+	# - No unconditional "modprobe 8189fs" here: the runtime selector
+	#   /usr/bin/rockbase_netsel.sh (init.d/S37netsel) decides between
+	#   USB wired / USB WiFi / SDIO WiFi and only loads 8189fs when the
+	#   SDIO path is chosen.
+	# - No build-time "unbind sdhci0" here: both SDIO and USB drivers are
+	#   always present, so the build cannot know which path the board will
+	#   take. The SDIO controller unbind (freeze-mitigation) is now done at
+	#   runtime by rockbase_netsel.sh when a USB network path is selected.
 
 	if [ ! -z "$BR2_CANAAN_AUTO_RUN_CMD" ]; then
 		echo "$BR2_CANAAN_AUTO_RUN_CMD" >> "${auto_boot_f}"

@@ -3,11 +3,11 @@ BR_NAME = buildroot-2025.02.1
 BR_SRC_DIR = output/$(BR_NAME)
 BR_OVERLAY_DIR = buildroot-overlay
 
-# Network interface mode (mutually exclusive):
-#   sdio_wifi (default) — SDIO WiFi (RTL8189FS)
-#   usb                 — USB network (wired + WiFi)
-# Backward compatible aliases: sdio_8189/sdio -> sdio_wifi, usb_eth/usb_wifi -> usb
-K230_NET ?= sdio_wifi
+# Network interface mode (unified image, see docs/rockbase-net-unified-image-plan.md):
+#   auto (default) — single image with BOTH SDIO WiFi (RTL8189FS) and USB
+#                    network drivers; runtime selection by rockbase_netsel.sh
+#   sdio_wifi / usb — legacy forced-mode test switches, no driver add/remove
+K230_NET ?= auto
 
 # Buildroot 不允许 PATH 中有空格或不可见字符，自动清洗
 export PATH := $(shell echo "$$PATH" | tr ':' '\n' | grep -v '[[:space:]]' | tr '\n' ':' | sed 's/:$$//')
@@ -50,12 +50,7 @@ copy-img:
 	ver_file="$(BRW_BUILD_DIR)/target/etc/version/release_version"; \
 	build_stamp=$$(grep -m1 '^sdk:' "$$ver_file" 2>/dev/null | grep -oE '[0-9]{8}-[0-9]{6}' | head -n1); \
 	[ -n "$$build_stamp" ] || build_stamp=$$(date +%Y%m%d-%H%M%S); \
-	mode_name=$$(tr -d '\r\n' < "$(BRW_BUILD_DIR)/.k230_net_mode" 2>/dev/null || echo "$(K230_NET)"); \
-		net_sfx="-sdio"; \
-		case "$$mode_name" in \
-			usb) net_sfx="-usb" ;; \
-			*) net_sfx="-sdio" ;; \
-		esac; \
+	net_sfx="-net"; \
 		image_prefix="sysimage-sdcard"; \
 		if [ "$(CONF)" = "k230_rockbase_1g_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-1g$${net_sfx}"; fi; \
 		if [ "$(CONF)" = "k230_rockbase_2g_defconfig" ]; then image_prefix="sysimage-sdcard-rockbase-2g$${net_sfx}"; fi; \

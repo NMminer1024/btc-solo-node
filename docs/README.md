@@ -14,7 +14,7 @@
 - [设计文档目录](design/)：LVGL、Web/API 等专题架构设计。
 - [配置/API 架构记录](design/rockbase-config-api-architecture.md)：Web/LCD 共用配置模型、schema 和操作接口。
 - [Block Seed 镜像流程](rockbase-block-seed-image-workflow.md)：带 seed 镜像构建流程。默认不要使用。
-- [网络接口合并方案](rockbase-net-unified-image-plan.md)：USB 优先 + SDIO 回退单镜像方案，已评审未实施，供后续 agent 接手。
+- [网络接口合并方案](rockbase-net-unified-image-plan.md)：USB 优先 + SDIO 回退单镜像方案，一期已实施并热部署验证通过（2026-08-20），含运行时 freeze 安全修正记录。
 
 ## Seed 更新一页式清单（交接专用）
 

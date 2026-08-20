@@ -288,19 +288,10 @@ sync_image_outputs()
 	local export_dir
 	local exported_image
 	local CONF=$(basename ${BASE_DIR})
-	local net_mode_file="${BASE_DIR}/.k230_net_mode"
-	local net_mode_name="${K230_NET:-sdio_wifi}"
-	if [ -f "${net_mode_file}" ]; then
-		net_mode_name=$(tr -d '\r\n' < "${net_mode_file}")
-	fi
-	# Network-mode suffix (canonical):
-	#   sdio_wifi -> -sdio
-	#   usb       -> -usb
-	local net_sfx="-sdio"
-	case "${net_mode_name}" in
-	  usb|usb_eth|usb-eth|usb_wifi|usb-wifi) net_sfx="-usb" ;;
-	  *) net_sfx="-sdio" ;;
-	esac
+	# Unified network image (docs/rockbase-net-unified-image-plan.md):
+	# single "-net" suffix — the image always carries both SDIO WiFi and
+	# USB network drivers; runtime selection is done by rockbase_netsel.sh.
+	local net_sfx="-net"
 	# Image flavor suffix: -min- (minimal, no real seed) vs -full- (with seed).
 	# Derived from K230_BLOCKDATA_SIZE: >= 1G means a full (seed) image, otherwise minimal.
 	local blockdata_size="${K230_BLOCKDATA_SIZE:-24G}"

@@ -36,53 +36,47 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 | WSL 导出 | 使用 `post-image.sh` 自动导出到 `/mnt/d/code/pony/IoT/k230/img/` |
 | 构建前准备 | 非 seed 构建需要 `mkdir -p /tmp/rockbase-empty-seed` |
 | Kernel patch 变更 | 只要改了 `buildroot-overlay/board/canaan/k230_rockbase/patches/linux/`，每个目标 defconfig 都必须先执行一次 `linux-dirclean` 再重编 |
-| 网络模式切换 | 使用 `K230_NET` 变量控制；详见下方 **网络接口模式（K230_NET）** 章节 |
+| 网络接口 | 统一镜像（USB + SDIO 驱动都在，运行时 `rockbase_netsel.sh` 自动选择）；`K230_NET` 仅作测试开关；详见下方 **网络接口模式（统一镜像，K230_NET）** 章节 |
 
 ---
 
-## 网络接口模式（K230_NET）
+## 网络接口模式（统一镜像，K230_NET）
 
-### 可用模式
+> 2026-08-20 起实施"单镜像 USB 优先 + SDIO 回退"方案，详见 `docs/rockbase-net-unified-image-plan.md`。
 
-| `K230_NET` 值 | 说明 | 镜像目录后缀 |
-|---------------|------|-------------|
-| `sdio_wifi`（默认） | SDIO WiFi（RTL8189FS），USB 驱动不编入 | `-sdio` |
-| `usb` | USB 全功能：有线网卡 + USB WiFi 驱动都编入 | `-usb` |
+### 统一镜像（默认）
 
-兼容旧值：`sdio_8189`/`sdio` → `sdio_wifi`；`usb_eth`/`usb_wifi` → `usb`。
+**单一镜像同时带 SDIO WiFi（RTL8189FS）与 USB 网络（有线 + WiFi）驱动**，板子上电后由 `/usr/bin/rockbase_netsel.sh`（init.d/S37netsel，早于 S38wifi）运行时自动探测：
 
-### 设计原则
+1. USB 有线网卡（`r8152`/`ax8817x`/`ax88179_178a`/`cdc_ether`，内核内置）→ `usb_eth`
+2. USB WiFi 加密狗（`mt7601u`/`rtw88_8821cu`，按 `/etc/rockbase-usb-wifi.map` 自动加载）→ `usb_wifi`
+3. 都没有 → 回退板载 SDIO WiFi（`8189fs`）→ `sdio_wifi`
 
-- **互斥粒度是接口族**：SDIO vs USB，不是 USB 内部再分有线/无线
-- `usb` 模式同时编入 USB 有线（`usbnet`/`r8152`）和 USB WiFi（`mt7601u`/`rtw88_8821cu`）驱动，运行时由硬件决定实际接口
-- 两种模式都包含 `wpa_supplicant` + `wireless_tools`（SDIO WiFi 和 USB WiFi 都需要）
-- 唯一差异：`sdio_wifi` 模式编入 `8189fs.ko`，`usb` 模式不编入
+决策结果写入 `/tmp/rockbase-net-mode`，供 `S38wifi`/`rockbase_wifi.sh` 读取。USB 路径下运行时 unbind SDIO 控制器（freeze 缓解）；**8189fs 已加载时绝不运行时 rmmod**（实测会触发历史 freeze 路径）。
+
+### K230_NET 变量（仅测试开关）
+
+| `K230_NET` 值 | 说明 |
+|---------------|------|
+| `auto`（默认） | 统一镜像，不做任何构建期驱动增删 |
+| `sdio_wifi` / `usb` | 旧值兼容，行为与 `auto` 相同（保留作强制模式测试开关） |
+
+镜像目录后缀统一为 **`-net`**（不再有 `-sdio`/`-usb` 区分）。
 
 ### 用法
 
-在 `make buildroot` 命令末尾追加 `K230_NET=<模式>`：
-
 ```bash
-# sdio_wifi（默认，不写也等价）
+# 统一镜像（默认，不写 K230_NET 也等价）
 mkdir -p /tmp/rockbase-empty-seed
 make CONF=k230_rockbase_1g_defconfig buildroot \
-  K230_NET=sdio_wifi \
-  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
-  K230_BLOCKDATA_SIZE=256M \
-  K230_IMAGE_GZIP=0
-
-# usb — USB 有线 + WiFi 全功能
-mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_1g_defconfig buildroot \
-  K230_NET=usb \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
 ```
 
-### USB WiFi 芯片支持（usb 模式）
+### USB WiFi 芯片支持
 
-`usb` 模式通过 `rockbase_usb_wifi.sh detect --autoload` 按 VID:PID 自动加载对应驱动：
+统一镜像通过 `rockbase_usb_wifi.sh detect --autoload` 按 VID:PID 自动加载对应驱动：
 
 | 芯片 | 内核模块 | 固件 | 配置项 |
 |------|---------|------|--------|
@@ -94,44 +88,42 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 - 改 `linux.fragment` 或 rtw88/mt7601u 相关配置后，必须 `linux-dirclean` 再重编
 - 固件注意：`mt7601u.bin` 放 `lib/firmware/` 根目录（不带 `mediatek/` 前缀）；`rtw8821c_fw.bin` 放 `lib/firmware/rtw88/`
 
-### 模式切换时的内部行为
+### 构建时的内部行为
 
 脚本 `tools/rockbase_net_mode.sh` 在 `buildroot` target 最前面自动执行：
 
 1. 若 `K230_NET` 与上次构建相同 → 仅做幂等 sed overlay，直接构建。
 2. 若 `K230_NET` 发生变化 → 先 re-apply defconfig（清洁基线），再 dirclean WiFi 包，再 overlay。
+3. 统一镜像下**不再删除 `8189fs.ko`**（所有模式都保留）。
 
 **不需要手动 `dirclean` WiFi 包**，切换模式时脚本自动处理。
 
 ### 镜像目录命名
 
-导出目录格式：`sysimage-sdcard-rockbase-{1g,2g}-{flavor}-{net_suffix}-TIMESTAMP/`
+导出目录格式：`sysimage-sdcard-rockbase-{1g,2g}-{flavor}-net-TIMESTAMP/`
 
 - `{flavor}`：镜像类型标志
   - `-min-`：最小镜像（非 seed，`K230_BLOCKDATA_SIZE=256M`）
   - `-full-`：完整镜像（带 seed，`K230_BLOCKDATA_SIZE=24G`）
-- `{net_suffix}`：网络模式后缀（`-sdio` / `-usb`）
+- 网络后缀固定为 `-net`（统一镜像，USB + SDIO 驱动都在）
 
 判定依据：脚本按 `K230_BLOCKDATA_SIZE` 判断，`>= 1G` 视为完整镜像（`-full-`），否则为最小镜像（`-min-`）。
 
 示例：
-- `sysimage-sdcard-rockbase-1g-min-sdio-20260817-102416/`（1G 最小镜像，SDIO WiFi）
-- `sysimage-sdcard-rockbase-1g-min-usb-20260817-113037/`（1G 最小镜像，USB）
-- `sysimage-sdcard-rockbase-2g-full-sdio-20260817-120000/`（2G 完整镜像，带 seed）
+- `sysimage-sdcard-rockbase-1g-min-net-20260820-102416/`（1G 最小统一镜像）
+- `sysimage-sdcard-rockbase-2g-full-net-20260820-120000/`（2G 完整镜像，带 seed）
 
-### 模式验收
+### 镜像验收（统一镜像）
 
-`sdio_wifi` 目标（必须全部满足）：
-- 有 `8189fs.ko`
-- `lsmod` 有 `8189fs`
-- 有 `wlan0`
+构建后镜像必须同时满足：
+- 有 `8189fs.ko`（SDIO WiFi 驱动）
 - 有 `wpa_supplicant` 与 `iwconfig`
+- 内核内置 USB 有线驱动（`r8152`/`ax8817x` 等）+ `mt7601u.ko`/`rtw88_8821cu.ko` 模块存在
 
-`usb` 目标（必须全部满足）：
-- 无 `8189fs.ko`
-- 有 `wpa_supplicant` 与 `iwconfig`
-- 插入 USB 有线网卡后出现 `eth*` 接口
-- 插入 USB WiFi 网卡后出现 `wlan*` 接口
+烧录后按硬件组合验收（`/tmp/rockbase-net-mode` 的 `NET_MODE` 值）：
+- 插 USB 有线网卡 → `NET_MODE=usb_eth`，`eth*` up，`lsmod` 无 `8189fs`
+- 插 USB WiFi 狗（无有线）→ `NET_MODE=usb_wifi`，对应 `wlan*` 正常连接，`lsmod` 无 `8189fs`
+- 什么都不插 → `NET_MODE=sdio_wifi`，`lsmod` 有 `8189fs`，`wlan0` 走 SDIO 路径
 
 如果任一条不满足，按"镜像与模式不一致"处理，不要继续做业务验证。
 
@@ -330,36 +322,36 @@ sed -n '292,310p' output/k230_rockbase_1g_defconfig/build/linux-*/drivers/mmc/ho
 ssh root@<IP> 'dmesg | grep -iE "mmc[01]: SDHCI controller|using PIO|using ADMA|using DMA"'
 ```
 
-### K230_NET 验证
+### 统一镜像验证
 
 ```bash
-# usb 模式验证（任一 FAIL 都视为镜像不合格）
+# 镜像层验证（任一 FAIL 都视为镜像不合格）
 ssh root@<IP> '
 echo "[release]"; cat /etc/version/release_version
-echo "[iface]"; ip link show | awk -F: "/^[0-9]+:/ {print \$2}" | sed "s/^ //"
-echo "[ko]"; find /lib/modules -name "8189fs.ko" | head -3
-[ -f /lib/modules/*/kernel/drivers/net/wireless/8189fs/8189fs.ko ] && echo "FAIL:8189fs.ko present" || echo "OK:no 8189fs.ko"
-command -v wpa_supplicant >/dev/null && echo "OK:wpa_supplicant present" || echo "FAIL:no wpa_supplicant"
-command -v iwconfig >/dev/null && echo "OK:iwconfig present" || echo "FAIL:no iwconfig"
-'
-
-# sdio_wifi 模式验证（任一 FAIL 都视为镜像不合格）
-ssh root@<IP> '
-echo "[release]"; cat /etc/version/release_version
+echo "[netsel]"; cat /tmp/rockbase-net-mode 2>/dev/null
 echo "[iface]"; ip link show | awk -F: "/^[0-9]+:/ {print \$2}" | sed "s/^ //"
 echo "[ko]"; find /lib/modules -name "8189fs.ko" | head -3
 [ -f /lib/modules/*/kernel/drivers/net/wireless/8189fs/8189fs.ko ] && echo "OK:8189fs.ko present" || echo "FAIL:no 8189fs.ko"
 command -v wpa_supplicant >/dev/null && echo "OK:wpa_supplicant present" || echo "FAIL:no wpa_supplicant"
 command -v iwconfig >/dev/null && echo "OK:iwconfig present" || echo "FAIL:no iwconfig"
-[ -d /sys/class/net/wlan0 ] && echo "OK:wlan0 present" || echo "FAIL:no wlan0"
+[ -x /usr/bin/rockbase_netsel.sh ] && echo "OK:netsel present" || echo "FAIL:no netsel"
+'
+
+# 运行时按硬件组合验证（NET_MODE 必须与所插硬件匹配）
+# - 插 USB 有线网卡: NET_MODE=usb_eth, eth* up, lsmod 无 8189fs
+# - 插 USB WiFi 狗:  NET_MODE=usb_wifi, wlan* 连接, lsmod 无 8189fs
+# - 什么都不插:      NET_MODE=sdio_wifi, lsmod 有 8189fs, wlan0 走 SDIO
+ssh root@<IP> '
+echo "[mode]"; grep NET_MODE /tmp/rockbase-net-mode
+echo "[8189fs]"; lsmod | grep 8189fs || echo "(not loaded)"
+echo "[netsel log]"; tail -5 /tmp/rockbase-netsel.log
 '
 ```
 
 烧录时优先使用目录名带后缀的镜像：
 - `-min-` 对应最小镜像（非 seed，`K230_BLOCKDATA_SIZE=256M`）
 - `-full-` 对应完整镜像（带 seed，`K230_BLOCKDATA_SIZE=24G`）
-- `-sdio-` 对应 `K230_NET=sdio_wifi`
-- `-usb-` 对应 `K230_NET=usb`
+- `-net-` 对应统一网络镜像（2026-08-20 起；旧镜像为 `-sdio-`/`-usb-`）
 
 若实机行为与后缀不一致，先排查误烧录或混用旧目录，再排查构建流程。
 
