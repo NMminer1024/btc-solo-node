@@ -42,6 +42,12 @@ if [ ! -b "${bootdev}" ] || [ ! -r "/sys/class/block/${rootbase}/start" ] || [ !
     fail "missing block device or sysfs metadata for ${rootdev}/${bootdev}"
 fi
 
+# Keep legacy fw_env path generation used by this platform scripts.
+# Must run on EVERY boot (before the resize_done early-return below), otherwise
+# slots written by OTA dd (which never go through resize) would lack fw_env.config
+# and fw_setenv/fw_printenv would fail. ${bootdev} encodes the correct mmc device.
+echo "${bootdev}   0x1e0000 0x10000" > /etc/fw_env.config
+
 if [ -f "${DONE_FLAG}" ]; then
     log "resize already completed, skipping"
     exit 0
@@ -55,9 +61,6 @@ maxrootsize=$((disksize - rootstart))
 tail_sectors=$((maxrootsize - rootsize))
 
 log "root=${rootdev} bootdev=${bootdev} start=${rootstart} sectors root_size=${rootsize} disk_size=${disksize} tail=${tail_sectors}"
-
-# Keep legacy fw_env path generation used by this platform scripts.
-echo "${bootdev}   0x1e0000 0x10000" > /etc/fw_env.config
 
 # New Rockbase images keep Bitcoin data on partition 3. In this layout rootfs
 # must never be expanded to the card end, otherwise the blockdata partition is
