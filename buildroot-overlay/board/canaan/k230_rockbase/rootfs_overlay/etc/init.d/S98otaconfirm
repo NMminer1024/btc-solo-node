@@ -1,0 +1,70 @@
+#!/bin/sh
+#
+# S98otaconfirm - Mark a freshly-booted OTA slot as good once the system is healthy.
+#
+# Runs late in boot. If this boot was an OTA trial (uboot env upgrade_available=1),
+# it waits for key services to come up, then clears bootcount + upgrade_available
+# via `rockbase-ota.sh confirm`. If the slot fails to become healthy before
+# uboot's bootcount exceeds bootlimit, uboot's altbootcmd rolls back to the
+# previous slot automatically.
+#
+# Safe no-op on normal (non-OTA) boots: if upgrade_available != 1, exits quickly.
+
+OTA=/usr/sbin/rockbase-ota.sh
+HEALTH_WAIT=${OTA_CONFIRM_WAIT:-120}   # seconds to wait for health
+ENV_UPGRADE=upgrade_available
+
+log() {
+    echo "[S98otaconfirm] $*"
+}
+
+is_upgrade_pending() {
+    [ "$(fw_printenv -n "$ENV_UPGRADE" 2>/dev/null)" = "1" ]
+}
+
+# Healthy = web dashboard up (httpd on :80) AND sshd up AND bitcoind running.
+# These mirror what a customer would notice first if a slot were broken.
+healthy() {
+    pgrep -f "httpd.*-h /root/web" >/dev/null 2>&1 || return 1
+    pgrep -x sshd >/dev/null 2>&1 || pgrep -f "/usr/sbin/sshd" >/dev/null 2>&1 || return 1
+    pgrep -x bitcoind >/dev/null 2>&1 || pgrep -f "bitcoind" >/dev/null 2>&1 || return 1
+    return 0
+}
+
+case "$1" in
+  start)
+        if ! is_upgrade_pending; then
+            # normal boot, nothing to confirm
+            exit 0
+        fi
+
+        printf "OTA confirm (waiting for health): "
+        # Run in background so a slow bitcoind doesn't block the boot sequence.
+        (
+            waited=0
+            while [ "$waited" -lt "$HEALTH_WAIT" ]; do
+                if healthy; then
+                    log "system healthy after ${waited}s, confirming slot"
+                    "$OTA" confirm >/dev/null 2>&1 && log "confirm OK" || log "confirm FAILED"
+                    exit 0
+                fi
+                sleep 5
+                waited=$((waited + 5))
+            done
+            log "WARN: health not confirmed within ${HEALTH_WAIT}s; leaving upgrade_available=1."
+            log "      If bootcount exceeds bootlimit, uboot will roll back to previous slot."
+        ) &
+        echo "backgrounded"
+        ;;
+  stop)
+        # one-shot, nothing to stop
+        exit 0
+        ;;
+  restart|reload)
+        "$0" start
+        ;;
+  *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac
