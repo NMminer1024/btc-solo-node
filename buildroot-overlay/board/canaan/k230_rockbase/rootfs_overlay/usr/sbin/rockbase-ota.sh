@@ -95,6 +95,19 @@ mj_num() {
     sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*\([0-9]\+\).*/\1/p' "$2" | head -1
 }
 
+# download with resume; if the server lacks Range support (curl err 33),
+# fall back to a clean full download. GitHub Releases supports Range; simple
+# test servers (python http.server) do not.
+fetch() {
+    local out=$1 url=$2
+    curl --cacert /etc/ssl/certs/ca-certificates.crt \
+         --retry 5 -C - -fSL -o "$out" "$url" && return 0
+    log "resume failed (server may lack Range); retrying full download"
+    rm -f "$out"
+    curl --cacert /etc/ssl/certs/ca-certificates.crt \
+         --retry 5 -fSL -o "$out" "$url"
+}
+
 # --- subcommands --------------------------------------------------------------
 
 cmd_status() {
@@ -163,13 +176,11 @@ cmd_apply() {
     local img="$WORKDIR/slot-$ver.img.gz"
     local sig="$img.sig"
 
-    # download image + signature with resume
+    # download image + signature with resume (auto full-retry if no Range)
     log "downloading image: $imgurl"
-    curl --cacert /etc/ssl/certs/ca-certificates.crt \
-         --retry 5 -C - -fSL -o "$img" "$imgurl" || die "image download failed"
+    fetch "$img" "$imgurl" || die "image download failed"
     log "downloading signature: $sigurl"
-    curl --cacert /etc/ssl/certs/ca-certificates.crt \
-         --retry 3 -C - -fSL -o "$sig" "$sigurl" || die "signature download failed"
+    fetch "$sig" "$sigurl" || die "signature download failed"
 
     # 1) signature verify (authenticity) - hard requirement
     [ -r "$PUBKEY" ] || die "missing OTA public key: $PUBKEY"

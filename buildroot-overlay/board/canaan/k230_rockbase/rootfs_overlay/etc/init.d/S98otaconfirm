@@ -24,10 +24,14 @@ is_upgrade_pending() {
 
 # Healthy = web dashboard up (httpd on :80) AND sshd up AND bitcoind running.
 # These mirror what a customer would notice first if a slot were broken.
+# NOTE: busybox on this target has no pgrep; use ps+grep like S42web does.
+proc_running() {
+    ps 2>/dev/null | grep -v grep | grep -q "$1"
+}
 healthy() {
-    pgrep -f "httpd.*-h /root/web" >/dev/null 2>&1 || return 1
-    pgrep -x sshd >/dev/null 2>&1 || pgrep -f "/usr/sbin/sshd" >/dev/null 2>&1 || return 1
-    pgrep -x bitcoind >/dev/null 2>&1 || pgrep -f "bitcoind" >/dev/null 2>&1 || return 1
+    proc_running "httpd.*-h /root/web" || return 1
+    proc_running "sshd" || return 1
+    proc_running "bitcoind" || return 1
     return 0
 }
 
