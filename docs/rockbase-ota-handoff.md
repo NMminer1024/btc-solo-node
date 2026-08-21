@@ -1,0 +1,170 @@
+# Rockbase OTA 开发 Handoff（接手用）
+
+> 写给接手 OTA 开发的 agent/人。读完这份 + `docs/design/rockbase-ota-plan.md` 即可无缝继续。
+> 更新日期：2026-08-21　当前分支：`ota`
+
+---
+
+## 0. 一句话现状
+
+A/B OTA 的方案已定稿（`rockbase-ota-plan.md`），**阶段 A2、A3 的代码已写完并基本验证**，
+正在进行 A3 收尾的设备端 dry-run 下载验证，下一步是 **A1（配置外置）** 或 **阶段 B（uboot A/B 手测）**。
+
+---
+
+## 1. 硬性约束（用户拍板，不要推翻）
+
+| 约束 | 值 |
+|---|---|
+| 目标板型 | **只针对 1G 板**（`k230_rockbase_1g_defconfig`）。**2G defconfig 不要动**（曾误改已还原） |
+| 镜像源 | 客户海外；自有域名 `nmminer.com` → GitHub Releases（纯免费） |
+| 签名 | **必须**（openssl dgst RSA/SHA256；私钥离线，公钥固化设备） |
+| 根分区 | **定 2G**（实测 gzip 后 ~43MB；缩 FS 不省下载只省 dd 时间，维持 2G 改动最小） |
+| 升级范围 | 只升系统，**不覆盖用户参数**（WiFi/ckpool/bitcoin 配置） |
+
+## 2. 分支与回退基线
+
+```
+ota 分支（当前工作分支）：
+  363c7f69  docs: OTA 方案初稿
+  49f8508f  docs: 2G 定案 + 镜像源/签名 + 体积分析
+  e2c07913  docs: 分阶段调试推进方案（方案第 7 章）
+  56f929dd  feat: A2 libubootenv + S00 fw_env 修复
+  0ef9fcb8  feat: A3 OTA agent + 打包 + 确认服务 + 工具链
+  e954f64c  fix:  A3 板端兼容修复（pgrep→ps、Range 容错）
+
+回退基线：dev 分支 = 363c7f69（OTA 之前的稳定点）
+镜像回退：dev 对应旧布局镜像可随时重烧恢复
+```
+
+## 3. 设计文档（单一事实来源）
+
+**`docs/design/rockbase-ota-plan.md`** —— 共 7 章：
+1. 当前镜像逻辑（分区/启动链/用户参数落点）
+2. 目标架构（A/B 分区、uboot 回滚、配置外置、OTA agent、镜像源与签名、体积分析）
+3. 改动清单（文件级，11 项）
+4. 出货与迁移策略
+5. 验证计划
+6. 分期实施（P1/P2/P3）
+7. **调试与验证推进方案（A→E 阶段，含每步通过标准与回退）** ← 当前正按这章走
+
+---
+
+## 4. 各阶段进度
+
+### 阶段 A：纯软件（现网单 rootfs 布局可测，不重烧）
+
+| 子阶段 | 内容 | 状态 |
+|---|---|---|
+| **A2** | libubootenv（fw_printenv/fw_setenv）上板 + 修 S00 fw_env 时机 | ✅ **完成并已验证**（commit 56f929dd） |
+| **A3** | OTA agent + 打包脚本 + 确认服务 + 签名工具链 | 🔄 **代码完成，设备 dry-run 收尾中**（commit 0ef9fcb8 + e954f64c） |
+| **A1** | 配置外置到 blockdata | ⬜ **未开始（下一步候选）** |
+
+### 阶段 B：uboot A/B 逻辑（串口命令行手测，不烧录）⬜ 未开始
+
+### 阶段 C：工具链 + 签名端到端（部分已并入 A3 完成）🔄 部分完成
+
+### 阶段 D：分区改造（唯一需重烧，放最后）⬜ 未开始
+
+### 阶段 E：全链路真机验证 ⬜ 未开始
+
+---
+
+## 5. 已写好的代码（都在 ota 分支，已提交）
+
+| 文件 | 作用 | 验证状态 |
+|---|---|---|
+| `rootfs_overlay/usr/sbin/rockbase-ota.sh` | OTA agent：`status/check/apply/confirm/rollback`。下载+验签是真实逻辑；dd+切槽用 `--force` 门控（默认 dry-run 安全） | check/status ✅ 板端验证；apply dry-run 🔄 收尾中 |
+| `tools/mk-ota-package.sh` | 构建端打包：gzip 槽镜像 + sha256 + openssl dgst 签名 + manifest.json | ✅ 本机全流程自测通过 |
+| `rootfs_overlay/etc/init.d/S98otaconfirm` | 确认服务：升级启动后等 web+sshd+bitcoind 健康则 `ota confirm` | 已写，待阶段 D 后真验 |
+| `rootfs_overlay/etc/rockbase-ota-pub.pem` | 验签公钥（测试密钥） | ✅ 已固化进 overlay |
+| `k230_rockbase_1g_defconfig` | +`LIBUBOOTENV`、`LIBCURL(+CURL/_OPENSSL)`、`CA_CERTIFICATES`、`LIBOPENSSL_BIN` | ✅ 已编译进镜像 |
+| `.gitignore` | +`*-private.pem` 防私钥误提交 | ✅ |
+
+## 6. 已验证的事实（不要重复验证）
+
+- **A2**：124.15 上 `fw_printenv` 读 33 行 env、`fw_setenv` 写/删正常、删 fw_env.config 重启后新 S00 自动重建。
+- **打包/签名/验签**：本机用 `mk-ota-package.sh` 造出 35MB 测试包，验签正例通过、篡改反例正确拒绝。
+- **板端 status**：正确识别 `current slot=2 / inactive=1 / bootdev=/dev/mmcblk1`（1G 板）。
+- **板端 check**：能从本机 HTTP 拉 manifest 并解析出 version/url/sha256/size。
+
+## 7. 正在进行的事（接手第一件事）
+
+**A3 设备端 apply dry-run 还没跑完**——板子 WiFi 慢（~40KB/s），34MB 包下载要 10 分钟左右。
+
+接手后立即检查：
+```bash
+ssh root@192.168.124.15 'tail -16 /root/block/ota/apply.out; \
+  ps | grep -v grep | grep rockbase-ota >/dev/null && echo RUNNING || echo DONE'
+```
+- 若 DONE 且日志出现 `DRY-RUN complete` → A3 通过，进入下一步。
+- 若 `signature verification FAILED` 或 `sha256 mismatch` → 查打包/验签链路。
+- 若还在下载 → 等它跑完。
+
+**验证环境**（接手时可能已失效，需重启）：
+- 本机 HTTP 服务：`python3 -m http.server 8000` 起在 `/tmp/ota-dist/v0.0.1-test/`（本机 `192.168.124.20:8000`）。若已停，重启之。
+- 测试密钥：`/tmp/ota-keys/{ota-private.pem,ota-pub.pem}`（**临时**，正式密钥需离线另生成）。
+- 测试包：`/tmp/ota-dist/v0.0.1-test/{manifest.json, slot-v0.0.1-test.img.gz, .sig}`。
+
+**dry-run 通过后**：停掉 HTTP 服务（`pkill -f "http.server 8000"`），A3 收尾完成。
+
+## 8. 下一步该做什么（按优先级）
+
+### 选项 1：A1 配置外置（推荐，逻辑独立）
+把 WiFi/ckpool/bitcoin 配置从 rootfs 挪到 blockdata `/root/block/config/`，rootfs 改符号链接。涉及：
+- 新建 `S05blockdata`（提前按 LABEL 挂载，不等 resize_done）
+- `/etc/rockbase-factory-defaults/` 出厂默认配置 + 首启播种
+- 3 个配置符号链接：`/etc/rockbase-wifi.conf`、`/root/bitcoind/bitcoin.conf`、`/root/ckpool/ckpool.conf`
+- 详见方案 2.3 + 阶段 A1
+
+### 选项 2：阶段 B uboot A/B 手测（需要串口，风险低）
+串口中断 bootdelay，手测新 `blinux`/`altbootcmd`/`bootcount`。需先改 `default.env` + uboot defconfig `CONFIG_BOOTCOUNT_LIMIT=y`，重编 uboot。详见方案 2.2 + 阶段 B。
+
+**建议先做 A1**（纯软件、热部署可验、不依赖串口），B 留到需要动 uboot 时一次性做。
+
+---
+
+## 9. 项目特定规则（必须遵守，摘自 AGENTS.md）
+
+1. **热部署优先**：改功能先 scp/ssh 到真板（124.15）验证，通过后再写回源码，不要反过来。
+2. **变更追踪**：热调试期间追踪所有改过的业务文件，固化时逐项勾销。
+3. **"打进镜像"≠编译**：用户说"打进镜像"只固化已验证改动，不编译除非明确要求。
+4. **1G/2G MMC 拓扑相反**：1G `mmc0=SDIO WiFi, mmc1=SD`（root=`mmcblk1p2`）；2G 相反。别固定假设。
+5. **共享 patch 变更**：改 kernel/uboot 共享 patch 后，每个 defconfig 要单独 `linux-dirclean`/`uboot-dirclean` 再重编。
+
+## 10. 板端/构建的坑（已踩过，记入 repo memory `build-notes.md`）
+
+- **`BR2_PACKAGE_LIBOPENSSL_BIN`** 才是 openssl 命令行开关（不是 `OPENSSL_BIN`）；curl 命令行是 `LIBCURL_CURL`（`LIBCURL` 只是库）。
+- **libubootenv** 的 `fw_printenv` 依赖 `libubootenv.so.0`+`libyaml-0.so.2`+`libz.so.1`，热部署要连库一起拷；`fw_setenv` 是它的符号链接。
+- **libopenssl 改 config 后**：要 `libopenssl-dirclean` 再重编才会装 `apps/openssl`；且 WSL PATH 含空格会报 "PATH contains spaces"，用干净 PATH `env PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"`。
+- **busybox 无 pgrep**：板上进程检测用 `ps | grep -v grep | grep <pat>`（参考 S42web）。
+- **简单 HTTP 服务器不支持 Range**：curl `-C -` 报 `(33)`，脚本已加 `fetch()` 全量重下容错。GitHub Releases 支持 Range，生产无碍。
+- **顶层 `make CONF=... buildroot`** 会经 `sync` 把 `.config` 重置回 defconfig；单独重编某包用 `make -C output/buildroot-2025.02.1 O=$PWD/output/<conf> <pkg>` 绕过。
+
+## 11. 构建命令（1G，非 seed 最小镜像）
+
+```bash
+cd /home/bitpony/k230_linux_sdk
+mkdir -p /tmp/rockbase-empty-seed
+make CONF=k230_rockbase_1g_defconfig buildroot \
+  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
+  K230_BLOCKDATA_SIZE=256M K230_IMAGE_GZIP=0 K230_KEEP_WSL_IMAGES=1
+```
+导出到 `/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-1g-min-net-<ts>/`。
+
+## 12. 连接板子
+
+```bash
+ssh -o StrictHostKeyChecking=no root@192.168.124.15   # 无密码（key 已信任）
+# 若报 HOST IDENTIFICATION HAS CHANGED：先 ssh-keygen -R 192.168.124.15
+```
+
+---
+
+## 13. 接手检查清单（5 分钟上手）
+
+- [ ] `git checkout ota && git log --oneline -6` 确认在最新 ota 分支
+- [ ] 读 `docs/design/rockbase-ota-plan.md` 第 2、7 章
+- [ ] 跑第 7 节的命令确认 A3 dry-run 结果
+- [ ] 决定下一步：A1（推荐）还是 B
+- [ ] 遵守第 9、10 节的规则与坑
