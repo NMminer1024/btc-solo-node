@@ -16,6 +16,7 @@ PIDFILE=/var/run/rockbase-statusd.pid
 LOCK_DIR=/var/run/rockbase-statusd.lock
 BTC_RPC_TIMEOUT=60
 CONN_RPC_TIMEOUT=2
+SYNC_HEADER_LAG=2
 SYSTEM_INTERVAL=15
 BITCOIN_CHAIN_INTERVAL=600
 BITCOIN_CHAIN_IBD_INTERVAL=60
@@ -894,6 +895,20 @@ render_status_json() {
         ibd_stage_detail="headers $(fmt_int "${headers}")"
         progress_pct="${height_based_progress}"
         progress_ring="${height_based_progress}"
+    fi
+
+    # IBD 已结束但 blocks 仍未追平 headers（尾部补块阶段），仍视为同步中
+    if [ "${ibd}" != "true" ] && [ "${btc_running}" = "1" ] &&
+       [ -n "${header_gap}" ] && [ "${header_gap}" -gt "${SYNC_HEADER_LAG}" ] 2>/dev/null; then
+        ibd_stage_key="sync_blocks"
+        ibd_stage_label="Synchronizing blocks"
+        ibd_stage_height=$(fmt_int "${blocks}")
+        ibd_stage_pct=""
+        ibd_stage_detail="headers $(fmt_int "${headers}")"
+        if [ -n "${height_based_progress}" ]; then
+            progress_pct="${height_based_progress}"
+            progress_ring="${height_based_progress}"
+        fi
     fi
 
     headers_fmt=$(fmt_int "${headers}")
