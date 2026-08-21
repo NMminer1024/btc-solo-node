@@ -351,3 +351,114 @@ P1 采用「整槽 ext2 + gzip」，43MB 已足够快，不折腾裁剪与增量
 
 建议实施顺序（每步先热部署到 192.168.124.15 验证再固化）：
 配置外置 → 分区/uboot → OTA agent。
+
+---
+
+## 7. 调试与验证推进方案（分阶段 · 可回退）
+
+核心原则：**从安全到危险，每步可独立验证、随时可回退**。先用现网单 rootfs 布局把所有
+「软件逻辑」调通，**最后一步才动分区表**（动分区是唯一不可逆、必须重烧的操作）。
+
+关键洞察：A/B 的 uboot 逻辑、配置外置、OTA 下载/验签/dd/确认，都可以在
+**当前单 rootfs 布局**上先调通——它们只是「读写 env、读写文件、dd 一个空闲分区」。
+只有最后把 p2 拆成两槽、真正把系统切过去，才需要新分区表。这样把风险压到最低。
+
+```
+阶段A  纯软件，现网布局可测，零风险
+  A1 配置外置 → A2 fw_env 修复 → A3 OTA agent 骨架
+阶段B  uboot A/B 逻辑（先在 u-boot 命令行手测，不烧录）
+阶段C  工具链 + 签名端到端
+阶段D  分区改造（唯一需重烧，放最后）
+阶段E  全链路真机验证
+```
+
+### 阶段 A：纯软件，现网布局可测（不重烧）
+
+#### A1 · 用户配置外置到 blockdata
+
+- 改：blockdata 挂载提前（新 `S05blockdata`，按 LABEL 挂载）、`/root/block/config/` 建仓、
+  3 个配置改符号链接、首启播种逻辑、`/etc/rockbase-factory-defaults/`。
+- 热部署验证（124.15）：
+  1. 改 WiFi（web）→ 确认落到 `/root/block/config/rockbase-wifi.conf` 而非 rootfs。
+  2. 改 ckpool 配置 → 重启服务仍生效。
+  3. 模拟升级：`rm` 掉 rootfs 里的链接再重建（模拟新 rootfs），确认配置从 p3 读回、WiFi 自动连上。
+- 通过标准：rootfs 全量替换后，WiFi/bitcoind/ckpool 配置原样保留。
+- 回退：符号链接改回普通文件即可。
+
+#### A2 · 修复 fw_env.config 时机 + libubootenv 上板（**建议的第一步**）
+
+- 背景：[S00resizemmc](buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/etc/init.d/S00resizemmc)
+  在 `/resize_done` 后提前 return，dd 出来的新槽会缺 `fw_env.config`，导致 `fw_setenv` 失败。
+- 改：`fw_env.config` 生成移到 done 检查之前；defconfig 加 `BR2_PACKAGE_LIBUBOOTENV`，
+  让 `fw_printenv/fw_setenv` 上板。
+- 验证：板上 `fw_printenv ota_part`、`fw_setenv test=1 && fw_printenv test` 能读写 env。
+  这是 A/B 的地基，必须先通。
+- 通过标准：用户态能可靠读写 uboot env。
+
+#### A3 · OTA agent 骨架 + 确认服务
+
+- 改：`/usr/sbin/rockbase-ota.sh`（status/check/apply/confirm/rollback）、`S98otaconfirm`。
+- 此阶段 apply 只到「下载+验签+校验」，不真的 dd（dry-run 模式）。
+- 验证：本地起 HTTP 服务放 manifest+假包，`ota.sh check` 能解析、
+  `ota.sh apply --dry-run` 走完验签流程。
+
+**阶段 A 出口**：配置外置 + env 读写 + OTA 下载验签，全部在现网布局跑通，系统仍从 p2 正常启动。
+
+### 阶段 B：uboot A/B 逻辑（先命令行手测，不烧录）
+
+> 不重烧、不改分区，只验证「uboot 能否按 env 的 ota_part 选对分区、能否回滚」。
+
+1. 串口中断 bootdelay，手动测新 `blinux`：
+   `setenv ota_part 2; run blinux` → 当前只有一个系统，应 load 失败。
+2. 验证 `altbootcmd` 回滚：`setenv ota_part 2; run altbootcmd` → 应自动 `ota_part=1`。
+3. 验证 `CONFIG_BOOTCOUNT_LIMIT`：加上后看 bootcount 是否每次启动 +1、超限是否触发 altbootcmd。
+4. 关键：验证 `board_fdt_chosen_bootargs()` 吃 env `bootargs` 的行为——
+   `setenv bootargs root=...p1 ...; run blinux`，看 root= 是否被 env 覆盖。
+
+通过标准：uboot 层「选槽 + 回滚 + bootcount」三板斧在命令行全部符合预期。
+全程串口手动做，失败就 reset，不碰任何持久数据。
+
+### 阶段 C：工具链 + 签名端到端
+
+1. defconfig 加 `LIBCURL(_OPENSSL)` / `CA_CERTIFICATES` / `OPENSSL_BIN`。
+2. 构建一对测试密钥：公钥入 overlay `/etc/rockbase-ota-pub.pem`，私钥离线。
+3. `tools/mk-ota-package.sh`：构建 slot.img.gz + 签名 + manifest.json。
+4. 真机端到端：
+   - `curl -C -` 断点续传（**人为断网再续，验证续传**）；
+   - dgst 验签（**故意改一个字节，验证拒绝**）；
+   - sha256 校验。
+5. 用 GitHub Releases 发测试 release，`ota.nmminer.com` 301 指向它，
+   验证重定向链路（`curl -fSL` 跟两次跳转）。
+
+通过标准：GitHub 下载 → 验签 → 校验全通；篡改包被拒；断点续传可用。
+
+### 阶段 D：分区改造（唯一需重烧，放最后）
+
+> 前面全部验证通过后，才动分区。这是唯一不可逆步骤。
+
+1. 改 `genimage.cfg`（删 boot 分区、p1/p2 双 2G 槽、blockdata 跟随）、
+   `post-build.sh`（Image/dtb/fw_jump 装进 `/boot/`）、`post-image.sh`（slot_b 复制 slot_a）。
+2. 构建新镜像 → 烧录到 124.15（第一台吃新布局的板子）。
+3. 验证：从 slot A 启动、blockdata 扩容/挂载正常、配置从 p3 读出、WiFi 连通。
+4. 手动做一次真 OTA：`ota.sh apply` 写 slot B → 切 `ota_part=2` → reboot →
+   确认从 B 起来 → `S98otaconfirm` 确认。
+
+回退预案：新布局有问题，重烧回 dev 分支旧镜像（`1bee6a57` 对应布局），
+blockdata 数据在 p3 未动（只要不重分区 p3）。
+
+### 阶段 E：全链路真机验证（对应第 5 节）
+
+| # | 用例 | 预期 |
+|---|---|---|
+| E1 | 新镜像烧录 slot A | 正常启动、blockdata 扩容、配置在 p3 |
+| E2 | OTA 到 slot B | 切槽成功、版本变化、WiFi/ckpool/bitcoin 配置保留 |
+| E3 | dd 写 B 中途断电 | 仍从 A 正常启动（A/B 价值所在） |
+| E4 | 切槽后破坏 B（如 dd 冲掉 B 的 kernel） | 3 次启动后自动回滚 A |
+| E5 | 1G(mmcblk1) + 2G(mmcblk0) 各跑一遍 | 设备号自适应 |
+| E6 | 回归：seed 镜像构建、USB/SDIO 网络切换 | 不受影响 |
+
+### 回退与分支基线
+
+- 文档基线：`dev` 分支停留在 commit `363c7f69`（OTA 方案初稿），作为可靠回退点。
+- OTA 实验全部在 `ota` 分支进行；每个阶段通过后 commit 一次，出问题 `git checkout dev` 回退。
+- 镜像回退：保留一份 dev 分支构建的旧布局镜像，随时可重烧恢复。
