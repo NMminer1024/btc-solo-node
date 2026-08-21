@@ -91,8 +91,9 @@ ssh root@<IP> 'mount | grep pstore; dmesg | grep -Ei "ramoops|pstore"; ls -lah /
 
 ## 当前诊断状态
 
-- **当前镜像仍处于 PIO 诊断态**，`0034-rockbase-sdhci-force-pio-dma-diagnostic.patch` 仍在生效，DMA 没有恢复
-- 最新提交 `cc6410e5` 只让 RTL8189FS SDIO bus 自恢复
+- **当前镜像已恢复 DMA**。`0034-rockbase-sdhci-force-pio-dma-diagnostic.patch` 已被 `936ea15b` 重命名为 `.disabled`（`buildroot-overlay/board/canaan/k230_rockbase/patches/linux/0034-rockbase-sdhci-force-pio-dma-diagnostic.patch.disabled`），源码默认恢复 DMA
+- **关键结论：PIO 也会卡死。** 仅关 ADMA/SDMA 的 PIO 镜像并没有彻底消掉 freeze（见 `docs/rockbase-freeze-milestones.md`「2026-08-12：PIO 诊断仍可卡死」），因此 0034 不是解药，根因是单核硬 lockup，与 PIO/DMA 模式无关
+- 提交脉络：`57fc4982`(fix 0034 hunk) → `cc6410e5`(rtl8189fs SDIO bus 自恢复，仍 PIO) → `88f1eff3`(sync freeze status) → `936ea15b`(disable 0034, restore DMA)
 - 最强证据指向 `RTL8189FS + SDIO host claim/IRQ/XMIT` 路径
 - pstore/ramoops 已加入并验证成功：`echo c > /proc/sysrq-trigger` 触发 panic → 10s 后重启 → 生成 `console-ramoops-0`
 
