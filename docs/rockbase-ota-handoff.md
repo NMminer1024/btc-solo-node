@@ -7,8 +7,8 @@
 
 ## 0. 一句话现状
 
-A/B OTA 的方案已定稿（`rockbase-ota-plan.md`），**阶段 A2、A3 的代码已写完并基本验证**，
-正在进行 A3 收尾的设备端 dry-run 下载验证，下一步是 **A1（配置外置）** 或 **阶段 B（uboot A/B 手测）**。
+A/B OTA 的方案已定稿（`rockbase-ota-plan.md`），**阶段 A2、A3 已完成并全部验证通过**，
+下一步是 **A1（配置外置，推荐）** 或 **阶段 B（uboot A/B 手测）**。
 
 ---
 
@@ -57,7 +57,7 @@ ota 分支（当前工作分支）：
 | 子阶段 | 内容 | 状态 |
 |---|---|---|
 | **A2** | libubootenv（fw_printenv/fw_setenv）上板 + 修 S00 fw_env 时机 | ✅ **完成并已验证**（commit 56f929dd） |
-| **A3** | OTA agent + 打包脚本 + 确认服务 + 签名工具链 | 🔄 **代码完成，设备 dry-run 收尾中**（commit 0ef9fcb8 + e954f64c） |
+| **A3** | OTA agent + 打包脚本 + 确认服务 + 签名工具链 | ✅ **完成并已验证**（commit 0ef9fcb8 + e954f64c，2026-08-21 设备 dry-run 通过） |
 | **A1** | 配置外置到 blockdata | ⬜ **未开始（下一步候选）** |
 
 ### 阶段 B：uboot A/B 逻辑（串口命令行手测，不烧录）⬜ 未开始
@@ -87,26 +87,22 @@ ota 分支（当前工作分支）：
 - **打包/签名/验签**：本机用 `mk-ota-package.sh` 造出 35MB 测试包，验签正例通过、篡改反例正确拒绝。
 - **板端 status**：正确识别 `current slot=2 / inactive=1 / bootdev=/dev/mmcblk1`（1G 板）。
 - **板端 check**：能从本机 HTTP 拉 manifest 并解析出 version/url/sha256/size。
+- **板端 dry-run（WiFi）**：下载+验签+sha256+槽位识别全对，`DRY-RUN complete`。
+- **板端 dry-run（USB 有线）**：34.2MB 下载 ~3s（约 11MB/s 跑满百兆），全流程 10.66s，同样通过。
+- **板端文件与源码一致性（2026-08-21 已核对）**：`S00resizemmc`/pub key/netsel 全套 md5 与 ota 分支一致；
+  `rockbase-ota.sh`/`S98otaconfirm` 曾落后源码（缺 e954f64c 修复），已重新 scp 同步。
+- **rootfs 为 ext4 rw**：热部署文件重启后保留（只有重烧镜像才会被源码版本覆盖）。
 
 ## 7. 正在进行的事（接手第一件事）
 
-**A3 设备端 apply dry-run 还没跑完**——板子 WiFi 慢（~40KB/s），34MB 包下载要 10 分钟左右。
+~~A3 设备端 apply dry-run~~ **已于 2026-08-21 验证通过**（WiFi / USB 有线各一次）：下载 → 验签 →
+sha256 校验 → 正确识别目标槽位 `mmcblk1p1`，日志 `DRY-RUN complete`。A3 收尾完成。
+临时测试密钥 `/tmp/ota-keys/` 与测试包 `/tmp/ota-dist/` 仍在（`/tmp` 重启即清，无所谓）；
+本机 HTTP 服务 `python3 -m http.server 8000`（起在 `/tmp/ota-dist/v0.0.1-test/`）当前仍在跑，不用了 `pkill -f http.server` 即可。
 
-接手后立即检查：
-```bash
-ssh root@192.168.124.15 'tail -16 /root/block/ota/apply.out; \
-  ps | grep -v grep | grep rockbase-ota >/dev/null && echo RUNNING || echo DONE'
-```
-- 若 DONE 且日志出现 `DRY-RUN complete` → A3 通过，进入下一步。
-- 若 `signature verification FAILED` 或 `sha256 mismatch` → 查打包/验签链路。
-- 若还在下载 → 等它跑完。
+直接进入第 8 节的下一步即可（推荐 A1）。
 
-**验证环境**（接手时可能已失效，需重启）：
-- 本机 HTTP 服务：`python3 -m http.server 8000` 起在 `/tmp/ota-dist/v0.0.1-test/`（本机 `192.168.124.20:8000`）。若已停，重启之。
-- 测试密钥：`/tmp/ota-keys/{ota-private.pem,ota-pub.pem}`（**临时**，正式密钥需离线另生成）。
-- 测试包：`/tmp/ota-dist/v0.0.1-test/{manifest.json, slot-v0.0.1-test.img.gz, .sig}`。
-
-**dry-run 通过后**：停掉 HTTP 服务（`pkill -f "http.server 8000"`），A3 收尾完成。
+历史备注：dry-run 时板子 WiFi ~40-60KB/s，34MB 包下载约 10 分钟。
 
 ## 8. 下一步该做什么（按优先级）
 
@@ -126,7 +122,7 @@ ssh root@192.168.124.15 'tail -16 /root/block/ota/apply.out; \
 
 ## 9. 项目特定规则（必须遵守，摘自 AGENTS.md）
 
-1. **热部署优先**：改功能先 scp/ssh 到真板（124.15）验证，通过后再写回源码，不要反过来。
+1. **热部署优先**：改功能先 scp/ssh 到真板（现为有线 `124.30`，见第 12 节）验证，通过后再写回源码，不要反过来。
 2. **变更追踪**：热调试期间追踪所有改过的业务文件，固化时逐项勾销。
 3. **"打进镜像"≠编译**：用户说"打进镜像"只固化已验证改动，不编译除非明确要求。
 4. **1G/2G MMC 拓扑相反**：1G `mmc0=SDIO WiFi, mmc1=SD`（root=`mmcblk1p2`）；2G 相反。别固定假设。
@@ -154,9 +150,13 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 
 ## 12. 连接板子
 
+**2026-08-21 起：板子已改走 USB 有线网卡**（`NET_MODE=usb_eth`，netsel 自动选择，
+SDIO WiFi 被解绑）。USB 网卡在路由器端按 MAC 绑定固定 IP **`192.168.124.30`**（与插哪块板子无关）。
+WiFi 侧旧 IP `192.168.124.15` 已失效。
+
 ```bash
-ssh -o StrictHostKeyChecking=no root@192.168.124.15   # 无密码（key 已信任）
-# 若报 HOST IDENTIFICATION HAS CHANGED：先 ssh-keygen -R 192.168.124.15
+ssh -o StrictHostKeyChecking=no root@192.168.124.30   # 无密码（key 已信任）
+# 若报 HOST IDENTIFICATION HAS CHANGED：先 ssh-keygen -R 192.168.124.30
 ```
 
 ---
@@ -165,6 +165,6 @@ ssh -o StrictHostKeyChecking=no root@192.168.124.15   # 无密码（key 已信�
 
 - [ ] `git checkout ota && git log --oneline -6` 确认在最新 ota 分支
 - [ ] 读 `docs/design/rockbase-ota-plan.md` 第 2、7 章
-- [ ] 跑第 7 节的命令确认 A3 dry-run 结果
-- [ ] 决定下一步：A1（推荐）还是 B
+- [ ] A2/A3 均已完成验证（第 4、6 节），无需复查
+- [ ] 下一步：A1（推荐，见第 8 节）或 B
 - [ ] 遵守第 9、10 节的规则与坑
