@@ -3,11 +3,11 @@
 # S62ckpool - BusyBox init service for ckpool
 #
 
-CONF=/root/ckpool/ckpool.conf
+CONF=/root/config/ckpool.conf
 LOGDIR=/root/ckpool/logs
 LOGFILE=${LOGDIR}/ckpool.log
 WAIT_PID_FILE=/var/run/ckpool-autostart.pid
-BTC_CONF=/root/bitcoind/bitcoin.conf
+BTC_CONF=/root/config/bitcoin.conf
 BTC_DATADIR=/root/block
 RESIZE_DONE_FLAG=/resize_done
 BTC_READY_CHECK=/usr/bin/rockbase_bitcoind_ready.sh

@@ -1,0 +1,111 @@
+#!/bin/sh
+#
+# S05config - Early mount of the user-config partition (LABEL=rockcfg).
+#
+# The config partition holds everything that must survive BOTH an OTA rootfs
+# swap AND a blockdata re-seed (WiFi profile, bitcoin.conf, ckpool.conf,
+# future web assets like custom images/animations). It is a small dedicated
+# partition (256M), separate from blockdata, mounted at /root/config well
+# before S38wifi / S61bitcoind / S62ckpool need it, WITHOUT waiting for
+# /resize_done.
+#
+# On first boot (or after the partition was re-created), missing files are
+# seeded from /etc/rockbase-factory-defaults/.
+#
+# If the partition cannot be mounted, factory defaults are copied into the
+# rootfs /root/config (degraded but bootable).
+#
+
+MOUNT_POINT=/root/config
+FACTORY_DIR=/etc/rockbase-factory-defaults
+LABEL=rockcfg
+
+log() {
+    echo "[S05config] $*"
+}
+
+root_device() {
+    sed -n 's#.*root=\(/dev/mmcblk[0-9]p[0-9]\+\).*#\1#p' /proc/cmdline
+}
+
+cfg_device() {
+    # LABEL lookup first (busybox blkid has no -L; parse the table instead).
+    dev=$(blkid 2>/dev/null | sed -n 's#^\(/dev/[^:]*\):.*LABEL="'"${LABEL}"'".*#\1#p' | head -1)
+    if [ -z "${dev}" ]; then
+        rootdev=$(root_device)
+        [ -n "${rootdev}" ] && dev="${rootdev%p*}p3"
+    fi
+    [ -n "${dev}" ] && [ -b "${dev}" ] || return 1
+    printf '%s\n' "${dev}"
+}
+
+is_mounted() {
+    awk -v m="${MOUNT_POINT}" '$2 == m { found = 1 } END { exit found ? 0 : 1 }' /proc/mounts
+}
+
+# Seed missing config files from factory defaults (idempotent).
+seed_configs() {
+    [ -d "${FACTORY_DIR}" ] || return 0
+    for f in "${FACTORY_DIR}"/*; do
+        [ -f "$f" ] || continue
+        name=${f##*/}
+        if [ ! -e "${MOUNT_POINT}/${name}" ]; then
+            cp -p "$f" "${MOUNT_POINT}/${name}" && log "seeded ${MOUNT_POINT}/${name}"
+        fi
+    done
+}
+
+case "$1" in
+  start)
+        printf "Mounting config partition: "
+
+        if is_mounted; then
+                echo "already mounted"
+        else
+                dev=$(cfg_device)
+                if [ -z "${dev}" ]; then
+                        echo "missing config partition"
+                else
+                        mkdir -p "${MOUNT_POINT}"
+                        if mount -t ext4 -o noatime "${dev}" "${MOUNT_POINT}" >/dev/null 2>&1; then
+                                echo "OK (${dev})"
+                        else
+                                echo "FAIL"
+                        fi
+                fi
+        fi
+
+        if is_mounted; then
+                seed_configs
+        else
+                # Degraded: keep the system bootable from rootfs copies.
+                mkdir -p "${MOUNT_POINT}"
+                seed_configs
+                exit 1
+        fi
+        ;;
+  stop)
+        printf "Unmounting config partition: "
+
+        if ! is_mounted; then
+                echo "already unmounted"
+                exit 0
+        fi
+
+        if umount "${MOUNT_POINT}" >/dev/null 2>&1; then
+                echo "OK"
+        else
+                echo "FAIL"
+                exit 1
+        fi
+        ;;
+  restart|reload)
+        "$0" start
+        ;;
+  *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+        ;;
+esac
+
+exit $?

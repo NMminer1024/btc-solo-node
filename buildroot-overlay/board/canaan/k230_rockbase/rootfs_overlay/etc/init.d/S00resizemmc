@@ -62,12 +62,12 @@ tail_sectors=$((maxrootsize - rootsize))
 
 log "root=${rootdev} bootdev=${bootdev} start=${rootstart} sectors root_size=${rootsize} disk_size=${disksize} tail=${tail_sectors}"
 
-# New Rockbase images keep Bitcoin data on partition 3. In this layout rootfs
-# must never be expanded to the card end, otherwise the blockdata partition is
-# destroyed. Instead, grow partition 3 to the card end and then resize both
-# filesystems on the next boot.
-blockdev="${bootdev}p3"
-blockbase="${bootbase}p3"
+# New Rockbase images keep Bitcoin data on partition 4 (p3 is the small
+# user-config partition). In this layout rootfs must never be expanded to the
+# card end, otherwise the trailing partitions are destroyed. Instead, grow
+# partition 4 to the card end and then resize both filesystems on the next boot.
+blockdev="${bootdev}p4"
+blockbase="${bootbase}p4"
 if [ -b "${blockdev}" ] && [ -r "/sys/class/block/${blockbase}/start" ] && [ -r "/sys/class/block/${blockbase}/size" ]; then
     blockstart=$(cat "/sys/class/block/${blockbase}/start")
     blocksize=$(cat "/sys/class/block/${blockbase}/size")
@@ -89,10 +89,10 @@ if [ -b "${blockdev}" ] && [ -r "/sys/class/block/${blockbase}/start" ] && [ -r 
     fi
 
     if [ "${block_tail_sectors}" -gt 2048 ]; then
-        log "Stage 1: recreating blockdata partition 3 on ${bootdev} from ${blockstart} to end"
+        log "Stage 1: recreating blockdata partition 4 on ${bootdev} from ${blockstart} to end"
         [ -x /sbin/fdisk ] || fail "fdisk is missing"
 
-        fdisk_out=$(printf 'd\n3\nn\np\n3\n%s\n\n\nw\n' "${blockstart}" | /sbin/fdisk "${bootdev}" 2>&1)
+        fdisk_out=$(printf 'd\n4\nn\np\n4\n%s\n\n\nw\n' "${blockstart}" | /sbin/fdisk "${bootdev}" 2>&1)
         fdisk_rc=$?
         echo "${fdisk_out}"
 

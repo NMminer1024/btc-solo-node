@@ -4,7 +4,7 @@
 # 用法: /root/bitcoind/stop.sh
 #
 
-CONF=/root/bitcoind/bitcoin.conf
+CONF=/root/config/bitcoin.conf
 DATADIR=/root/block
 LOGFILE=/root/block/debug.log
 
@@ -17,10 +17,11 @@ echo "Stopping bitcoind gracefully..."
 bitcoin-cli -conf="$CONF" -datadir="$DATADIR" stop
 
 # 等待 debug.log 中出现 "Shutdown: done"，最多等 120 秒
+# 注意：busybox ash 不支持 $SECONDS，必须用 date +%s 计时。
 echo "Waiting for 'Shutdown: done' in $LOGFILE ..."
-SECONDS=0
+start_ts=$(date +%s 2>/dev/null || echo 0)
 MAX_WAIT=120
-while [ $SECONDS -lt $MAX_WAIT ]; do
+while :; do
     if tail -5 "$LOGFILE" 2>/dev/null | grep -q "Shutdown: done"; then
         echo "bitcoind stopped OK"
         exit 0
@@ -30,6 +31,8 @@ while [ $SECONDS -lt $MAX_WAIT ]; do
         echo "bitcoind process exited (no shutdown log)"
         exit 0
     fi
+    now=$(date +%s 2>/dev/null || echo 0)
+    [ $((now - start_ts)) -ge $MAX_WAIT ] && break
     sleep 1
 done
 

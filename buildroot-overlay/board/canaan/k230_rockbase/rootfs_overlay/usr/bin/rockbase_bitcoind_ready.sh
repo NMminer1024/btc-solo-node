@@ -3,7 +3,7 @@
 # rockbase_bitcoind_ready.sh - Gate ckpool startup on a clear bitcoind sync signal.
 #
 
-BTC_CONF=${BTC_CONF:-/root/bitcoind/bitcoin.conf}
+BTC_CONF=${BTC_CONF:-/root/config/bitcoin.conf}
 BTC_DATADIR=${BTC_DATADIR:-/root/block}
 STATE_DIR=${STATE_DIR:-/run/rockbase}
 READY_FILE=${READY_FILE:-${STATE_DIR}/bitcoind-synced}

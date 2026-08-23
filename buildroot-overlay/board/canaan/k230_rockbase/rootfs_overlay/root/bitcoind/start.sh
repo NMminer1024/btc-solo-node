@@ -4,7 +4,7 @@
 # 用法: /root/bitcoind/start.sh
 #
 
-CONF=/root/bitcoind/bitcoin.conf
+CONF=/root/config/bitcoin.conf
 DATADIR=/root/block
 
 # debug.log 可能在 datadir 或 conf 所在目录

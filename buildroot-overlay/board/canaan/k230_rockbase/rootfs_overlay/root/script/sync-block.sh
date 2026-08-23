@@ -229,7 +229,7 @@ if [ $RSYNC_EXIT -eq 0 ]; then
     echo -e "  ${GREEN}✓ 传输完成！${NC}"
     echo ""
     echo "  接下来在目标设备 ($TARGET_IP) 启动 bitcoind:"
-    echo "    bitcoind -conf=/root/bitcoind/bitcoin.conf -datadir=$REMOTE_DATADIR -daemon"
+    echo "    bitcoind -conf=/root/config/bitcoin.conf -datadir=$REMOTE_DATADIR -daemon"
 else
     echo -e "  ${RED}✗ 传输失败，rsync 退出码: $RSYNC_EXIT${NC}"
     echo ""

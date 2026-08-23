@@ -3,7 +3,7 @@
 # S61bitcoind - BusyBox init service for Bitcoin Core
 #
 
-CONF=/root/bitcoind/bitcoin.conf
+CONF=/root/config/bitcoin.conf
 DATADIR=/root/block
 CLOCK_EPOCH_MIN=1704067200
 RESIZE_DONE_FLAG=/resize_done

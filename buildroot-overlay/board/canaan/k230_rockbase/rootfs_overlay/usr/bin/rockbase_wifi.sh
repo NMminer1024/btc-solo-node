@@ -1,7 +1,7 @@
 #!/bin/sh
 
 WLAN_DEV=${WLAN_DEV:-wlan0}
-WIFI_CONFIG_FILE=${WIFI_CONFIG_FILE:-/etc/rockbase-wifi.conf}
+WIFI_CONFIG_FILE=${WIFI_CONFIG_FILE:-/root/config/rockbase-wifi.conf}
 WIFI_WPA_CONF=${WIFI_WPA_CONF:-/tmp/rockbase-wpa_supplicant.conf}
 WIFI_STATE_FILE=${WIFI_STATE_FILE:-/tmp/rockbase-wifi-state.conf}
 WIFI_SCAN_CACHE=${WIFI_SCAN_CACHE:-/tmp/rockbase-wifi-scan.cache}

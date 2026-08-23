@@ -5,10 +5,10 @@
 # - renders /tmp/status-api.json for the web UI
 #
 
-CONF=/root/bitcoind/bitcoin.conf
+CONF=/root/config/bitcoin.conf
 DATADIR=/root/block
 DEBUG_LOG=/root/block/debug.log
-CKPOOL_CONF=/root/ckpool/ckpool.conf
+CKPOOL_CONF=/root/config/ckpool.conf
 CKPOOL_LOG=/root/ckpool/logs/ckpool.log
 STATE_DIR=/tmp/rockbase-status
 FINAL_CACHE=/tmp/status-api.json

@@ -15,10 +15,15 @@ root_device() {
 }
 
 block_device() {
-    rootdev=$(root_device)
-    bootdev=${rootdev%p*}
-    [ -n "${bootdev}" ] || return 1
-    printf '%sp3\n' "${bootdev}"
+    # LABEL lookup first (busybox blkid has no -L; parse the table instead).
+    dev=$(blkid 2>/dev/null | sed -n 's#^\(/dev/[^:]*\):.*LABEL="blockdata".*#\1#p' | head -1)
+    if [ -z "${dev}" ]; then
+        rootdev=$(root_device)
+        bootdev=${rootdev%p*}
+        [ -n "${bootdev}" ] && dev="${bootdev}p4"
+    fi
+    [ -n "${dev}" ] && [ -b "${dev}" ] || return 1
+    printf '%s\n' "${dev}"
 }
 
 is_mounted() {

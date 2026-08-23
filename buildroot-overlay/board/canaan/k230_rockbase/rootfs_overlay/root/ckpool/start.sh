@@ -4,7 +4,7 @@
 # 用法: /root/ckpool/start.sh
 #
 
-CONF=/root/ckpool/ckpool.conf
+CONF=/root/config/ckpool.conf
 LOGDIR=/root/ckpool/logs
 
 if ps | grep -v grep | grep -q ckpool; then
