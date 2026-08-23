@@ -7,8 +7,8 @@
 
 ## 0. 一句话现状
 
-A/B OTA 的方案已定稿（`rockbase-ota-plan.md`），**阶段 A2、A3 已完成并全部验证通过**，
-下一步是 **A1（配置外置，推荐）** 或 **阶段 B（uboot A/B 手测）**。
+A/B OTA 的方案已定稿（`rockbase-ota-plan.md`），**阶段 A（A1/A2/A3）已全部完成并验证通过**，
+下一步是 **阶段 B（uboot A/B 手测，需串口）**。
 
 ---
 
@@ -58,7 +58,7 @@ ota 分支（当前工作分支）：
 |---|---|---|
 | **A2** | libubootenv（fw_printenv/fw_setenv）上板 + 修 S00 fw_env 时机 | ✅ **完成并已验证**（commit 56f929dd） |
 | **A3** | OTA agent + 打包脚本 + 确认服务 + 签名工具链 | ✅ **完成并已验证**（commit 0ef9fcb8 + e954f64c，2026-08-21 设备 dry-run 通过） |
-| **A1** | 配置外置到 blockdata | ⬜ **未开始（下一步候选）** |
+| **A1** | 用户配置独立分区（p3=config 256M `rockcfg` / p4=blockdata） | ✅ **完成并已验证**（2026-08-21，124.30 重分区 + 热部署验证通过） |
 
 ### 阶段 B：uboot A/B 逻辑（串口命令行手测，不烧录）⬜ 未开始
 
@@ -80,6 +80,14 @@ ota 分支（当前工作分支）：
 | `rootfs_overlay/etc/rockbase-ota-pub.pem` | 验签公钥（测试密钥） | ✅ 已固化进 overlay |
 | `k230_rockbase_1g_defconfig` | +`LIBUBOOTENV`、`LIBCURL(+CURL/_OPENSSL)`、`CA_CERTIFICATES`、`LIBOPENSSL_BIN` | ✅ 已编译进镜像 |
 | `.gitignore` | +`*-private.pem` 防私钥误提交 | ✅ |
+| `rootfs_overlay/etc/init.d/S05config` | A1 v2：早期挂载 `LABEL=rockcfg`（p3）到 `/root/config` + 出厂默认播种 + 降级回退（blkid 表解析，busybox 无 `blkid -L`） | ✅ 板端验证 |
+| `rootfs_overlay/etc/rockbase-factory-defaults/` | A1：出厂默认 `bitcoin.conf`/`ckpool.conf`（原 rootfs 实体文件移入） | ✅ 板端 md5 与原文件一致 |
+| 消费方路径直改 `/root/config/…`（无符号链接） | `S61bitcoind`/`S62ckpool`/`bitcoind start|stop.sh`/`ckpool/start.sh`/`rockbase_statusd.sh`/`rockbase_bitcoind_ready.sh`/`rockbase_wifi.sh`(`WIFI_CONFIG_FILE`) | ✅ 板端验证（重启后 bitcoind 以新路径启动） |
+| `S59blockdata` / `S00resizemmc` | A1 v2：S59 按 LABEL=blockdata 挂载（回退 p4）；S00 扩容对象 p3→p4 | ✅ 板端验证（LABEL 挂载正常；S00 扩容逻辑待阶段 D 新卡验证） |
+| `genimage.cfg` + `post-image.sh` | A1 v2：新增 p3 config 分区（空 256M `rockcfg.ext4`，`gen_rockcfg_ext4`） | 已写，待下次构建镜像时验证 |
+
+> A1 曾有 v1（配置放 blockdata 子目录 + 符号链接），经讨论改为 v2 独立分区方案，
+> v1 产物（`S05blockdata`、符号链接、wifi readlink 补丁）已全部移除。
 
 ## 6. 已验证的事实（不要重复验证）
 
@@ -92,6 +100,10 @@ ota 分支（当前工作分支）：
 - **板端文件与源码一致性（2026-08-21 已核对）**：`S00resizemmc`/pub key/netsel 全套 md5 与 ota 分支一致；
   `rockbase-ota.sh`/`S98otaconfirm` 曾落后源码（缺 e954f64c 修复），已重新 scp 同步。
 - **rootfs 为 ext4 rw**：热部署文件重启后保留（只有重烧镜像才会被源码版本覆盖）。
+- **A1 v2（2026-08-21，124.30）**：板端已重分区为 `p1=boot / p2=rootfs / p3=config(256M,LABEL=rockcfg) / p4=blockdata(55.6G,LABEL=blockdata)`；
+  重启后 S05config/S59 按 LABEL 正常挂载、出厂默认播种正确（md5 一致）、bitcoind 以 `-conf=/root/config/bitcoin.conf` 启动、
+  WiFi 保存直写 p3。原 p3 区块数据已按既定决策销毁（重灌 seed 或网络重同步；bitcoind 已在 p4 重新同步）。
+  `S00resizemmc` 的 p4 扩容逻辑只改了源码，本板 `/resize_done` 已存在不会触发，待阶段 D 新卡验证。
 
 ## 7. 正在进行的事（接手第一件事）
 
@@ -100,23 +112,23 @@ sha256 校验 → 正确识别目标槽位 `mmcblk1p1`，日志 `DRY-RUN complet
 临时测试密钥 `/tmp/ota-keys/` 与测试包 `/tmp/ota-dist/` 仍在（`/tmp` 重启即清，无所谓）；
 本机 HTTP 服务 `python3 -m http.server 8000`（起在 `/tmp/ota-dist/v0.0.1-test/`）当前仍在跑，不用了 `pkill -f http.server` 即可。
 
-直接进入第 8 节的下一步即可（推荐 A1）。
+直接进入第 8 节的下一步即可（阶段 B，需串口）。
 
 历史备注：dry-run 时板子 WiFi ~40-60KB/s，34MB 包下载约 10 分钟。
 
 ## 8. 下一步该做什么（按优先级）
 
-### 选项 1：A1 配置外置（推荐，逻辑独立）
+### ~~选项 1：A1 配置外置~~ ✅ 已完成（2026-08-21）
 把 WiFi/ckpool/bitcoin 配置从 rootfs 挪到 blockdata `/root/block/config/`，rootfs 改符号链接。涉及：
 - 新建 `S05blockdata`（提前按 LABEL 挂载，不等 resize_done）
 - `/etc/rockbase-factory-defaults/` 出厂默认配置 + 首启播种
 - 3 个配置符号链接：`/etc/rockbase-wifi.conf`、`/root/bitcoind/bitcoin.conf`、`/root/ckpool/ckpool.conf`
 - 详见方案 2.3 + 阶段 A1
 
-### 选项 2：阶段 B uboot A/B 手测（需要串口，风险低）
+### 阶段 B：uboot A/B 手测（需要串口，风险低）← 下一步
 串口中断 bootdelay，手测新 `blinux`/`altbootcmd`/`bootcount`。需先改 `default.env` + uboot defconfig `CONFIG_BOOTCOUNT_LIMIT=y`，重编 uboot。详见方案 2.2 + 阶段 B。
 
-**建议先做 A1**（纯软件、热部署可验、不依赖串口），B 留到需要动 uboot 时一次性做。
+**阶段 A 已全部完成**（纯软件部分收官）。B 需要人在板子旁接串口线，无法远程进行。
 
 ---
 
@@ -134,6 +146,12 @@ sha256 校验 → 正确识别目标槽位 `mmcblk1p1`，日志 `DRY-RUN complet
 - **libubootenv** 的 `fw_printenv` 依赖 `libubootenv.so.0`+`libyaml-0.so.2`+`libz.so.1`，热部署要连库一起拷；`fw_setenv` 是它的符号链接。
 - **libopenssl 改 config 后**：要 `libopenssl-dirclean` 再重编才会装 `apps/openssl`；且 WSL PATH 含空格会报 "PATH contains spaces"，用干净 PATH `env PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"`。
 - **busybox 无 pgrep**：板上进程检测用 `ps | grep -v grep | grep <pat>`（参考 S42web）。
+- **busybox ash 不支持 `$SECONDS`**：展开为空导致 `[ $SECONDS -lt N ]` 报 "unknown operand" 恒为假。
+  `root/bitcoind/stop.sh` 的 120s 等待循环因此形同虚设（bitcoin-cli stop 失败时会直接跳到 force kill；
+  且 conf 路径变更期间 bitcoin-cli 缺 conf 会导致 stop 流程卡死）。后续修 stop.sh 时改用 `date +%s` 计时。
+- **busybox fdisk 新建分区的默认值取"第一个空闲区域"**：卡上前部有 uboot raw 间隙时，
+  空回车会把新分区建到那个间隙里（曾误建 p4=16-61439 盖住 SPL/env 区，幸好只改表没写数据）。
+  建分区必须**显式给首尾扇区**，w 之前用 `p` 打印确认。
 - **简单 HTTP 服务器不支持 Range**：curl `-C -` 报 `(33)`，脚本已加 `fetch()` 全量重下容错。GitHub Releases 支持 Range，生产无碍。
 - **顶层 `make CONF=... buildroot`** 会经 `sync` 把 `.config` 重置回 defconfig；单独重编某包用 `make -C output/buildroot-2025.02.1 O=$PWD/output/<conf> <pkg>` 绕过。
 

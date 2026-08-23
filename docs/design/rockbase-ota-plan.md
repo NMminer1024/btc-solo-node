@@ -9,7 +9,7 @@
 目标：设备全部到客户手上后，可远程 OTA **只升级系统，不覆盖用户参数**。
 
 结论：**当前架构不支持**，存在 4 个硬性缺口；但缺口清晰、改造可控。推荐方案为
-**「A/B 双槽 + 用户配置外置到 blockdata + uboot 回滚 + shell OTA agent」**。
+**「A/B 双槽 + 用户配置独立分区 + uboot 回滚 + shell OTA agent」**。
 
 硬性缺口：
 
@@ -25,7 +25,7 @@
 - rootfs 实际占用仅 ~71MB（2G 镜像 96% 空闲），A/B 双 2G 槽在 SD 卡上轻松容纳。
 - uboot `board_fdt_chosen_bootargs()`（k230_img.c）**优先读 env `bootargs`**，
   因此 A/B 切换 `root=` 无需改任何 C 代码。
-- blockdata 保持 p3，现有扩容/挂载脚本基本零改动。
+- blockdata 仍由现有脚本扩容/挂载（改为按 LABEL 识别，分区号 p3→p4 见 2.3）。
 
 ---
 
@@ -41,7 +41,11 @@
 | env（冗余拷贝） | 0x380000 | 128K | 静态写入，uboot 不读 |
 | p1 boot | 30M | 80M ext4 | `Image` / `k.dtb` / `fw_jump_add_uboot_head.bin` |
 | p2 rootfs | 128M | 2G ext4 | 完整系统（实际仅用 ~170MB） |
-| p3 blockdata | ~2.2G | 构建时 256M/24G | 首启被 S00resizemmc 扩到卡尾，挂载 `/root/block` = bitcoind datadir |
+| p3 config | 紧随 p2 | 256M ext4 `LABEL=rockcfg` | A1 v2 新增：用户配置分区，挂载 `/root/config` |
+| p4 blockdata | 紧随 p3 | 构建时 256M/24G | 首启被 S00resizemmc 扩到卡尾，挂载 `/root/block` = bitcoind datadir |
+
+> 注：A1 v2 之前的老镜像为「p1 boot / p2 rootfs / p3 blockdata（扩到卡尾）」，
+> 无 config 分区。开发期不做兼容。
 
 ### 1.2 启动链
 
@@ -58,10 +62,10 @@ SPL → uboot → run blinux
 
 | 用户参数 | 文件 | 所在分区 | 修改入口 |
 |---|---|---|---|
-| WiFi SSID/密码 | `/etc/rockbase-wifi.conf` | rootfs p2 | Web `/api/wifi.cgi` |
-| bitcoind 配置 | `/root/bitcoind/bitcoin.conf` | rootfs p2 | SSH |
-| ckpool 矿池/BTC 地址 | `/root/ckpool/ckpool.conf` | rootfs p2 | SSH |
-| 区块数据 | `/root/block/{blocks,chainstate}` | blockdata p3 | 自动 |
+| WiFi SSID/密码 | `/root/config/rockbase-wifi.conf` | config p3 | Web `/api/wifi.cgi` |
+| bitcoind 配置 | `/root/config/bitcoin.conf` | config p3 | SSH |
+| ckpool 矿池/BTC 地址 | `/root/config/ckpool.conf` | config p3 | SSH |
+| 区块数据 | `/root/block/{blocks,chainstate}` | blockdata p4 | 自动 |
 | 初始默认 WiFi | uboot env `wlanssid/wlanpass` | raw env | 出厂 |
 | LCD 配置 | `/etc/rockbase-lcdui.conf` | rootfs p2 | 编译期固定（随系统升级） |
 
@@ -75,7 +79,8 @@ SPL → uboot → run blinux
 raw 区不变：SPL / env@0x1e0000 / uboot / env@0x380000
 p1 = slot_a  2G ext4   完整系统，内含 /boot/{Image, k.dtb, fw_jump_add_uboot_head.bin}
 p2 = slot_b  2G ext4   出厂时为 slot_a 的拷贝
-p3 = blockdata         剩余全部（分区号不变）
+p3 = config  256M ext4  用户配置分区（LABEL=rockcfg，挂载 /root/config）
+p4 = blockdata          剩余全部（LABEL=blockdata，挂载 /root/block）
 ```
 
 要点：
@@ -86,9 +91,10 @@ p3 = blockdata         剩余全部（分区号不变）
   空闲块压掉，2G 与更小 FS 的 OTA 下载体积几乎相同，缩 FS 只能省 dd 刷写时间；
   保留 2G 换来充足的未来升级余量，且**改动最小、风险最低**（与当前 rootfs 等大，
   无需重调构建参数与挂载/扩容逻辑）。
-- blockdata 保持 p3：S00resizemmc 的 p3 扩容与 S59blockdata 挂载逻辑不动；
-  OTA 永远只写 p1/p2，p3 上的区块与用户配置物理上不可能被碰。
-- 卡容量要求：A/B 双 2G 槽 + blockdata，建议 **≥ 8G SD 卡**（当前客户基线已满足）。
+- blockdata 为 p4（config 占据 p3）：S00resizemmc 的扩容对象改为 p4，
+  S59blockdata 挂载改为按 LABEL 识别；OTA 永远只写 p1/p2，
+  p3/p4 上的用户配置与区块数据物理上不可能被碰。
+- 卡容量要求：A/B 双 2G 槽 + config + blockdata，建议 **≥ 8G SD 卡**（当前客户基线已满足）。
 
 ### 2.2 启动与回滚（uboot 层：纯 env 脚本 + 1 个 defconfig 开关）
 
@@ -112,18 +118,30 @@ altbootcmd=if test "${ota_part}" = 1; then ota_part=2; else ota_part=1; fi; \
   每次启动 bootcount+1，超过 bootlimit 自动执行 altbootcmd 回旧槽。
   env 位于 MMC raw 区可写，bootcount 直接落 env。
 
-### 2.3 用户配置外置到 blockdata（"保参数"的核心）
+### 2.3 用户配置独立分区（"保参数"的核心，A1 v2 定稿）
 
-- blockdata 新建 `/root/block/config/`，集中存放：
-  `rockbase-wifi.conf`、`bitcoin.conf`、`ckpool.conf`，以及未来 web 新增的所有用户设置。
-- rootfs 内改为符号链接：
-  `/etc/rockbase-wifi.conf`、`/root/bitcoind/bitcoin.conf`、`/root/ckpool/ckpool.conf`
-  → `/root/block/config/…`
-- blockdata 挂载提前到 S05 左右（挂载无需等 resize_done；S38wifi 在 S37 之后，时序满足）。
-  挂载改用 `LABEL=blockdata`（mkfs 已打 label），比 p3 硬编码更稳。
-- 首启播种：`/root/block/config/` 为空时从 `/etc/rockbase-factory-defaults/` 拷贝默认配置；
-  blockdata 缺失时各服务回退内置默认，保证可启动。
-- 效果：OTA、甚至整系统重刷（不动 p3）都不会丢用户参数。
+- **独立配置分区 p3**（256M，ext4，`LABEL=rockcfg`，挂载 `/root/config`），
+  与 blockdata（p4，`LABEL=blockdata`）并列。OTA 刷 rootfs 槽不碰它，
+  **重灌区块 seed（mkfs blockdata）也不碰它**——用户参数与区块数据彻底解耦。
+  256M 的余量也为后续自定义图片/动画等 web 资产预留空间。
+- 集中存放：`rockbase-wifi.conf`、`bitcoin.conf`、`ckpool.conf`，
+  以及未来 web 新增的所有用户设置/自定义资产。
+- **不用符号链接**（开发初期无向后兼容包袱）：所有消费方直接引用 `/root/config/…`。
+  涉及 `S61bitcoind`、`S62ckpool`、`bitcoind/start.sh|stop.sh`、`ckpool/start.sh`、
+  `rockbase_statusd.sh`、`rockbase_bitcoind_ready.sh`、`rockbase_wifi.sh`（`WIFI_CONFIG_FILE` 默认值）。
+- 配置分区挂载提前到 S05（新 `S05config`，按 LABEL 挂载，不等 resize_done；
+  S38wifi 在 S37 之后，时序满足）。blockdata 仍由 S59 挂载（改为按 LABEL，回退 p4）。
+- 首启播种：`/root/config/` 缺文件时从 `/etc/rockbase-factory-defaults/` 拷贝默认配置；
+  配置分区缺失时 S05config 把出厂默认拷进 rootfs 的 `/root/config`（降级但可启动）。
+- 分区布局（当前与阶段 D 一致）：
+
+  ```
+  现网过渡:  p1=boot  p2=rootfs    p3=config(256M)  p4=blockdata(扩到卡尾)
+  阶段D:     p1=rootfsA(2G) p2=rootfsB(2G)  p3=config(256M)  p4=blockdata(扩到卡尾)
+  ```
+
+  S00resizemmc 的扩容对象相应从 p3 改为 p4。
+- 效果：OTA、整系统重刷、blockdata 重灌，都不丢用户参数。
 
 ### 2.4 OTA agent（全 shell，符合项目现有风格）
 
@@ -301,15 +319,15 @@ P1 采用「整槽 ext2 + gzip」，43MB 已足够快，不折腾裁剪与增量
 
 | # | 文件 | 改动 |
 |---|---|---|
-| 1 | buildroot-overlay/board/canaan/k230_rockbase/genimage.cfg | 删 boot 分区；p1/p2 两个 2G 槽；blockdata 跟随 |
+| 1 | buildroot-overlay/board/canaan/k230_rockbase/genimage.cfg | 删 boot 分区；p1/p2 两个 2G 槽；p3 config（256M `rockcfg.ext4`）；blockdata 跟随为 p4 |
 | 2 | buildroot-overlay/configs/k230_rockbase_{1g,2g}_defconfig | EXT2_SIZE 维持 2G 不变；新增 `BR2_PACKAGE_LIBUBOOTENV`、`BR2_PACKAGE_LIBCURL(+_CURL/_OPENSSL)`、`BR2_PACKAGE_CA_CERTIFICATES`、`BR2_PACKAGE_OPENSSL_BIN`（dgst 验签） |
 | 3 | buildroot-overlay/board/canaan/k230_rockbase/default.env | A/B bootcmd / altbootcmd / ota_part / bootlimit |
 | 4 | buildroot-overlay/boot/uboot/u-boot-2022.10-overlay/configs/k230_rockbase_defconfig | `CONFIG_BOOTCOUNT_LIMIT=y` |
 | 5 | post-build.sh | 生成 `fw_jump_add_uboot_head.bin` 并把 Image/k.dtb 装入 `${TARGET_DIR}/boot/`；安装 factory-defaults |
-| 6 | post-image.sh | slot_b 由 slot_a 复制；导出逻辑保留；新增 OTA 包产物输出 |
-| 7 | rootfs_overlay/etc/init.d/S00resizemmc | `fw_env.config` 生成移到 done 检查之前（当前在 `/resize_done` 后直接退出，dd 出来的新槽会缺此文件导致 `fw_setenv` 失败） |
-| 8 | rootfs_overlay/etc/init.d/S59blockdata | 拆出早期挂载（新 `S05blockdata`，按 LABEL 挂载，不等 resize_done） |
-| 9 | overlay 新增 | `/usr/sbin/rockbase-ota.sh`、`/etc/init.d/S98otaconfirm`、`/root/web/api/ota.cgi`、`/etc/rockbase-factory-defaults/`、`/etc/rockbase-ota-pub.pem`（验签公钥）、3 个配置符号链接 |
+| 6 | post-image.sh | slot_b 由 slot_a 复制；导出逻辑保留；新增 OTA 包产物输出；新增 `gen_rockcfg_ext4`（空 256M，`LABEL=rockcfg`） |
+| 7 | rootfs_overlay/etc/init.d/S00resizemmc | `fw_env.config` 生成移到 done 检查之前（当前在 `/resize_done` 后直接退出，dd 出来的新槽会缺此文件导致 `fw_setenv` 失败）；blockdata 扩容对象 p3→p4 |
+| 8 | rootfs_overlay/etc/init.d/S59blockdata + 新增 S05config | S59 改按 LABEL=blockdata 挂载（回退 p4）；新 `S05config` 早期挂载 LABEL=rockcfg 到 `/root/config` 并播种出厂默认 |
+| 9 | overlay 新增 | `/usr/sbin/rockbase-ota.sh`、`/etc/init.d/S98otaconfirm`、`/root/web/api/ota.cgi`、`/etc/rockbase-factory-defaults/`、`/etc/rockbase-ota-pub.pem`（验签公钥）；消费方路径直改 `/root/config/…`（不用符号链接） |
 | 10 | tools/ 新增 | `mk-ota-package.sh`（构建 OTA 包 + manifest + dgst 签名） |
 | 11 | 仓库根 `.gitignore` | 增加 `*-private.pem`，防私钥误提交 |
 
@@ -330,7 +348,7 @@ P1 采用「整槽 ext2 + gzip」，43MB 已足够快，不折腾裁剪与增量
 
 ## 5. 验证计划（真实板）
 
-1. 新镜像烧录 → 确认 slot A 启动、blockdata 扩容/挂载正常、WiFi 配置落在 p3。
+1. 新镜像烧录 → 确认 slot A 启动、blockdata 扩容/挂载正常、WiFi 配置落在 config 分区（p3）。
 2. 构造 v2 假版本 OTA 包 → apply → 确认切槽、版本号变化、
    WiFi / ckpool / bitcoin 配置原样保留。
 3. dd 写槽中途断电 → 设备仍从旧槽正常启动。
@@ -374,16 +392,19 @@ P1 采用「整槽 ext2 + gzip」，43MB 已足够快，不折腾裁剪与增量
 
 ### 阶段 A：纯软件，现网布局可测（不重烧）
 
-#### A1 · 用户配置外置到 blockdata
+#### A1 · 用户配置独立分区（config 分区）
 
-- 改：blockdata 挂载提前（新 `S05blockdata`，按 LABEL 挂载）、`/root/block/config/` 建仓、
-  3 个配置改符号链接、首启播种逻辑、`/etc/rockbase-factory-defaults/`。
-- 热部署验证（124.15）：
-  1. 改 WiFi（web）→ 确认落到 `/root/block/config/rockbase-wifi.conf` 而非 rootfs。
-  2. 改 ckpool 配置 → 重启服务仍生效。
-  3. 模拟升级：`rm` 掉 rootfs 里的链接再重建（模拟新 rootfs），确认配置从 p3 读回、WiFi 自动连上。
-- 通过标准：rootfs 全量替换后，WiFi/bitcoind/ckpool 配置原样保留。
-- 回退：符号链接改回普通文件即可。
+- 改：新 `S05config`（按 LABEL=rockcfg 早期挂载 `/root/config`，不等 resize_done）、
+  消费方路径直改 `/root/config/…`（无符号链接）、首启播种逻辑、
+  `/etc/rockbase-factory-defaults/`、`S59blockdata` 改 LABEL 挂载、`S00resizemmc` 扩容对象 p3→p4。
+- 热部署验证（124.30，USB 有线）：
+  1. 板端重分区：p3=config(256M) / p4=blockdata，mkfs 打 LABEL。
+  2. 改 WiFi（web）→ 确认落到 `/root/config/rockbase-wifi.conf`（p3）。
+  3. 改 ckpool 配置 → 重启服务仍生效。
+  4. 重启 → S05config/S59 按 LABEL 挂载、配置播种、bitcoind 以 `-conf=/root/config/bitcoin.conf` 启动。
+- 通过标准：OTA 换槽、blockdata 重灌 seed 后，WiFi/bitcoind/ckpool 配置原样保留。
+- 回退：恢复旧分区表 + 旧脚本（开发期不兼容老布局，重烧即可）。
+- ✅ 2026-08-21 已完成并验证（见 handoff 文档）。
 
 #### A2 · 修复 fw_env.config 时机 + libubootenv 上板（**建议的第一步**）
 
@@ -436,15 +457,16 @@ P1 采用「整槽 ext2 + gzip」，43MB 已足够快，不折腾裁剪与增量
 
 > 前面全部验证通过后，才动分区。这是唯一不可逆步骤。
 
-1. 改 `genimage.cfg`（删 boot 分区、p1/p2 双 2G 槽、blockdata 跟随）、
-   `post-build.sh`（Image/dtb/fw_jump 装进 `/boot/`）、`post-image.sh`（slot_b 复制 slot_a）。
-2. 构建新镜像 → 烧录到 124.15（第一台吃新布局的板子）。
-3. 验证：从 slot A 启动、blockdata 扩容/挂载正常、配置从 p3 读出、WiFi 连通。
+1. 改 `genimage.cfg`（删 boot 分区、p1/p2 双 2G 槽、p3 config、p4 blockdata——
+   config 分区已在 A1 v2 先行加入）、`post-build.sh`（Image/dtb/fw_jump 装进 `/boot/`）、
+   `post-image.sh`（slot_b 复制 slot_a）。
+2. 构建新镜像 → 烧录到 124.30（第一台吃新布局的板子，USB 有线）。
+3. 验证：从 slot A 启动、blockdata 扩容/挂载正常、配置从 config 分区（p3）读出、WiFi 连通。
 4. 手动做一次真 OTA：`ota.sh apply` 写 slot B → 切 `ota_part=2` → reboot →
    确认从 B 起来 → `S98otaconfirm` 确认。
 
-回退预案：新布局有问题，重烧回 dev 分支旧镜像（`1bee6a57` 对应布局），
-blockdata 数据在 p3 未动（只要不重分区 p3）。
+回退预案：新布局有问题，重烧回旧镜像。
+注意：阶段 D 会重分区，blockdata 需重灌 seed 或重同步；用户配置在 p3 不受影响。
 
 ### 阶段 E：全链路真机验证（对应第 5 节）
 
