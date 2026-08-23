@@ -123,7 +123,7 @@ render_cache() {
   : > "$tmp_all"
 
   if [ -d "$DATA_DIR" ]; then
-    cat "$DATA_DIR"/node-*.jsonl >> "$tmp_all" 2>/dev/null || true
+    grep -h -v '^[[:space:]]*$' "$DATA_DIR"/node-*.jsonl >> "$tmp_all" 2>/dev/null || true
   fi
 
   total=$(wc -l < "$tmp_all" 2>/dev/null | tr -d ' ')
@@ -145,7 +145,7 @@ render_cache() {
     printf '  "series": ["1m","5m","15m","1h","6h","1d","7d"],\n'
     printf '  "points": [\n'
     awk -v step="$step" -v total="$total" '
-      total > 0 && (NR % step == 0 || NR == total) {
+      $0 != "" && total > 0 && (NR % step == 0 || NR == total) {
         if (seen++) printf ",\n"
         printf "    %s", $0
       }
