@@ -40,6 +40,7 @@ log() {
 
 die() {
     log "ERROR: $*"
+    ota_restore
     exit 1
 }
 
@@ -49,6 +50,39 @@ require() {
     for c in "$@"; do
         have "$c" || die "missing required tool: $c"
     done
+}
+
+# --- service quiesce ---------------------------------------------------------
+# Lesson from E2 (2026-08-24): OTA flashing is a long, heavy SD write.
+#  1) supervisord resurrects bitcoind mid-flash (SD IO contention returns)
+#  2) serial healthd sees the expected long MMC host claims during dd and
+#     false-positives a freeze -> sysrq crash -> reboot mid-flash
+# So before a real apply: stop the resurrector FIRST, then all SD/network
+# heavy services, and pause the freeze watchdog for the duration.
+# Kept running on purpose: lcdui (LCD shows OTA progress), httpd (web
+# progress polling), network, sshd.
+OTA_QUIESCE_SERVICES="S45supervisord S62ckpool S61bitcoind S64miners-history S63miners-cache S43statusd S04serialhealthd"
+OTA_QUIESCED=0
+
+ota_quiesce() {
+    local s
+    log "quiescing services for OTA (keeping lcdui/httpd/network/sshd up)"
+    for s in $OTA_QUIESCE_SERVICES; do
+        [ -x "/etc/init.d/$s" ] && "/etc/init.d/$s" stop >/dev/null 2>&1 || true
+    done
+    OTA_QUIESCED=1
+}
+
+# restore in reverse stop order (supervisord last, after its daemons are up)
+ota_restore() {
+    [ "$OTA_QUIESCED" = "1" ] || return 0
+    local s rev=""
+    for s in $OTA_QUIESCE_SERVICES; do rev="$s $rev"; done
+    log "restoring services after OTA failure"
+    for s in $rev; do
+        [ -x "/etc/init.d/$s" ] && "/etc/init.d/$s" start >/dev/null 2>&1 || true
+    done
+    OTA_QUIESCED=0
 }
 
 # --- environment / device helpers -------------------------------------------
@@ -175,6 +209,10 @@ cmd_apply() {
 
     local img="$WORKDIR/slot-$ver.img.gz"
     local sig="$img.sig"
+
+    # real apply: free the SD card / network from other services before the
+    # heavy download+dd (dry-run keeps everything running on purpose)
+    [ "$force" = "1" ] && ota_quiesce
 
     # download image + signature with resume (auto full-retry if no Range)
     log "downloading image: $imgurl"

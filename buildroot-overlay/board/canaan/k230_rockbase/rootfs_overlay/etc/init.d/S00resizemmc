@@ -34,6 +34,17 @@ fail() {
     exit 1
 }
 
+# ext4 left dirty by a crash/power-cut (e.g. during an OTA dd) refuses
+# resize2fs until e2fsck has run. A fresh OTA slot has no /resize_done and
+# would otherwise fail here forever, leaving blockdata unmounted (E2 lesson).
+resize_fs() {
+    local dev="$1"
+    resize2fs "${dev}" && return 0
+    log "resize2fs failed on ${dev}, running e2fsck repair then retrying"
+    e2fsck -f -y "${dev}" || fail "e2fsck failed for ${dev}"
+    resize2fs "${dev}" || fail "resize2fs failed for ${dev} (after fsck)"
+}
+
 if [ -z "${rootdev}" ] || [ -z "${bootdev}" ] || [ -z "${rootpartnum}" ]; then
     fail "cannot parse root mmc device from /proc/cmdline"
 fi
@@ -80,8 +91,8 @@ if [ -b "${blockdev}" ] && [ -r "/sys/class/block/${blockbase}/start" ] && [ -r 
         log "Stage 2: resizing blockdata filesystem on ${blockdev}"
         [ -x /sbin/resize2fs ] || fail "resize2fs is missing"
 
-        resize2fs "${blockdev}" || fail "resize2fs failed for ${blockdev}"
-        resize2fs "${rootdev}" || fail "resize2fs failed for ${rootdev}"
+        resize_fs "${blockdev}"
+        resize_fs "${rootdev}"
         rm -f "${BLOCK_RESIZE_FLAG}" "${RESIZE_FLAG}" "${FIRST_BOOT_FLAG}"
         touch "${DONE_FLAG}"
         log "blockdata/rootfs resize done"
@@ -110,8 +121,8 @@ if [ -b "${blockdev}" ] && [ -r "/sys/class/block/${blockbase}/start" ] && [ -r 
 
     log "blockdata partition already at card end, resizing filesystems directly"
     [ -x /sbin/resize2fs ] || fail "resize2fs is missing"
-    resize2fs "${blockdev}" || fail "resize2fs failed for ${blockdev}"
-    resize2fs "${rootdev}" || fail "resize2fs failed for ${rootdev}"
+    resize_fs "${blockdev}"
+    resize_fs "${rootdev}"
     rm -f "${FIRST_BOOT_FLAG}" "${RESIZE_FLAG}"
     touch "${DONE_FLAG}"
     log "blockdata/rootfs resize done"
