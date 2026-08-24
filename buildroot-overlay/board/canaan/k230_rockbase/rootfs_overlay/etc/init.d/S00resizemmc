@@ -37,11 +37,14 @@ fail() {
 # ext4 left dirty by a crash/power-cut (e.g. during an OTA dd) refuses
 # resize2fs until e2fsck has run. A fresh OTA slot has no /resize_done and
 # would otherwise fail here forever, leaving blockdata unmounted (E2 lesson).
+# e2fsck exit codes: 0=clean, 1=errors corrected, 2=corrected+reboot advised
+# — all fine for us; only >=4 is a real failure.
 resize_fs() {
-    local dev="$1"
+    local dev="$1" rc
     resize2fs "${dev}" && return 0
     log "resize2fs failed on ${dev}, running e2fsck repair then retrying"
-    e2fsck -f -y "${dev}" || fail "e2fsck failed for ${dev}"
+    e2fsck -f -y "${dev}"; rc=$?
+    [ "${rc}" -lt 4 ] || fail "e2fsck failed for ${dev} (rc=${rc})"
     resize2fs "${dev}" || fail "resize2fs failed for ${dev} (after fsck)"
 }
 

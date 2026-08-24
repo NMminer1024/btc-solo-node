@@ -1,14 +1,16 @@
 # Rockbase OTA 开发 Handoff（接手用）
 
 > 写给接手 OTA 开发的 agent/人。读完这份 + `docs/design/rockbase-ota-plan.md` 即可无缝继续。
-> 更新日期：2026-08-24　当前分支：`ota`
+> 更新日期：2026-08-24　当前分支：`dev`（`ota` 分支已 ff 合并进 dev，见第 2 节）
 
 ---
 
 ## 0. 一句话现状
 
-**A/B OTA 主框架全链路（E1~E4）已于 2026-08-24 在 124.30 真机验证通过**：
-双槽切换、配置/数据保留、写盘中途断电安全、bootcount 超限自动回滚全部工作。
+**A/B OTA 主框架全链路（E1~E4）已于 2026-08-24 在 124.30 真机验证通过，且
+`tools/ota-push.sh` 一键推送（打包→本机 HTTP→板端下载验签→dd 写槽→切槽重启→确认）
+已在 B→A 方向实测闭环**：双槽切换、配置/数据保留、写盘中途断电安全、bootcount
+超限自动回滚全部工作。`ota` 分支已 ff 合并进 `dev`。
 剩余：E5（2G 板适配，需先评估 2G defconfig）、E6 回归、阶段 C 的 GitHub 发布链路、
 P2 的 Web 升级页（ota.cgi + 前端卡片 + LCD 进度展示）。
 
@@ -27,7 +29,7 @@ P2 的 Web 升级页（ota.cgi + 前端卡片 + LCD 进度展示）。
 ## 2. 分支与回退基线
 
 ```
-ota 分支（当前工作分支）：
+ota 分支（已全部 ff 合并进 dev @ 131a4fca，后续直接在 dev 上开发）：
   363c7f69  docs: OTA 方案初稿
   49f8508f  docs: 2G 定案 + 镜像源/签名 + 体积分析
   e2c07913  docs: 分阶段调试推进方案（方案第 7 章）
@@ -99,13 +101,13 @@ ota 分支（当前工作分支）：
 | # | 用例 | 结果 |
 |---|---|---|
 | E1 | 新镜像烧录 → slot A 启动 | ✅ `root=/dev/mmcblk1p1`、p4 扩容到卡尾、p3 播种、服务全起 |
-| E2 | 真 OTA apply 写 slot B | ✅ 切 `ota_part=2` 从 B 起（版本标记 `99999999-e2test`）、p3/p4 完好、confirm 后 `upgrade_available=0 bootcount=0`。过程中暴露并修复两个坑（见下） |
+| E2 | 真 OTA apply 写对侧槽 | ✅ A→B：切 `ota_part=2` 从 B 起（版本标记 `99999999-e2test`）、p3/p4 完好、confirm 后 `upgrade_available=0 bootcount=0`。B→A：`ota-push.sh` 一键推送 `v20260824-112046-ota` 到 slot A、重启起 p1、修复 p4 后 confirm 成功。过程中暴露并修复三个坑（见下） |
 | E3 | dd 写 A 槽中途断电（49% 处） | ✅ 上电照常用 slot B 启动，env 未污染，p4 journal replay 正常 |
 | E4 | 破坏 A 槽 + 切 `ota_part=1` | ✅ 串口实测 bootcount 1→2→3 递增，超限自动 altbootcmd 回滚 slot B；回滚后 S98otaconfirm 自动确认 |
 | E5 | 2G 板（mmcblk0） | ⬜ 未测（2G defconfig 按约束未动，需另行评估） |
 | E6 | 回归：seed 构建、网络切换 | ⬜ 未测 |
 
-**E2 暴露并修复的两个坑（commit eaee4386，均已板端验证）**：
+**E2 暴露并修复的三个坑（前两个 commit eaee4386，均已板端验证）**：
 
 1. **freeze 看门狗误杀**：dd 写 SD 期间 mmc1 host claim 长占用是预期行为，
    `rockbase_serial_healthd` 误判冻结 → sysrq crash（连续 3 次）；supervisord
@@ -116,6 +118,12 @@ ota 分支（当前工作分支）：
    resize2fs 被拒（需先 e2fsck）→ `/resize_done` 建不了 → S59 无限期推迟挂载
    → otaconfirm 等不到健康。修复：S00 `resize_fs()`（resize2fs 失败先
    `e2fsck -f -y` 再重试）。
+3. **e2fsck 返回码误判**（B→A 实测暴露）：`e2fsck -f -y` 修复成功后返回 **1**
+   （"errors corrected"），`resize_fs()` 原实现把非 0 全当失败直接放弃。
+   修复：接受 rc<4（0/1/2 都算成功）再重试 resize2fs。**注意此修复是热部署
+   验证后写回源码的，OTA 打进对侧槽的镜像仍是构建时点的脚本版本——本次就是
+   靠热部署新 S00 重跑才把 A 槽 p4 修好**（运维教训：OTA 槽镜像只带构建时点
+   的脚本，热修复不会随 OTA 传播）。
 
 **另一个阶段 D 的首烧坑（commit c87eaab5）**：uboot 变量单层展开——
 `ota_bootargs` 中间变量会让 `${mmc_boot_dev_num}`/`${ota_part}` 以字面量进
@@ -127,6 +135,8 @@ kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=..
 
 | 文件 | 作用 | 验证状态 |
 |---|---|---|
+| `tools/ota-push.sh` | WSL 侧一键推送：mk-ota-package 打包 → 起/复用本机 HTTP(:8000) → 触发板端 check/apply（nohup）→ 轮询进度 → 重启后等板回来 → otaconfirm。密钥 `~/.rockbase-ota-keys/`，产物 `~/ota-dist/` | ✅ B→A 全流程实测（skill「ota升级124.30」入口） |
+| `.github/skills/rockbase-ota/SKILL.md` | skill：提示词「ota升级124.30」触发上述全流程 | ✅ 实测 |
 | `rootfs_overlay/usr/sbin/rockbase-ota.sh` | OTA agent：`status/check/apply/confirm/rollback`；真 apply 前 quiesce 服务（停 supervisord→ckpool/bitcoind/miners/statusd→暂停 serialhealthd，留 lcdui/httpd/网络/sshd），失败逆序恢复 | ✅ E2 真切槽验证（含 quiesce） |
 | `tools/mk-ota-package.sh` | 构建端打包：gzip 槽镜像 + sha256 + openssl dgst 签名 + manifest.json | ✅ E2/E3 真包验证 |
 | `rootfs_overlay/etc/init.d/S98otaconfirm` | 确认服务：升级启动后等 web+sshd+bitcoind 健康则 `ota confirm` | ✅ E4 回滚后自动确认 |
@@ -169,10 +179,11 @@ kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=..
 
 ~~A3 设备端 apply dry-run~~ 2026-08-21 完成。~~阶段 B 串口手测~~ 2026-08-24 完成。
 ~~阶段 D 分区改造~~ 2026-08-24 完成（镜像 `sysimage-sdcard-rockbase-1g-min-net-20260824-112046`）。
-~~阶段 E1~E4 全链路~~ 2026-08-24 完成（见第 4 节阶段 E 表格与两个修复坑）。
+~~阶段 E1~E4 全链路~~ 2026-08-24 完成（见第 4 节阶段 E 表格与三个修复坑）。
+~~`ota-push.sh` + skill 一键推送（B→A）~~ 2026-08-24 实测闭环；`ota` 分支已 ff 合并进 `dev`。
 
 **接手第一件事：E6 回归 + 阶段 C 剩余项（GitHub Releases + 域名重定向），
-或直接进 P2（Web 升级页 + LCD OTA 进度）。**
+或直接进 P2（Web 升级页 + LCD OTA 进度）。后续开发直接在 `dev` 分支进行。**
 
 ## 8. 下一步该做什么（按优先级）
 
@@ -236,7 +247,7 @@ ssh -o StrictHostKeyChecking=no root@192.168.124.30   # 无密码（key 已信�
 
 ## 13. 接手检查清单（5 分钟上手）
 
-- [ ] `git checkout ota && git log --oneline -6` 确认在最新 ota 分支
+- [ ] `git checkout dev && git log --oneline -6` 确认在最新 dev（ota 已合并）
 - [ ] 读 `docs/design/rockbase-ota-plan.md` 第 2、7 章
 - [ ] A2/A3 均已完成验证（第 4、6 节），无需复查
 - [ ] 下一步：A1（推荐，见第 8 节）或 B
