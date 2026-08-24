@@ -7,9 +7,10 @@
 
 ## 0. 一句话现状
 
-**阶段 A（A1/A2/A3）+ 阶段 B（uboot 选槽/回滚串口手测）已全部完成并验证通过**；
-阶段 D（双槽分区布局）源码改造已完成、1G 最小镜像构建中，
-下一步是 **把新镜像烧到 124.30 做阶段 E 全链路真机验证**。
+**A/B OTA 主框架全链路（E1~E4）已于 2026-08-24 在 124.30 真机验证通过**：
+双槽切换、配置/数据保留、写盘中途断电安全、bootcount 超限自动回滚全部工作。
+剩余：E5（2G 板适配，需先评估 2G defconfig）、E6 回归、阶段 C 的 GitHub 发布链路、
+P2 的 Web 升级页（ota.cgi + 前端卡片 + LCD 进度展示）。
 
 ---
 
@@ -33,6 +34,10 @@ ota 分支（当前工作分支）：
   56f929dd  feat: A2 libubootenv + S00 fw_env 修复
   0ef9fcb8  feat: A3 OTA agent + 打包 + 确认服务 + 工具链
   e954f64c  fix:  A3 板端兼容修复（pgrep→ps、Range 容错）
+  dfc742ae  feat: A1 v2 配置独立分区（p3=rockcfg / p4=blockdata）
+  a81d473f  feat: 阶段 B+D（双槽布局、uboot bootcount、槽位自包含 /boot）
+  c87eaab5  fix:  blinux 内联 bootargs（uboot 单层展开，首烧 VFS panic 修复）
+  eaee4386  feat: E2 加固（apply 服务 quiesce + S00 脏 FS 修复重试）
 
 回退基线：dev 分支 = 363c7f69（OTA 之前的稳定点）
 镜像回退：dev 对应旧布局镜像可随时重烧恢复
@@ -89,7 +94,32 @@ ota 分支（当前工作分支）：
 - 兼容性核查：`S00resizemmc` 只在 p4 存在时扩容 p4，不动 rootfs 分区（p1/p2 双槽安全）；
   rootfs_overlay 无 p1/boot 分区残留引用。
 
-### 阶段 E：全链路真机验证 ⬜ 未开始（等阶段 D 镜像烧录）
+### 阶段 E：全链路真机验证 ✅ E1~E4 已通过（2026-08-24，124.30）
+
+| # | 用例 | 结果 |
+|---|---|---|
+| E1 | 新镜像烧录 → slot A 启动 | ✅ `root=/dev/mmcblk1p1`、p4 扩容到卡尾、p3 播种、服务全起 |
+| E2 | 真 OTA apply 写 slot B | ✅ 切 `ota_part=2` 从 B 起（版本标记 `99999999-e2test`）、p3/p4 完好、confirm 后 `upgrade_available=0 bootcount=0`。过程中暴露并修复两个坑（见下） |
+| E3 | dd 写 A 槽中途断电（49% 处） | ✅ 上电照常用 slot B 启动，env 未污染，p4 journal replay 正常 |
+| E4 | 破坏 A 槽 + 切 `ota_part=1` | ✅ 串口实测 bootcount 1→2→3 递增，超限自动 altbootcmd 回滚 slot B；回滚后 S98otaconfirm 自动确认 |
+| E5 | 2G 板（mmcblk0） | ⬜ 未测（2G defconfig 按约束未动，需另行评估） |
+| E6 | 回归：seed 构建、网络切换 | ⬜ 未测 |
+
+**E2 暴露并修复的两个坑（commit eaee4386，均已板端验证）**：
+
+1. **freeze 看门狗误杀**：dd 写 SD 期间 mmc1 host claim 长占用是预期行为，
+   `rockbase_serial_healthd` 误判冻结 → sysrq crash（连续 3 次）；supervisord
+   还会把 bitcoind 拉回来加剧争抢。修复：`rockbase-ota.sh` 真 apply 前
+   quiesce（先停 supervisord 断复活 → ckpool/bitcoind/miners/statusd →
+   暂停 serialhealthd；保留 lcdui/httpd/网络/sshd），失败逆序恢复。
+2. **新槽首启 p4 挂不上**：崩溃弄脏 p4 → 新槽（无 `/resize_done`）S00 的
+   resize2fs 被拒（需先 e2fsck）→ `/resize_done` 建不了 → S59 无限期推迟挂载
+   → otaconfirm 等不到健康。修复：S00 `resize_fs()`（resize2fs 失败先
+   `e2fsck -f -y` 再重试）。
+
+**另一个阶段 D 的首烧坑（commit c87eaab5）**：uboot 变量单层展开——
+`ota_bootargs` 中间变量会让 `${mmc_boot_dev_num}`/`${ota_part}` 以字面量进
+kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=...p${ota_part} ...`。
 
 ---
 
@@ -97,21 +127,21 @@ ota 分支（当前工作分支）：
 
 | 文件 | 作用 | 验证状态 |
 |---|---|---|
-| `rootfs_overlay/usr/sbin/rockbase-ota.sh` | OTA agent：`status/check/apply/confirm/rollback`。下载+验签是真实逻辑；dd+切槽用 `--force` 门控（默认 dry-run 安全） | check/status ✅ 板端验证；apply dry-run 🔄 收尾中 |
-| `tools/mk-ota-package.sh` | 构建端打包：gzip 槽镜像 + sha256 + openssl dgst 签名 + manifest.json | ✅ 本机全流程自测通过 |
-| `rootfs_overlay/etc/init.d/S98otaconfirm` | 确认服务：升级启动后等 web+sshd+bitcoind 健康则 `ota confirm` | 已写，待阶段 D 后真验 |
+| `rootfs_overlay/usr/sbin/rockbase-ota.sh` | OTA agent：`status/check/apply/confirm/rollback`；真 apply 前 quiesce 服务（停 supervisord→ckpool/bitcoind/miners/statusd→暂停 serialhealthd，留 lcdui/httpd/网络/sshd），失败逆序恢复 | ✅ E2 真切槽验证（含 quiesce） |
+| `tools/mk-ota-package.sh` | 构建端打包：gzip 槽镜像 + sha256 + openssl dgst 签名 + manifest.json | ✅ E2/E3 真包验证 |
+| `rootfs_overlay/etc/init.d/S98otaconfirm` | 确认服务：升级启动后等 web+sshd+bitcoind 健康则 `ota confirm` | ✅ E4 回滚后自动确认 |
 | `rootfs_overlay/etc/rockbase-ota-pub.pem` | 验签公钥（测试密钥） | ✅ 已固化进 overlay |
 | `k230_rockbase_1g_defconfig` | +`LIBUBOOTENV`、`LIBCURL(+CURL/_OPENSSL)`、`CA_CERTIFICATES`、`LIBOPENSSL_BIN` | ✅ 已编译进镜像 |
 | `.gitignore` | +`*-private.pem` 防私钥误提交 | ✅ |
 | `rootfs_overlay/etc/init.d/S05config` | A1 v2：早期挂载 `LABEL=rockcfg`（p3）到 `/root/config` + 出厂默认播种 + 降级回退（blkid 表解析，busybox 无 `blkid -L`） | ✅ 板端验证 |
 | `rootfs_overlay/etc/rockbase-factory-defaults/` | A1：出厂默认 `bitcoin.conf`/`ckpool.conf`（原 rootfs 实体文件移入） | ✅ 板端 md5 与原文件一致 |
 | 消费方路径直改 `/root/config/…`（无符号链接） | `S61bitcoind`/`S62ckpool`/`bitcoind start|stop.sh`/`ckpool/start.sh`/`rockbase_statusd.sh`/`rockbase_bitcoind_ready.sh`/`rockbase_wifi.sh`(`WIFI_CONFIG_FILE`) | ✅ 板端验证（重启后 bitcoind 以新路径启动） |
-| `S59blockdata` / `S00resizemmc` | A1 v2：S59 按 LABEL=blockdata 挂载（回退 p4）；S00 扩容对象 p3→p4 | ✅ 板端验证（LABEL 挂载正常；S00 扩容逻辑待阶段 D 新卡验证） |
+| `S59blockdata` / `S00resizemmc` | A1 v2：S59 按 LABEL=blockdata 挂载（回退 p4）；S00 扩容对象 p3→p4；S00 `resize_fs()` 脏 FS 先 e2fsck 再 resize（E2 修复） | ✅ E1/E3 验证（扩容、脏挂载恢复均正常） |
 | `genimage.cfg` + `post-image.sh` | A1 v2：新增 p3 config 分区（空 256M `rockcfg.ext4`，`gen_rockcfg_ext4`） | ✅ 阶段 D 镜像已验证 |
 | `genimage.cfg`（阶段 D） | 删 80M boot 分区；p1=slot_a / p2=slot_b（同一 `rootfs.ext4` 写两遍）；p3=config、p4=blockdata | ✅ 镜像分区表 fdisk 验证（30M 起，2G/2G/256M/256M） |
 | `post-build.sh`（阶段 D） | `gen_target_boot`：`Image`/`k.dtb`(实文件)/`fw_jump_add_uboot_head.bin` 装进 `${TARGET_DIR}/boot/` | ✅ rootfs.ext4 debugfs 验证 |
-| `default.env`（阶段 D） | A/B 版：`ota_part=1`/`bootlimit=3`/`upgrade_available=0`/`ota_bootargs`/新 `blinux`/`altbootcmd` | ✅ env.env strings 验证（命令与串口手测逐字一致） |
-| uboot `k230_rockbase_defconfig` | `CONFIG_BOOTCOUNT_LIMIT=y` + `CONFIG_BOOTCOUNT_ENV=y` | ✅ 已重编进 `fn_ug_u-boot.bin`；bootcount 行为待烧录后验证（E4） |
+| `default.env`（阶段 D） | A/B 版：`ota_part=1`/`bootlimit=3`/`upgrade_available=0`/新 `blinux`（bootargs 内联，uboot 单层展开）/`altbootcmd` | ✅ E1~E4 全链路验证 |
+| uboot `k230_rockbase_defconfig` | `CONFIG_BOOTCOUNT_LIMIT=y` + `CONFIG_BOOTCOUNT_ENV=y` | ✅ E4 验证：bootcount 逐次 +1、超限触发 altbootcmd 回滚 |
 
 > A1 曾有 v1（配置放 blockdata 子目录 + 符号链接），经讨论改为 v2 独立分区方案，
 > v1 产物（`S05blockdata`、符号链接、wifi readlink 补丁）已全部移除。
@@ -137,36 +167,23 @@ ota 分支（当前工作分支）：
 
 ## 7. 正在进行的事（接手第一件事）
 
-~~A3 设备端 apply dry-run~~ **已于 2026-08-21 验证通过**（WiFi / USB 有线各一次）：下载 → 验签 →
-sha256 校验 → 正确识别目标槽位 `mmcblk1p1`，日志 `DRY-RUN complete`。A3 收尾完成。
+~~A3 设备端 apply dry-run~~ 2026-08-21 完成。~~阶段 B 串口手测~~ 2026-08-24 完成。
+~~阶段 D 分区改造~~ 2026-08-24 完成（镜像 `sysimage-sdcard-rockbase-1g-min-net-20260824-112046`）。
+~~阶段 E1~E4 全链路~~ 2026-08-24 完成（见第 4 节阶段 E 表格与两个修复坑）。
 
-~~阶段 B 串口手测~~ **已于 2026-08-24 完成**（见第 4/6 节）。阶段 D 源码改造完成，
-1G 最小镜像已构建导出：`/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-1g-min-net-20260824-110716/`
-（4.53GiB，p1=slot_a 2G / p2=slot_b 2G / p3=config 256M / p4=blockdata 256M，S00 首启扩 p4 到卡尾）。
-
-**接手第一件事：烧录该镜像到 124.30，跑阶段 E 全链路验证（见第 8 节）。**
-
-历史备注：dry-run 时板子 WiFi ~40-60KB/s，34MB 包下载约 10 分钟；USB 有线约 11MB/s。
+**接手第一件事：E6 回归 + 阶段 C 剩余项（GitHub Releases + 域名重定向），
+或直接进 P2（Web 升级页 + LCD OTA 进度）。**
 
 ## 8. 下一步该做什么（按优先级）
 
-### 阶段 E：全链路真机验证 ← 下一步（烧录阶段 D 镜像后按序执行）
+1. **E6 回归**：seed 镜像构建不受影响、USB/SDIO 网络切换不受影响。
+2. **阶段 C 剩余**：GitHub Releases 真实发布 + `ota.nmminer.com` 301 重定向链路（本机 HTTP 已验证）。
+3. **P2 Web 集成**：`/root/web/api/ota.cgi`（status/check/apply + 进度轮询）+
+   前端「系统升级」卡片 + LCD OTA 进度展示。
+4. **E5（需用户拍板）**：2G 板适配——2G defconfig 按约束一直没动，
+   要做的话需同步阶段 B/C/D 的全部改动并注意 mmc 设备号相反（mmcblk0）。
 
-| # | 用例 | 预期 |
-|---|---|---|
-| E1 | 新镜像烧录 → slot A 启动 | 正常启动、`/proc/cmdline` 为 `root=/dev/mmcblk1p1`、p4 扩容/挂载正常、配置在 p3、WiFi/USB 网连通 |
-| E1b | bootcount 观察 | `upgrade_available=0` 时 bootcount 恒 0（BOOTCOUNT_ENV 行为） |
-| E2 | 真 OTA：`rockbase-ota.sh apply`（去掉 dry-run）写 slot B | 切 `ota_part=2` 重启、从 B 起来、版本号变化、WiFi/ckpool/bitcoin 配置（p3）原样保留；`S98otaconfirm` 确认清 `upgrade_available` |
-| E3 | dd 写 B 中途断电 | 仍从 A 正常启动 |
-| E4 | 切槽后破坏 B（dd 冲掉 B 的 `/boot/Image`） | bootcount 每次 +1，超 `bootlimit=3` 后 uboot 自动 `altbootcmd` 回 A |
-| E5 | 2G 板（mmcblk0）跑一遍 | 设备号自适应（**注意：2G defconfig 按约束未动，需另行评估**） |
-| E6 | 回归：seed 镜像构建、USB/SDIO 网络切换 | 不受影响 |
-
-回退预案：新布局有问题就重烧 dev 分支旧布局镜像；p3 配置与 p4 区块数据在
-阶段 D 重烧后需要重灌/重同步（分区表变了）。
-
-### 阶段 C 剩余项（可后置）
-GitHub Releases 真实发布 + `ota.nmminer.com` 301 重定向链路验证（本机 HTTP 已通）。
+回退预案：新布局有问题就重烧 dev 分支旧布局镜像。
 
 ---
 
