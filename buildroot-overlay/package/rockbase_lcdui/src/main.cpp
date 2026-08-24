@@ -27,6 +27,7 @@
 #include "lvgl/draw/lv_snapshot.h"
 #include "timezone_overlay.h"
 #include "wifi_config_overlay.h"
+#include "ota_overlay.h"
 
 namespace {
 
@@ -319,6 +320,7 @@ TimezoneOverlay g_timezone_overlay;
 bool g_timezone_overlay_open_pending = false;
 MinersOverlay g_miners_overlay;
 bool g_miners_overlay_open_pending = false;
+OtaOverlay g_ota_overlay;
 int g_pressed_hotspot_index = -1;
 bool g_show_page_indicator = false;
 
@@ -337,7 +339,7 @@ uint32_t tick_ms() {
 bool ui_interacting(uint32_t now_ms = tick_ms()) {
     (void)now_ms;
     return g_touch.down || g_pager_anim_active || g_wifi_config_overlay.active() ||
-           g_timezone_overlay.active() || g_miners_overlay.active();
+           g_timezone_overlay.active() || g_miners_overlay.active() || g_ota_overlay.active();
 }
 
 struct ConfigHotspot {
@@ -1938,7 +1940,8 @@ void touch_read_cb(lv_indev_t*, lv_indev_data_t* data) {
     g_swipe_current_y = data->point.y;
 
     static bool was_down = false;
-    if (g_wifi_config_overlay.active() || g_timezone_overlay.active() || g_miners_overlay.active()) {
+    if (g_wifi_config_overlay.active() || g_timezone_overlay.active() || g_miners_overlay.active() ||
+        g_ota_overlay.active()) {
         if (g_wifi_config_overlay.active() && g_wifi_config_overlay_wait_release) {
             if (!g_touch.down) {
                 g_wifi_config_overlay_wait_release = false;
@@ -3127,26 +3130,31 @@ int main() {
         g_wifi_config_overlay.update();
         g_timezone_overlay.update();
         g_miners_overlay.update();
+        g_ota_overlay.update();  // self-manages open/close from /run/rockbase/ota-state.json
         process_deferred_refreshes_if_idle();
         refresh_one_dirty_page_if_idle();
 
         bool custom_present = false;
-        if (!g_wifi_config_overlay.active() && !g_timezone_overlay.active() && !g_miners_overlay.active() && g_touch.down) {
+        if (!g_wifi_config_overlay.active() && !g_timezone_overlay.active() && !g_miners_overlay.active() &&
+            !g_ota_overlay.active() && g_touch.down) {
             const int32_t scroll_x = visual_scroll_x_from_touch();
             if (g_swipe_drag_started) {
                 custom_present = present_pager_frame(scroll_x);
             }
         }
-        else if (!g_wifi_config_overlay.active() && !g_timezone_overlay.active() && !g_miners_overlay.active() && g_pager_anim_active) {
+        else if (!g_wifi_config_overlay.active() && !g_timezone_overlay.active() && !g_miners_overlay.active() &&
+                 !g_ota_overlay.active() && g_pager_anim_active) {
             custom_present = present_pager_snap_anim(now_ms);
         }
 
         g_custom_frame_presenting = !g_wifi_config_overlay.active() && !g_timezone_overlay.active() &&
-                                    !g_miners_overlay.active() &&
+                                    !g_miners_overlay.active() && !g_ota_overlay.active() &&
                                     (g_touch.down || custom_present);
         uint32_t next_ms = lv_timer_handler();
         g_custom_frame_presenting = false;
-        if (interacting) {
+        // The OTA overlay has no touch interaction and can stay up for many
+        // minutes; it must not force the no-sleep high-framerate mode.
+        if (interacting && !g_ota_overlay.active()) {
             next_ms = 0;
         }
         uint32_t sleep_us = next_ms * 1000U;
