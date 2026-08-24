@@ -14,8 +14,14 @@ description: 'Rockbase A/B OTA 升级真机流程。Use when: ota升级, OTA 升
 
 - 布局：`p1=slot_a / p2=slot_b / p3=config(rockcfg) / p4=blockdata`，每槽 `/boot/` 自包含。
 - 板端 agent：`/usr/sbin/rockbase-ota.sh`（`status/check/apply/confirm/rollback`）。
-  真 apply 已内置 **quiesce**（自动停 supervisord/bitcoind/ckpool 等、暂停 freeze 看门狗，
-  保留 lcdui/httpd/网络/sshd），**不要手动再停服务**。
+  真 apply 已内置 **direct quiesce**：不依赖容易卡住的 init `stop`，而是直接按
+  cmdline/killall 清理 `bitcoind`/`ckpool`/`statusd`/miners/supervisord/serialhealth/
+  用户态 watchdog，保留 lcdui/httpd/网络/sshd。**不要手动再停服务**。
+- OTA agent 必须有 `/run/rockbase/ota-apply.lock` 防并发 apply；重复触发应被拒绝，
+  不能出现多个 `rockbase-ota.sh apply`/`gunzip` 同时写槽。
+- 写盘进度以目标分区 `/proc/diskstats` 写扇区增量为准，并写入
+  `/run/rockbase/ota-state.json`（LCD 覆膜）和 `/dev/console`（串口日志）。
+  不要再用 pipeline `$!` + `/proc/<pid>/io` 判断 dd 进度。
 - **必须 nohup 跑 apply**：SSH 会话死掉会杀远程 dd（E2 踩过）。`tools/ota-push.sh` 已处理。
 - 切槽重启后 **SSH host key 会变**（另一个槽有独立 `/etc/ssh`）：
   先 `ssh-keygen -R <ip>` 再连。脚本已处理前置，升级后若再变需手动清一次。
@@ -39,16 +45,33 @@ tools/ota-push.sh 192.168.124.30 v0.1.0     # 或显式指定
 **镜像来源**：`output/k230_rockbase_1g_defconfig/images/rootfs.ext2`。
 用户说「重新编译再升级」时才先构建（见 `rockbase-build` skill）；否则直接用现有构建产物。
 
+**重要**：热部署到板上的修复不会自动进入 OTA 包。若刚修了 `rockbase-ota.sh`、
+`S00resizemmc` 或 `rockbase-lcdui`，必须重新构建 1G 镜像，并用 `debugfs` 从新的
+`rootfs.ext2` 抽文件验证后再 OTA。
+
 ### 2. 监控 dd 进度（约 2~4 分钟）
 
 ```bash
 ssh root@192.168.124.30 '
-  awk "\$3==\"mmcblk1pX\" {print \$10\"/4194304\"}" /proc/diskstats   # X=非活动槽
-  tail -3 /root/block/ota/ota.log'
+  cat /run/rockbase/ota-state.json 2>/dev/null || true
+  grep "flashing progress\|flash done\|switching boot\|rebooting" /root/block/ota/ota.log | tail -20
+  ps | grep -v grep | grep -E "rockbase-ota|gunzip|dd of=" || true'
 ```
 
 日志出现 `rebooting into new slot` 或 SSH 断连 = 正常（正在切槽重启）。
 SSH 中途 banner timeout 属正常（dd 占 SD 卡时 sshd 响应慢），重试即可。
+
+写盘正常日志示例（124.30，2026-08-24 已验证）：
+
+```text
+flashing progress: 42% (.../2048 MiB)
+flashing progress: 49% (.../2048 MiB)   # 已越过旧故障点
+...
+flashing progress: 94% (.../2048 MiB)
+flash done
+switching boot slot -> <new-slot> (upgrade_available=1, bootcount=0)
+rebooting into new slot...
+```
 
 ### 3. 升级后验证清单
 
@@ -74,6 +97,15 @@ ssh root@192.168.124.30 '
 ### 4. 失败处置
 
 - apply 中途断电/崩溃：**无所谓**，运行槽不受影响，重跑一次推送即可（A/B 的意义）。
+- 如果日志停在 `flashing progress: 36~43%` 后重启，且重启后仍是旧槽、
+  `upgrade_available=0`，说明写槽中途被重启，未执行到 `fw_setenv`，A/B 保护正常。
+  优先检查当前镜像里的 OTA agent 是否包含 direct quiesce、`S05watchdog`/`S04serialhealth`
+  是否在写盘期被清理。
+- 如果日志停在 `quiescing services for OTA`，检查是否有卡住的
+  `S61bitcoind stop`、`S43statusd stop`、`/root/bitcoind/stop.sh` 或重复 apply。
+  当前正确实现应直接清理进程，并用 apply lock 防重复触发。
+- 如果重启后 `/root/block` 没挂载、`upgrade_available=1` 未确认，检查 `S00resizemmc`
+  是否包含 `resize_fs()` 中 `e2fsck -f -y` 后接受 `rc < 4` 再 retry `resize2fs` 的修复。
 - 连续 3 次启动未确认 → uboot 自动回滚旧槽（E4 已验证）。
 - 手动回滚：板上 `rockbase-ota.sh rollback`。
 - 完整排查手册：`docs/rockbase-ota-handoff.md` 第 4/6 节。

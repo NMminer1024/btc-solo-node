@@ -34,6 +34,7 @@ LOGFILE=${OTA_LOG:-$WORKDIR/ota.log}
 # strictly tied to the apply run - no stale state after reboot.
 STATE_FILE=${OTA_STATE_FILE:-/run/rockbase/ota-state.json}
 STATE_ENABLED=0   # only a real apply (--force) drives the overlay
+APPLY_LOCKDIR=${OTA_APPLY_LOCKDIR:-/run/rockbase/ota-apply.lock}
 
 # set_state <phase> <progress 0-100|-1 indeterminate> <message>
 set_state() {
@@ -53,7 +54,10 @@ ENV_UPGRADE=upgrade_available
 
 log() {
     mkdir -p "$WORKDIR" 2>/dev/null
-    echo "[$(date '+%F %T')] $*" | tee -a "$LOGFILE" >&2
+    local line
+    line="[$(date '+%F %T')] $*"
+    echo "$line" | tee -a "$LOGFILE" >&2
+    [ -w /dev/console ] && echo "$line" > /dev/console
 }
 
 die() {
@@ -71,24 +75,95 @@ require() {
     done
 }
 
+acquire_apply_lock() {
+    local old_pid
+    mkdir -p /run/rockbase 2>/dev/null
+    if mkdir "$APPLY_LOCKDIR" 2>/dev/null; then
+        echo $$ > "$APPLY_LOCKDIR/pid" 2>/dev/null || true
+        trap 'rm -rf "$APPLY_LOCKDIR"' EXIT INT TERM
+        return 0
+    fi
+    old_pid=$(cat "$APPLY_LOCKDIR/pid" 2>/dev/null || true)
+    if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+        die "another OTA apply is already running (pid=$old_pid)"
+    fi
+    rm -rf "$APPLY_LOCKDIR" 2>/dev/null || true
+    mkdir "$APPLY_LOCKDIR" 2>/dev/null || die "cannot acquire OTA apply lock"
+    echo $$ > "$APPLY_LOCKDIR/pid" 2>/dev/null || true
+    trap 'rm -rf "$APPLY_LOCKDIR"' EXIT INT TERM
+}
+
 # --- service quiesce ---------------------------------------------------------
 # Lesson from E2 (2026-08-24): OTA flashing is a long, heavy SD write.
 #  1) supervisord resurrects bitcoind mid-flash (SD IO contention returns)
 #  2) serial healthd sees the expected long MMC host claims during dd and
 #     false-positives a freeze -> sysrq crash -> reboot mid-flash
 # So before a real apply: stop the resurrector FIRST, then all SD/network
-# heavy services, and pause the freeze watchdog for the duration.
+# heavy services, and pause software/hardware watchdog helpers for the duration.
 # Kept running on purpose: lcdui (LCD shows OTA progress), httpd (web
 # progress polling), network, sshd.
-OTA_QUIESCE_SERVICES="S45supervisord S62ckpool S61bitcoind S64miners-history S63miners-cache S43statusd S04serialhealthd"
+OTA_QUIESCE_SERVICES="S45supervisord S62ckpool S61bitcoind S64miners-history S63miners-cache S43statusd S04serialhealth S05watchdog"
 OTA_QUIESCED=0
 
-ota_quiesce() {
-    local s
-    log "quiescing services for OTA (keeping lcdui/httpd/network/sshd up)"
-    for s in $OTA_QUIESCE_SERVICES; do
-        [ -x "/etc/init.d/$s" ] && "/etc/init.d/$s" stop >/dev/null 2>&1 || true
+kill_cmdline_matches() {
+    local pattern=$1 sig=${2:-} proc_dir pid cmdline
+    for proc_dir in /proc/[0-9]*; do
+        [ -r "$proc_dir/cmdline" ] || continue
+        pid=${proc_dir##*/}
+        [ "$pid" = "$$" ] && continue
+        cmdline=$(tr '\000' ' ' <"$proc_dir/cmdline" 2>/dev/null || true)
+        case "$cmdline" in
+            *"$pattern"*) kill $sig "$pid" >/dev/null 2>&1 || true ;;
+        esac
     done
+}
+
+stop_init_bounded() {
+    local s=$1 pid waited=0 limit=8
+    [ -x "/etc/init.d/$s" ] || return 0
+    "/etc/init.d/$s" stop >/dev/null 2>&1 &
+    pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        if [ "$waited" -ge "$limit" ]; then
+            log "WARN: /etc/init.d/$s stop timed out; continuing OTA quiesce"
+            kill "$pid" >/dev/null 2>&1 || true
+            sleep 1
+            kill -9 "$pid" >/dev/null 2>&1 || true
+            break
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+    wait "$pid" >/dev/null 2>&1 || true
+}
+
+ota_quiesce() {
+    log "quiescing services for OTA (keeping lcdui/httpd/network/sshd up)"
+    kill_cmdline_matches rockbase_supervisord.sh
+    kill_cmdline_matches rockbase_statusd.sh
+    kill_cmdline_matches rockbase_miners_cache.sh
+    kill_cmdline_matches rockbase_miners_history.sh
+    kill_cmdline_matches rockbase_serial_healthd.sh
+    kill_cmdline_matches /etc/init.d/S43statusd
+    kill_cmdline_matches /etc/init.d/S61bitcoind
+    kill_cmdline_matches /root/bitcoind/stop.sh
+    kill_cmdline_matches "watchdog -T"
+    killall rockbase_serial_healthd.sh >/dev/null 2>&1 || true
+    killall watchdog >/dev/null 2>&1 || true
+    killall bitcoind >/dev/null 2>&1 || true
+    killall ckpool >/dev/null 2>&1 || true
+    sleep 1
+    kill_cmdline_matches rockbase_supervisord.sh -9
+    kill_cmdline_matches rockbase_statusd.sh -9
+    kill_cmdline_matches rockbase_miners_cache.sh -9
+    kill_cmdline_matches rockbase_miners_history.sh -9
+    kill_cmdline_matches rockbase_serial_healthd.sh -9
+    kill_cmdline_matches /etc/init.d/S43statusd -9
+    kill_cmdline_matches /etc/init.d/S61bitcoind -9
+    kill_cmdline_matches /root/bitcoind/stop.sh -9
+    kill_cmdline_matches "watchdog -T" -9
+    killall -9 bitcoind >/dev/null 2>&1 || true
+    killall -9 ckpool >/dev/null 2>&1 || true
     OTA_QUIESCED=1
 }
 
@@ -136,6 +211,11 @@ inactive_slot() {
         2) echo 1 ;;
         *) die "cannot determine inactive slot from current=$cur" ;;
     esac
+}
+
+disk_written_sectors() {
+    local part=$1
+    awk -v part="$part" '$3 == part { print $10; found = 1 } END { exit found ? 0 : 1 }' /proc/diskstats
 }
 
 # --- manifest parsing (busybox-friendly, no jq) ------------------------------
@@ -236,6 +316,7 @@ cmd_apply() {
     done
     [ -n "$url" ] || die "usage: $PROG apply <manifest_url> [--force]"
     require curl openssl sha256sum gunzip dd
+    acquire_apply_lock
 
     mkdir -p "$WORKDIR"
     local mf="$WORKDIR/$MANIFEST_NAME"
@@ -300,20 +381,32 @@ cmd_apply() {
         return 0
     fi
 
-    # 3) flash inactive slot (progress via dd's /proc/<pid>/io write_bytes)
+    # 3) flash inactive slot (progress via target partition diskstats)
     [ -b "$tgt_dev" ] || die "target device not found: $tgt_dev (A/B layout not present yet?)"
     set_state flashing 0 "Writing system image"
     log "flashing $tgt_dev ..."
-    local flash_total=""
+    local flash_total="" tgt_base start_sectors cur_sectors done_bytes pct next_report mib_done mib_total
     flash_total=$(cat "/sys/block/$(basename "$bd")/$(basename "$tgt_dev")/size" 2>/dev/null || true)
     [ -n "$flash_total" ] && flash_total=$((flash_total * 512)) || flash_total=0
+    tgt_base=$(basename "$tgt_dev")
+    start_sectors=$(disk_written_sectors "$tgt_base" 2>/dev/null || echo 0)
+    next_report=0
     gunzip -c "$img" | dd of="$tgt_dev" bs=4M conv=fsync status=none &
-    local dd_pid=$! wb
+    local dd_pid=$!
     while kill -0 "$dd_pid" 2>/dev/null; do
         if [ "$flash_total" -gt 0 ]; then
-            wb=$(awk '/^write_bytes/{print $2}' "/proc/$dd_pid/io" 2>/dev/null || true)
-            [ -n "$wb" ] && [ "$wb" -gt 0 ] && \
-                set_state flashing $((wb * 100 / flash_total)) "Writing system image"
+            cur_sectors=$(disk_written_sectors "$tgt_base" 2>/dev/null || echo "$start_sectors")
+            done_bytes=$(((cur_sectors - start_sectors) * 512))
+            [ "$done_bytes" -lt 0 ] 2>/dev/null && done_bytes=0
+            pct=$((done_bytes * 100 / flash_total))
+            [ "$pct" -gt 100 ] && pct=100
+            set_state flashing "$pct" "Writing system image"
+            if [ "$pct" -ge "$next_report" ]; then
+                mib_done=$((done_bytes / 1048576))
+                mib_total=$((flash_total / 1048576))
+                log "flashing progress: ${pct}% (${mib_done}/${mib_total} MiB)"
+                next_report=$((pct + 5))
+            fi
         fi
         sleep 2
     done

@@ -101,19 +101,19 @@ ota 分支（已全部 ff 合并进 dev @ 131a4fca，后续直接在 dev 上开�
 | # | 用例 | 结果 |
 |---|---|---|
 | E1 | 新镜像烧录 → slot A 启动 | ✅ `root=/dev/mmcblk1p1`、p4 扩容到卡尾、p3 播种、服务全起 |
-| E2 | 真 OTA apply 写对侧槽 | ✅ A→B：切 `ota_part=2` 从 B 起（版本标记 `99999999-e2test`）、p3/p4 完好、confirm 后 `upgrade_available=0 bootcount=0`。B→A：`ota-push.sh` 一键推送 `v20260824-112046-ota` 到 slot A、重启起 p1、修复 p4 后 confirm 成功。过程中暴露并修复三个坑（见下） |
+| E2 | 真 OTA apply 写对侧槽 | ✅ A→B：切 `ota_part=2` 从 B 起（版本标记 `99999999-e2test`）、p3/p4 完好、confirm 后 `upgrade_available=0 bootcount=0`。B→A：`ota-push.sh` 一键推送 `v20260824-112046-ota` 到 slot A、重启起 p1、修复 p4 后 confirm 成功。最终回归：`v20260824-165803-ota` 从 p2 写 p1，进度 0→94%，`flash done`→切 p1→自动 confirm 成功。过程中暴露并修复多个坑（见下） |
 | E3 | dd 写 A 槽中途断电（49% 处） | ✅ 上电照常用 slot B 启动，env 未污染，p4 journal replay 正常 |
 | E4 | 破坏 A 槽 + 切 `ota_part=1` | ✅ 串口实测 bootcount 1→2→3 递增，超限自动 altbootcmd 回滚 slot B；回滚后 S98otaconfirm 自动确认 |
 | E5 | 2G 板（mmcblk0） | ⬜ 未测（2G defconfig 按约束未动，需另行评估） |
 | E6 | 回归：seed 构建、网络切换 | ⬜ 未测 |
 
-**E2 暴露并修复的三个坑（前两个 commit eaee4386，均已板端验证）**：
+**E2 暴露并修复的关键坑（均已在 124.30 真机验证）**：
 
 1. **freeze 看门狗误杀**：dd 写 SD 期间 mmc1 host claim 长占用是预期行为，
    `rockbase_serial_healthd` 误判冻结 → sysrq crash（连续 3 次）；supervisord
-   还会把 bitcoind 拉回来加剧争抢。修复：`rockbase-ota.sh` 真 apply 前
-   quiesce（先停 supervisord 断复活 → ckpool/bitcoind/miners/statusd →
-   暂停 serialhealthd；保留 lcdui/httpd/网络/sshd），失败逆序恢复。
+  还会把 bitcoind 拉回来加剧争抢。最终修复：`rockbase-ota.sh` 真 apply 前
+  direct quiesce，按 cmdline/killall 直接清理 bitcoind/ckpool/statusd/miners/
+  supervisord/serialhealth/用户态 watchdog，保留 lcdui/httpd/网络/sshd。
 2. **新槽首启 p4 挂不上**：崩溃弄脏 p4 → 新槽（无 `/resize_done`）S00 的
    resize2fs 被拒（需先 e2fsck）→ `/resize_done` 建不了 → S59 无限期推迟挂载
    → otaconfirm 等不到健康。修复：S00 `resize_fs()`（resize2fs 失败先
@@ -124,6 +124,16 @@ ota 分支（已全部 ff 合并进 dev @ 131a4fca，后续直接在 dev 上开�
    验证后写回源码的，OTA 打进对侧槽的镜像仍是构建时点的脚本版本——本次就是
    靠热部署新 S00 重跑才把 A 槽 p4 修好**（运维教训：OTA 槽镜像只带构建时点
    的脚本，热修复不会随 OTA 传播）。
+4. **写盘进度卡 0%**：busybox ash 后台 pipeline 下 `$!` 不可靠，读
+  `/proc/<pid>/io` 可能不是实际 dd 写进程。修复：按目标分区 `/proc/diskstats`
+  写扇区增量计算进度，同时写 `/run/rockbase/ota-state.json`（LCD 覆膜）和
+  `/dev/console`（串口日志）。
+5. **36~43% 写盘中重启但 env 未切槽**：日志无 `flash done`/`switching boot`，
+  重启后仍旧槽且 `upgrade_available=0`，说明中断在 `fw_setenv` 前，A/B 保护有效。
+  根因链：quiesce 误写 `S04serialhealthd`（真实脚本 `S04serialhealth`）、未停
+  `S05watchdog`，且 init stop 可能卡在 `S61bitcoind`/`S43statusd`。
+6. **重复触发并发 apply**：多次 `ota-push.sh` 可能造成多个 apply/gunzip 重叠。
+  修复：`/run/rockbase/ota-apply.lock` 防并发；发现旧锁但 pid 不存在时自动清理。
 
 **另一个阶段 D 的首烧坑（commit c87eaab5）**：uboot 变量单层展开——
 `ota_bootargs` 中间变量会让 `${mmc_boot_dev_num}`/`${ota_part}` 以字面量进
@@ -137,9 +147,9 @@ kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=..
 |---|---|---|
 | `tools/ota-push.sh` | WSL 侧一键推送：mk-ota-package 打包 → 起/复用本机 HTTP(:8000) → 触发板端 check/apply（nohup）→ 轮询进度 → 重启后等板回来 → otaconfirm。密钥 `~/.rockbase-ota-keys/`，产物 `~/ota-dist/`；推送时若板上公钥与本地不一致会自动 scp 同步 | ✅ B→A 全流程实测（skill「ota升级124.30」入口） |
 | `.github/skills/rockbase-ota/SKILL.md` | skill：提示词「ota升级124.30」触发上述全流程 | ✅ 实测 |
-| `rockbase-ota.sh` OTA 状态文件 | apply（--force）全程写 `/run/rockbase/ota-state.json`（tmpfs，重启自清）：phase=preparing/downloading/verifying/flashing/switching/failed + progress（-1=不定）+ message；下载进度 stat 文件大小、刻录进度读 dd 的 `/proc/<pid>/io` write_bytes；die 时写 failed | ✅ A→B 端到端实测 |
+| `rockbase-ota.sh` OTA 状态文件 | apply（--force）全程写 `/run/rockbase/ota-state.json`（tmpfs，重启自清）：phase=preparing/downloading/verifying/flashing/switching/failed + progress（-1=不定）+ message；下载进度 stat 文件大小、刻录进度按目标分区 `/proc/diskstats` 写扇区增量计算；die 时写 failed；日志同步 `/dev/console` 便于串口观察 | ✅ `v20260824-165803-ota` p2→p1 端到端实测 |
 | lcdui OTA 覆膜（`ota_overlay.cpp/h` + main.cpp 4 处门控） | 状态文件驱动的全屏覆膜（`lv_layer_top` 不透明）：英文文案、4 阶段指示（Download/Verify/Write/Reboot）、进度条（-1 时满格半透明）、耗时提示、"Do not power off" 警告；failed 常驻不消失；覆膜期间不触发高帧率（CPU 空转已排除） | ✅ 四态冒烟 + A→B 端到端实测 |
-| `rootfs_overlay/usr/sbin/rockbase-ota.sh` | OTA agent：`status/check/apply/confirm/rollback`；真 apply 前 quiesce 服务（停 supervisord→ckpool/bitcoind/miners/statusd→暂停 serialhealthd，留 lcdui/httpd/网络/sshd），失败逆序恢复 | ✅ E2 真切槽验证（含 quiesce） |
+| `rootfs_overlay/usr/sbin/rockbase-ota.sh` | OTA agent：`status/check/apply/confirm/rollback`；真 apply 有 apply lock 防并发；direct quiesce 直接清理 bitcoind/ckpool/statusd/miners/supervisord/serialhealth/用户态 watchdog，留 lcdui/httpd/网络/sshd；失败逆序恢复 | ✅ `v20260824-165803-ota` 真切槽验证 |
 | `tools/mk-ota-package.sh` | 构建端打包：gzip 槽镜像 + sha256 + openssl dgst 签名 + manifest.json | ✅ E2/E3 真包验证 |
 | `rootfs_overlay/etc/init.d/S98otaconfirm` | 确认服务：升级启动后等 web+sshd+bitcoind 健康则 `ota confirm` | ✅ E4 回滚后自动确认 |
 | `rootfs_overlay/etc/rockbase-ota-pub.pem` | 验签公钥（测试密钥） | ✅ 已固化进 overlay |
