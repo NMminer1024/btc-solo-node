@@ -80,6 +80,24 @@ int json_int_at(const std::string& src, size_t pos, const char* key, int fallbac
     return std::atoi(src.c_str() + pos);
 }
 
+std::string format_speed(int bytes_per_second) {
+    if (bytes_per_second <= 0) {
+        return {};
+    }
+
+    char buf[32];
+    if (bytes_per_second >= 1000000) {
+        std::snprintf(buf, sizeof(buf), "%.1f MB/s", bytes_per_second / 1000000.0);
+    }
+    else if (bytes_per_second >= 1000) {
+        std::snprintf(buf, sizeof(buf), "%.0f KB/s", bytes_per_second / 1000.0);
+    }
+    else {
+        std::snprintf(buf, sizeof(buf), "%d B/s", bytes_per_second);
+    }
+    return buf;
+}
+
 void set_label_if_changed(lv_obj_t* label, const std::string& text) {
     if (label == nullptr) return;
     const char* current = lv_label_get_text(label);
@@ -172,11 +190,13 @@ void OtaOverlay::poll_state_file() {
     if (json.empty()) {
         phase_ = Phase::Hidden;
         progress_ = -1;
+        speed_bps_ = -1;
         message_.clear();
         return;
     }
     phase_ = parse_phase_name(json_value_at(json, 0, "phase"));
     progress_ = json_int_at(json, 0, "progress", -1);
+    speed_bps_ = json_int_at(json, 0, "speed_bps", -1);
     message_ = json_value_at(json, 0, "message");
 }
 
@@ -260,6 +280,7 @@ void OtaOverlay::open() {
     lv_obj_set_style_text_font(progress_label_, &lv_font_montserrat_18, 0);
     lv_obj_set_style_text_color(progress_label_, lv_color_hex(0xf4efe2), 0);
     lv_obj_set_style_text_align(progress_label_, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_recolor(progress_label_, true);
 
     message_label_ = lv_label_create(panel);
     lv_label_set_text(message_label_, "");
@@ -351,9 +372,15 @@ void OtaOverlay::apply_state() {
     if (progress_ >= 0 && progress_ <= 100) {
         lv_obj_set_style_bg_opa(bar_, LV_OPA_COVER, LV_PART_INDICATOR);
         lv_bar_set_value(bar_, progress_, LV_ANIM_OFF);
-        char pct[16];
+        char pct[96];
         std::snprintf(pct, sizeof(pct), "%d%%", progress_);
-        set_label_if_changed(progress_label_, pct);
+        const std::string speed = format_speed(speed_bps_);
+        if (!speed.empty()) {
+            set_label_if_changed(progress_label_, std::string(pct) + "  |  #f0b44c " + speed + "#");
+        }
+        else {
+            set_label_if_changed(progress_label_, pct);
+        }
     }
     else {
         lv_obj_set_style_bg_opa(bar_, LV_OPA_40, LV_PART_INDICATOR);

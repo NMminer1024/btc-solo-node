@@ -13,7 +13,7 @@ OBJS := $(SRCS:.cpp=.o)
 
 all: $(BIN)
 
-$(OBJS): %.o: %.cpp
+$(OBJS): %.o: %.cpp *.h
 	$(CXX) -c $(CXXFLAGS) $< -o $@ $(INCS)
 
 $(BIN): $(OBJS)

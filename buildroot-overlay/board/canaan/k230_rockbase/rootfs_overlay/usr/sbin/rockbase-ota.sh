@@ -36,15 +36,15 @@ STATE_FILE=${OTA_STATE_FILE:-/run/rockbase/ota-state.json}
 STATE_ENABLED=0   # only a real apply (--force) drives the overlay
 APPLY_LOCKDIR=${OTA_APPLY_LOCKDIR:-/run/rockbase/ota-apply.lock}
 
-# set_state <phase> <progress 0-100|-1 indeterminate> <message>
+# set_state <phase> <progress 0-100|-1 indeterminate> <message> [speed_bps]
 set_state() {
     [ "$STATE_ENABLED" = "1" ] || return 0
-    local phase=$1 progress=$2 msg safe_msg
+    local phase=$1 progress=$2 msg speed_bps=${4:--1} safe_msg
     # strip characters that would break JSON (busybox-friendly)
     safe_msg=$(printf '%s' "$3" | tr -d '"\\' | tr '\n' ' ')
     mkdir -p /run/rockbase 2>/dev/null
-    printf '{"phase":"%s","progress":%s,"message":"%s","ts":%s}\n' \
-        "$phase" "$progress" "$safe_msg" "$(date +%s)" > "$STATE_FILE.tmp" 2>/dev/null
+    printf '{"phase":"%s","progress":%s,"message":"%s","speed_bps":%s,"ts":%s}\n' \
+        "$phase" "$progress" "$safe_msg" "$speed_bps" "$(date +%s)" > "$STATE_FILE.tmp" 2>/dev/null
     mv "$STATE_FILE.tmp" "$STATE_FILE" 2>/dev/null
 }
 
@@ -237,17 +237,27 @@ fetch() {
     [ "$total" -gt 0 ] 2>/dev/null && set_state downloading 0 "Downloading firmware"
     curl --cacert /etc/ssl/certs/ca-certificates.crt \
          --retry 5 -C - -fSL -o "$out" "$url" &
-    local pid=$! cur
+    local pid=$! cur now last_time last_bytes speed_bps elapsed
+    last_time=$(date +%s)
+    last_bytes=$(stat -c %s "$out" 2>/dev/null || echo 0)
     while kill -0 "$pid" 2>/dev/null; do
         if [ "$total" -gt 0 ] 2>/dev/null; then
             cur=$(stat -c %s "$out" 2>/dev/null || echo 0)
+            now=$(date +%s)
+            elapsed=$((now - last_time))
+            speed_bps=-1
+            if [ "$elapsed" -gt 0 ] && [ "$cur" -ge "$last_bytes" ] 2>/dev/null; then
+                speed_bps=$(((cur - last_bytes) / elapsed))
+            fi
+            last_time=$now
+            last_bytes=$cur
             [ "$cur" -gt 0 ] 2>/dev/null && \
-                set_state downloading $((cur * 100 / total)) "Downloading firmware"
+                set_state downloading $((cur * 100 / total)) "Downloading firmware" "$speed_bps"
         fi
         sleep 2
     done
     if wait "$pid"; then
-        [ "$total" -gt 0 ] 2>/dev/null && set_state downloading 100 "Download complete"
+        [ "$total" -gt 0 ] 2>/dev/null && set_state downloading 100 "Download complete" 0
         return 0
     fi
     log "resume failed (server may lack Range); retrying full download"
@@ -255,11 +265,21 @@ fetch() {
     curl --cacert /etc/ssl/certs/ca-certificates.crt \
          --retry 5 -fSL -o "$out" "$url" &
     pid=$!
+    last_time=$(date +%s)
+    last_bytes=0
     while kill -0 "$pid" 2>/dev/null; do
         if [ "$total" -gt 0 ] 2>/dev/null; then
             cur=$(stat -c %s "$out" 2>/dev/null || echo 0)
+            now=$(date +%s)
+            elapsed=$((now - last_time))
+            speed_bps=-1
+            if [ "$elapsed" -gt 0 ] && [ "$cur" -ge "$last_bytes" ] 2>/dev/null; then
+                speed_bps=$(((cur - last_bytes) / elapsed))
+            fi
+            last_time=$now
+            last_bytes=$cur
             [ "$cur" -gt 0 ] 2>/dev/null && \
-                set_state downloading $((cur * 100 / total)) "Downloading firmware"
+                set_state downloading $((cur * 100 / total)) "Downloading firmware" "$speed_bps"
         fi
         sleep 2
     done
@@ -386,11 +406,14 @@ cmd_apply() {
     set_state flashing 0 "Writing system image"
     log "flashing $tgt_dev ..."
     local flash_total="" tgt_base start_sectors cur_sectors done_bytes pct next_report mib_done mib_total
+    local now last_time last_bytes speed_bps elapsed
     flash_total=$(cat "/sys/block/$(basename "$bd")/$(basename "$tgt_dev")/size" 2>/dev/null || true)
     [ -n "$flash_total" ] && flash_total=$((flash_total * 512)) || flash_total=0
     tgt_base=$(basename "$tgt_dev")
     start_sectors=$(disk_written_sectors "$tgt_base" 2>/dev/null || echo 0)
     next_report=0
+    last_time=$(date +%s)
+    last_bytes=0
     gunzip -c "$img" | dd of="$tgt_dev" bs=4M conv=fsync status=none &
     local dd_pid=$!
     while kill -0 "$dd_pid" 2>/dev/null; do
@@ -400,7 +423,15 @@ cmd_apply() {
             [ "$done_bytes" -lt 0 ] 2>/dev/null && done_bytes=0
             pct=$((done_bytes * 100 / flash_total))
             [ "$pct" -gt 100 ] && pct=100
-            set_state flashing "$pct" "Writing system image"
+            now=$(date +%s)
+            elapsed=$((now - last_time))
+            speed_bps=-1
+            if [ "$elapsed" -gt 0 ] && [ "$done_bytes" -ge "$last_bytes" ] 2>/dev/null; then
+                speed_bps=$(((done_bytes - last_bytes) / elapsed))
+            fi
+            last_time=$now
+            last_bytes=$done_bytes
+            set_state flashing "$pct" "Writing system image" "$speed_bps"
             if [ "$pct" -ge "$next_report" ]; then
                 mib_done=$((done_bytes / 1048576))
                 mib_total=$((flash_total / 1048576))

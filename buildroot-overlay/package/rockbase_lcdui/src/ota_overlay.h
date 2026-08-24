@@ -47,6 +47,7 @@ private:
     lv_obj_t* failed_hint_label_ = nullptr;
     Phase phase_ = Phase::Hidden;
     int progress_ = -1;
+    int speed_bps_ = -1;
     std::string message_;
     uint32_t last_poll_ms_ = 0;
 };
