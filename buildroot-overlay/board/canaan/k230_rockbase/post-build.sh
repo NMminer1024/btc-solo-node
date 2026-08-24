@@ -160,9 +160,27 @@ EOF
 	chmod a+x "${auto_boot_f}"
 }
 
+# OTA A/B (stage D): each rootfs slot is self-contained — kernel, dtb and the
+# opensbi/uboot-head boot blob live in /boot/ of the slot itself, so uboot can
+# ext4load them straight from the active slot partition (no shared boot
+# partition anymore). Mirrors what gen_boot_ext4() used to pack into boot.ext4.
+gen_target_boot()
+{
+	local first_dtb="$(grep BR2_LINUX_KERNEL_INTREE_DTS_NAME ${BR2_CONFIG} | cut -d / -f2 | tr -d '"' | cut -d ' ' -f1).dtb"
+	local boot_dir="${TARGET_DIR}/boot"
+
+	mkdir -p "${boot_dir}"
+	cp "${BINARIES_DIR}/Image" "${boot_dir}/Image"
+	# real file (not a symlink) so uboot ext4load never has to follow links
+	cp "${BINARIES_DIR}/${first_dtb}" "${boot_dir}/k.dtb"
+	${UBOOT_BUILD_DIR}/tools/mkimage -A riscv -O linux -T kernel -C none -a 0 -e 0 -n linux \
+		-d "${BINARIES_DIR}/fw_jump.bin" "${boot_dir}/fw_jump_add_uboot_head.bin"
+}
+
 gen_version
 auto_boot_proc
 prepare_block_seed_mountpoint
+gen_target_boot
 [ -f "${STAGING_DIR}/lib/libasan.so.8" ] && cp "${STAGING_DIR}/lib/libasan.so.8" "${TARGET_DIR}/lib/"
 # Remove non-essential init scripts (mining-only K230)
 rm -f "${TARGET_DIR}/etc/init.d/S50telnet"

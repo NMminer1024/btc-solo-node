@@ -401,7 +401,9 @@ gen_deb_packages_gz()
 gen_uboot_bin
 gen_env_bin
 #gen_linux_bin;
-gen_boot_ext4
+# OTA A/B (stage D): no shared boot.ext4 anymore — each rootfs slot carries
+# its own /boot (see gen_target_boot in post-build.sh), and genimage writes
+# slot_b from the same rootfs.ext4 (factory copy of slot_a).
 gen_blockdata_ext4
 gen_rockcfg_ext4
 #gen_deb_packages_gz
