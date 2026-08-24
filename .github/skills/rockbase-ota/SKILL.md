@@ -23,6 +23,10 @@ description: 'Rockbase A/B OTA 升级真机流程。Use when: ota升级, OTA 升
   `/run/rockbase/ota-state.json`（LCD 覆膜）和 `/dev/console`（串口日志）。
   不要再用 pipeline `$!` + `/proc/<pid>/io` 判断 dd 进度。
 - **必须 nohup 跑 apply**：SSH 会话死掉会杀远程 dd（E2 踩过）。`tools/ota-push.sh` 已处理。
+- **OTA payload 只能让设备自己下载**：不要把 `manifest.json`、`slot-*.img.gz`、
+  `slot-*.img.gz.sig` 用 `scp` 传到目标机再 `file://` apply。`scp` 包到板上是早期调试手段，
+  不能作为真机 OTA 验证路径；如果设备拉不到 HTTP/GitHub 源，先修路由/HTTP 服务/发布源，
+  或停止并报告网络问题，不要绕过 OTA 下载链路。
 - 切槽重启后 **SSH host key 会变**（另一个槽有独立 `/etc/ssh`）：
   先 `ssh-keygen -R <ip>` 再连。脚本已处理前置，升级后若再变需手动清一次。
 - 升级后 `S98otaconfirm` 等健康（httpd+sshd+bitcoind，≤120s）自动 confirm；
@@ -31,23 +35,37 @@ description: 'Rockbase A/B OTA 升级真机流程。Use when: ota升级, OTA 升
 
 ## 标准流程
 
-### 1. 推送（WSL 侧一条命令）
+### 1. 发布并触发（WSL 侧一条命令）
 
 ```bash
 tools/ota-push.sh 192.168.124.30            # 版本号自动取镜像 release_version
 tools/ota-push.sh 192.168.124.30 v0.1.0     # 或显式指定
 ```
 
-脚本自动完成：密钥检查（`~/.rockbase-ota-keys/`，不在仓库内）→ 板端公钥比对/部署 →
+脚本自动完成：密钥检查（`~/.rockbase-ota-keys/`，不在仓库内）→ 板端公钥比对 →
 `mk-ota-package.sh` 打包签名 → HTTP 服务（`~/ota-dist`，PID 文件管理，幂等）→
-板端 `nohup apply --force`。
+板端 `nohup apply --force`。这里的 “push” 只是发布并触发 OTA；payload 必须由板端
+通过 HTTP/生产源下载，不能 `scp` 到目标机。
 
 **镜像来源**：`output/k230_rockbase_1g_defconfig/images/rootfs.ext2`。
 用户说「重新编译再升级」时才先构建（见 `rockbase-build` skill）；否则直接用现有构建产物。
+但每次触发 OTA 前都必须确认待打包文件来自最新编译结果：检查 `rootfs.ext2` 的 mtime、
+`/etc/version/release_version`，以及刚改过的关键文件是否已进入 `rootfs.ext2`。
+如果无法证明当前 OTA 包对应最新编译产物，先重编或停止并报告，不要拿旧包升级。
 
 **重要**：热部署到板上的修复不会自动进入 OTA 包。若刚修了 `rockbase-ota.sh`、
 `S00resizemmc` 或 `rockbase-lcdui`，必须重新构建 1G 镜像，并用 `debugfs` 从新的
 `rootfs.ext2` 抽文件验证后再 OTA。
+
+**多台设备连续 OTA**：复用同一个已构建、已签名、已由 HTTP 服务发布的包即可；
+不要为了第二台设备改 manifest 成 `file://`，也不要把包复制到目标机。触发前必须确认
+目标机能从自身网络访问 manifest URL，例如：
+
+```bash
+ssh root@<IP> 'curl --cacert /etc/ssl/certs/ca-certificates.crt --retry 2 -sfI http://<host>:8000/<ver>/manifest.json'
+```
+
+如果这里失败，先修 HTTP 监听地址、路由、防火墙或改用生产发布源；未修通前不执行 OTA。
 
 ### 2. 监控 dd 进度（约 2~4 分钟）
 

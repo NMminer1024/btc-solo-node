@@ -75,6 +75,12 @@ require() {
     done
 }
 
+file_size_bytes() {
+    local n
+    n=$(wc -c < "$1" 2>/dev/null) || n=0
+    echo "${n:-0}"
+}
+
 acquire_apply_lock() {
     local old_pid
     mkdir -p /run/rockbase 2>/dev/null
@@ -237,12 +243,13 @@ fetch() {
     [ "$total" -gt 0 ] 2>/dev/null && set_state downloading 0 "Downloading firmware"
     curl --cacert /etc/ssl/certs/ca-certificates.crt \
          --retry 5 -C - -fSL -o "$out" "$url" &
-    local pid=$! cur now last_time last_bytes speed_bps elapsed
+    local pid=$! cur now last_time last_bytes speed_bps elapsed pct next_report mib_cur mib_total
     last_time=$(date +%s)
-    last_bytes=$(stat -c %s "$out" 2>/dev/null || echo 0)
+    last_bytes=$(file_size_bytes "$out")
+    next_report=5
     while kill -0 "$pid" 2>/dev/null; do
         if [ "$total" -gt 0 ] 2>/dev/null; then
-            cur=$(stat -c %s "$out" 2>/dev/null || echo 0)
+            cur=$(file_size_bytes "$out")
             now=$(date +%s)
             elapsed=$((now - last_time))
             speed_bps=-1
@@ -251,8 +258,17 @@ fetch() {
             fi
             last_time=$now
             last_bytes=$cur
-            [ "$cur" -gt 0 ] 2>/dev/null && \
-                set_state downloading $((cur * 100 / total)) "Downloading firmware" "$speed_bps"
+            if [ "$cur" -gt 0 ] 2>/dev/null; then
+                pct=$((cur * 100 / total))
+                [ "$pct" -gt 100 ] && pct=100
+                set_state downloading "$pct" "Downloading firmware" "$speed_bps"
+                if [ "$pct" -ge "$next_report" ]; then
+                    mib_cur=$((cur / 1048576))
+                    mib_total=$((total / 1048576))
+                    log "download progress: ${pct}% (${mib_cur}/${mib_total} MiB)"
+                    next_report=$((pct + 5))
+                fi
+            fi
         fi
         sleep 2
     done
@@ -267,9 +283,10 @@ fetch() {
     pid=$!
     last_time=$(date +%s)
     last_bytes=0
+    next_report=5
     while kill -0 "$pid" 2>/dev/null; do
         if [ "$total" -gt 0 ] 2>/dev/null; then
-            cur=$(stat -c %s "$out" 2>/dev/null || echo 0)
+            cur=$(file_size_bytes "$out")
             now=$(date +%s)
             elapsed=$((now - last_time))
             speed_bps=-1
@@ -278,8 +295,17 @@ fetch() {
             fi
             last_time=$now
             last_bytes=$cur
-            [ "$cur" -gt 0 ] 2>/dev/null && \
-                set_state downloading $((cur * 100 / total)) "Downloading firmware" "$speed_bps"
+            if [ "$cur" -gt 0 ] 2>/dev/null; then
+                pct=$((cur * 100 / total))
+                [ "$pct" -gt 100 ] && pct=100
+                set_state downloading "$pct" "Downloading firmware" "$speed_bps"
+                if [ "$pct" -ge "$next_report" ]; then
+                    mib_cur=$((cur / 1048576))
+                    mib_total=$((total / 1048576))
+                    log "download progress: ${pct}% (${mib_cur}/${mib_total} MiB)"
+                    next_report=$((pct + 5))
+                fi
+            fi
         fi
         sleep 2
     done
