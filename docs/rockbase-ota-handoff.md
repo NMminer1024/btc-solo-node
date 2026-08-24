@@ -1,14 +1,15 @@
 # Rockbase OTA 开发 Handoff（接手用）
 
 > 写给接手 OTA 开发的 agent/人。读完这份 + `docs/design/rockbase-ota-plan.md` 即可无缝继续。
-> 更新日期：2026-08-21　当前分支：`ota`
+> 更新日期：2026-08-24　当前分支：`ota`
 
 ---
 
 ## 0. 一句话现状
 
-A/B OTA 的方案已定稿（`rockbase-ota-plan.md`），**阶段 A（A1/A2/A3）已全部完成并验证通过**，
-下一步是 **阶段 B（uboot A/B 手测，需串口）**。
+**阶段 A（A1/A2/A3）+ 阶段 B（uboot 选槽/回滚串口手测）已全部完成并验证通过**；
+阶段 D（双槽分区布局）源码改造已完成、1G 最小镜像构建中，
+下一步是 **把新镜像烧到 124.30 做阶段 E 全链路真机验证**。
 
 ---
 
@@ -60,13 +61,35 @@ ota 分支（当前工作分支）：
 | **A3** | OTA agent + 打包脚本 + 确认服务 + 签名工具链 | ✅ **完成并已验证**（commit 0ef9fcb8 + e954f64c，2026-08-21 设备 dry-run 通过） |
 | **A1** | 用户配置独立分区（p3=config 256M `rockcfg` / p4=blockdata） | ✅ **完成并已验证**（2026-08-21，124.30 重分区 + 热部署验证通过） |
 
-### 阶段 B：uboot A/B 逻辑（串口命令行手测，不烧录）⬜ 未开始
+### 阶段 B：uboot A/B 逻辑（串口命令行手测，不烧录）✅ 已完成（2026-08-24，124.30 串口）
+
+- 串口链路：CH340 经 usbipd 透传进 WSL2，`/dev/ttyUSB0` 115200，uboot 提示符 `K230#`（bootdelay=1）。
+- 正测：`ota_part=2` + `blinux_ab`（从 p2 `/boot/` 加载三件套 + env `bootargs` 覆盖 + bootm）→
+  成功启动，`/proc/cmdline` 确认 `root=/dev/mmcblk1p2 ... rockbase_ab_test=1`——
+  **方案 2.2 的关键假设成立：env `bootargs` 覆盖 DTS `bootargs`**（DTS 的
+  `ignore_loglevel log_buf_len=4M keep_bootcon printk.always_kmsg_dump=1` 仍被追加）。
+- 负测：`ota_part=3`（无 /boot）→ `Failed to load ...`，`&&` 链中断，不 bootm，安全回到 `K230#`。
+- 回滚逻辑：槽位翻转 2→1 / 1→2 / 2→1 三次全对，`bootcount` 同步清零（未带 saveenv 的测试版）。
+- `CONFIG_BOOTCOUNT_LIMIT=y` + `CONFIG_BOOTCOUNT_ENV=y` 已加进 uboot defconfig 并重编；
+  **bootcount 自动 +1 / 超限触发 altbootcmd 待新镜像烧录后验证**（属阶段 E 的 E4）。
 
 ### 阶段 C：工具链 + 签名端到端（部分已并入 A3 完成）🔄 部分完成
 
-### 阶段 D：分区改造（唯一需重烧，放最后）⬜ 未开始
+### 阶段 D：分区改造（唯一需重烧）🔄 源码已改完，镜像构建中（2026-08-24）
 
-### 阶段 E：全链路真机验证 ⬜ 未开始
+- `genimage.cfg`：删 80M boot 分区；p1=slot_a / p2=slot_b（同一 `rootfs.ext4` 写两遍，
+  slot_b 天然是 slot_a 出厂拷贝，无需 post-image 复制）；p3=config、p4=blockdata 不变。
+- `post-build.sh`：新增 `gen_target_boot`，把 `Image` / `k.dtb`（实文件）/
+  `fw_jump_add_uboot_head.bin` 装进 `${TARGET_DIR}/boot/`（每槽自包含）。
+- `post-image.sh`：停调 `gen_boot_ext4`（不再生成 boot.ext4）。
+- `default.env`：固化 A/B 版（`ota_part=1`、`bootlimit=3`、`upgrade_available=0`、
+  `ota_bootargs`、新 `blinux` 按 `${ota_part}` 从 `/boot/` 加载并覆盖 `bootargs`、
+  `altbootcmd` 翻槽 + `saveenv` + `run blinux`）——与串口验证过的命令逐字一致。
+- uboot defconfig：`CONFIG_BOOTCOUNT_LIMIT=y` + `CONFIG_BOOTCOUNT_ENV=y`（bootcount 落 env）。
+- 兼容性核查：`S00resizemmc` 只在 p4 存在时扩容 p4，不动 rootfs 分区（p1/p2 双槽安全）；
+  rootfs_overlay 无 p1/boot 分区残留引用。
+
+### 阶段 E：全链路真机验证 ⬜ 未开始（等阶段 D 镜像烧录）
 
 ---
 
@@ -84,13 +107,20 @@ ota 分支（当前工作分支）：
 | `rootfs_overlay/etc/rockbase-factory-defaults/` | A1：出厂默认 `bitcoin.conf`/`ckpool.conf`（原 rootfs 实体文件移入） | ✅ 板端 md5 与原文件一致 |
 | 消费方路径直改 `/root/config/…`（无符号链接） | `S61bitcoind`/`S62ckpool`/`bitcoind start|stop.sh`/`ckpool/start.sh`/`rockbase_statusd.sh`/`rockbase_bitcoind_ready.sh`/`rockbase_wifi.sh`(`WIFI_CONFIG_FILE`) | ✅ 板端验证（重启后 bitcoind 以新路径启动） |
 | `S59blockdata` / `S00resizemmc` | A1 v2：S59 按 LABEL=blockdata 挂载（回退 p4）；S00 扩容对象 p3→p4 | ✅ 板端验证（LABEL 挂载正常；S00 扩容逻辑待阶段 D 新卡验证） |
-| `genimage.cfg` + `post-image.sh` | A1 v2：新增 p3 config 分区（空 256M `rockcfg.ext4`，`gen_rockcfg_ext4`） | 已写，待下次构建镜像时验证 |
+| `genimage.cfg` + `post-image.sh` | A1 v2：新增 p3 config 分区（空 256M `rockcfg.ext4`，`gen_rockcfg_ext4`） | ✅ 阶段 D 镜像已验证 |
+| `genimage.cfg`（阶段 D） | 删 80M boot 分区；p1=slot_a / p2=slot_b（同一 `rootfs.ext4` 写两遍）；p3=config、p4=blockdata | ✅ 镜像分区表 fdisk 验证（30M 起，2G/2G/256M/256M） |
+| `post-build.sh`（阶段 D） | `gen_target_boot`：`Image`/`k.dtb`(实文件)/`fw_jump_add_uboot_head.bin` 装进 `${TARGET_DIR}/boot/` | ✅ rootfs.ext4 debugfs 验证 |
+| `default.env`（阶段 D） | A/B 版：`ota_part=1`/`bootlimit=3`/`upgrade_available=0`/`ota_bootargs`/新 `blinux`/`altbootcmd` | ✅ env.env strings 验证（命令与串口手测逐字一致） |
+| uboot `k230_rockbase_defconfig` | `CONFIG_BOOTCOUNT_LIMIT=y` + `CONFIG_BOOTCOUNT_ENV=y` | ✅ 已重编进 `fn_ug_u-boot.bin`；bootcount 行为待烧录后验证（E4） |
 
 > A1 曾有 v1（配置放 blockdata 子目录 + 符号链接），经讨论改为 v2 独立分区方案，
 > v1 产物（`S05blockdata`、符号链接、wifi readlink 补丁）已全部移除。
 
 ## 6. 已验证的事实（不要重复验证）
 
+- **阶段 B（2026-08-24，124.30 串口 `/dev/ttyUSB0`）**：uboot 按 `ota_part` 选槽加载
+  `/boot/{fw_jump_add_uboot_head.bin,Image,k.dtb}` 正测/负测全对；env `bootargs`
+  能覆盖 DTS `bootargs`；`altbootcmd` 翻槽逻辑三向全对。env 备份在 `/tmp/uboot-env-backup.txt`。
 - **A2**：124.15 上 `fw_printenv` 读 33 行 env、`fw_setenv` 写/删正常、删 fw_env.config 重启后新 S00 自动重建。
 - **打包/签名/验签**：本机用 `mk-ota-package.sh` 造出 35MB 测试包，验签正例通过、篡改反例正确拒绝。
 - **板端 status**：正确识别 `current slot=2 / inactive=1 / bootdev=/dev/mmcblk1`（1G 板）。
@@ -109,26 +139,34 @@ ota 分支（当前工作分支）：
 
 ~~A3 设备端 apply dry-run~~ **已于 2026-08-21 验证通过**（WiFi / USB 有线各一次）：下载 → 验签 →
 sha256 校验 → 正确识别目标槽位 `mmcblk1p1`，日志 `DRY-RUN complete`。A3 收尾完成。
-临时测试密钥 `/tmp/ota-keys/` 与测试包 `/tmp/ota-dist/` 仍在（`/tmp` 重启即清，无所谓）；
-本机 HTTP 服务 `python3 -m http.server 8000`（起在 `/tmp/ota-dist/v0.0.1-test/`）当前仍在跑，不用了 `pkill -f http.server` 即可。
 
-直接进入第 8 节的下一步即可（阶段 B，需串口）。
+~~阶段 B 串口手测~~ **已于 2026-08-24 完成**（见第 4/6 节）。阶段 D 源码改造完成，
+1G 最小镜像已构建导出：`/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-1g-min-net-20260824-110716/`
+（4.53GiB，p1=slot_a 2G / p2=slot_b 2G / p3=config 256M / p4=blockdata 256M，S00 首启扩 p4 到卡尾）。
 
-历史备注：dry-run 时板子 WiFi ~40-60KB/s，34MB 包下载约 10 分钟。
+**接手第一件事：烧录该镜像到 124.30，跑阶段 E 全链路验证（见第 8 节）。**
+
+历史备注：dry-run 时板子 WiFi ~40-60KB/s，34MB 包下载约 10 分钟；USB 有线约 11MB/s。
 
 ## 8. 下一步该做什么（按优先级）
 
-### ~~选项 1：A1 配置外置~~ ✅ 已完成（2026-08-21）
-把 WiFi/ckpool/bitcoin 配置从 rootfs 挪到 blockdata `/root/block/config/`，rootfs 改符号链接。涉及：
-- 新建 `S05blockdata`（提前按 LABEL 挂载，不等 resize_done）
-- `/etc/rockbase-factory-defaults/` 出厂默认配置 + 首启播种
-- 3 个配置符号链接：`/etc/rockbase-wifi.conf`、`/root/bitcoind/bitcoin.conf`、`/root/ckpool/ckpool.conf`
-- 详见方案 2.3 + 阶段 A1
+### 阶段 E：全链路真机验证 ← 下一步（烧录阶段 D 镜像后按序执行）
 
-### 阶段 B：uboot A/B 手测（需要串口，风险低）← 下一步
-串口中断 bootdelay，手测新 `blinux`/`altbootcmd`/`bootcount`。需先改 `default.env` + uboot defconfig `CONFIG_BOOTCOUNT_LIMIT=y`，重编 uboot。详见方案 2.2 + 阶段 B。
+| # | 用例 | 预期 |
+|---|---|---|
+| E1 | 新镜像烧录 → slot A 启动 | 正常启动、`/proc/cmdline` 为 `root=/dev/mmcblk1p1`、p4 扩容/挂载正常、配置在 p3、WiFi/USB 网连通 |
+| E1b | bootcount 观察 | `upgrade_available=0` 时 bootcount 恒 0（BOOTCOUNT_ENV 行为） |
+| E2 | 真 OTA：`rockbase-ota.sh apply`（去掉 dry-run）写 slot B | 切 `ota_part=2` 重启、从 B 起来、版本号变化、WiFi/ckpool/bitcoin 配置（p3）原样保留；`S98otaconfirm` 确认清 `upgrade_available` |
+| E3 | dd 写 B 中途断电 | 仍从 A 正常启动 |
+| E4 | 切槽后破坏 B（dd 冲掉 B 的 `/boot/Image`） | bootcount 每次 +1，超 `bootlimit=3` 后 uboot 自动 `altbootcmd` 回 A |
+| E5 | 2G 板（mmcblk0）跑一遍 | 设备号自适应（**注意：2G defconfig 按约束未动，需另行评估**） |
+| E6 | 回归：seed 镜像构建、USB/SDIO 网络切换 | 不受影响 |
 
-**阶段 A 已全部完成**（纯软件部分收官）。B 需要人在板子旁接串口线，无法远程进行。
+回退预案：新布局有问题就重烧 dev 分支旧布局镜像；p3 配置与 p4 区块数据在
+阶段 D 重烧后需要重灌/重同步（分区表变了）。
+
+### 阶段 C 剩余项（可后置）
+GitHub Releases 真实发布 + `ota.nmminer.com` 301 重定向链路验证（本机 HTTP 已通）。
 
 ---
 
