@@ -135,8 +135,10 @@ kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=..
 
 | 文件 | 作用 | 验证状态 |
 |---|---|---|
-| `tools/ota-push.sh` | WSL 侧一键推送：mk-ota-package 打包 → 起/复用本机 HTTP(:8000) → 触发板端 check/apply（nohup）→ 轮询进度 → 重启后等板回来 → otaconfirm。密钥 `~/.rockbase-ota-keys/`，产物 `~/ota-dist/` | ✅ B→A 全流程实测（skill「ota升级124.30」入口） |
+| `tools/ota-push.sh` | WSL 侧一键推送：mk-ota-package 打包 → 起/复用本机 HTTP(:8000) → 触发板端 check/apply（nohup）→ 轮询进度 → 重启后等板回来 → otaconfirm。密钥 `~/.rockbase-ota-keys/`，产物 `~/ota-dist/`；推送时若板上公钥与本地不一致会自动 scp 同步 | ✅ B→A 全流程实测（skill「ota升级124.30」入口） |
 | `.github/skills/rockbase-ota/SKILL.md` | skill：提示词「ota升级124.30」触发上述全流程 | ✅ 实测 |
+| `rockbase-ota.sh` OTA 状态文件 | apply（--force）全程写 `/run/rockbase/ota-state.json`（tmpfs，重启自清）：phase=preparing/downloading/verifying/flashing/switching/failed + progress（-1=不定）+ message；下载进度 stat 文件大小、刻录进度读 dd 的 `/proc/<pid>/io` write_bytes；die 时写 failed | ✅ A→B 端到端实测 |
+| lcdui OTA 覆膜（`ota_overlay.cpp/h` + main.cpp 4 处门控） | 状态文件驱动的全屏覆膜（`lv_layer_top` 不透明）：英文文案、4 阶段指示（Download/Verify/Write/Reboot）、进度条（-1 时满格半透明）、耗时提示、"Do not power off" 警告；failed 常驻不消失；覆膜期间不触发高帧率（CPU 空转已排除） | ✅ 四态冒烟 + A→B 端到端实测 |
 | `rootfs_overlay/usr/sbin/rockbase-ota.sh` | OTA agent：`status/check/apply/confirm/rollback`；真 apply 前 quiesce 服务（停 supervisord→ckpool/bitcoind/miners/statusd→暂停 serialhealthd，留 lcdui/httpd/网络/sshd），失败逆序恢复 | ✅ E2 真切槽验证（含 quiesce） |
 | `tools/mk-ota-package.sh` | 构建端打包：gzip 槽镜像 + sha256 + openssl dgst 签名 + manifest.json | ✅ E2/E3 真包验证 |
 | `rootfs_overlay/etc/init.d/S98otaconfirm` | 确认服务：升级启动后等 web+sshd+bitcoind 健康则 `ota confirm` | ✅ E4 回滚后自动确认 |
@@ -219,6 +221,9 @@ kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=..
   空回车会把新分区建到那个间隙里（曾误建 p4=16-61439 盖住 SPL/env 区，幸好只改表没写数据）。
   建分区必须**显式给首尾扇区**，w 之前用 `p` 打印确认。
 - **简单 HTTP 服务器不支持 Range**：curl `-C -` 报 `(33)`，脚本已加 `fetch()` 全量重下容错。GitHub Releases 支持 Range，生产无碍。
+- **curl `-C -` 对已完整的本地文件直接跳过下载**（服务器 416 → curl 视为完成）：板上 WORKDIR 缓存的旧 `.sig` 不会被重下，重签后会验签失败。修复：apply 下载 sig 前 `rm -f`（小文件不需要续传）；img.gz 有 sha256 兜底不受影响。
+- **OTA 密钥对必须单一来源**：签名私钥 `~/.rockbase-ota-keys/ota-private.pem`（WSL 侧持久目录），源码固化公钥 `rootfs_overlay/etc/rockbase-ota-pub.pem` 必须与它配对（2026-08-24 已统一；曾有两套密钥导致验签失败）。`/tmp/ota-keys/` 是早期临时密钥，已废弃勿用。
+- **`reboot -f` 会弄脏 p4**：OTA 切槽后强重启不卸载文件系统，新槽首启 p4 脏 → 需 S00 e2fsck 修复链。已在 reboot 前加 `umount /root/block` 缓解（占用中 umount 失败也没关系，e2fsck 兜底）。
 - **顶层 `make CONF=... buildroot`** 会经 `sync` 把 `.config` 重置回 defconfig；单独重编某包用 `make -C output/buildroot-2025.02.1 O=$PWD/output/<conf> <pkg>` 绕过。
 
 ## 11. 构建命令（1G，非 seed 最小镜像）

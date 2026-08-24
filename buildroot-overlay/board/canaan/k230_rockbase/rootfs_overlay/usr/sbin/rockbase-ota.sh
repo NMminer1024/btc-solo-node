@@ -29,6 +29,24 @@ WORKDIR=${OTA_WORKDIR:-/root/block/ota}
 MANIFEST_NAME=manifest.json
 LOGFILE=${OTA_LOG:-$WORKDIR/ota.log}
 
+# Live state file consumed by lcdui (full-screen OTA overlay) and web.
+# Lives in /run (tmpfs): a reboot wipes it, so the overlay lifecycle is
+# strictly tied to the apply run - no stale state after reboot.
+STATE_FILE=${OTA_STATE_FILE:-/run/rockbase/ota-state.json}
+STATE_ENABLED=0   # only a real apply (--force) drives the overlay
+
+# set_state <phase> <progress 0-100|-1 indeterminate> <message>
+set_state() {
+    [ "$STATE_ENABLED" = "1" ] || return 0
+    local phase=$1 progress=$2 msg safe_msg
+    # strip characters that would break JSON (busybox-friendly)
+    safe_msg=$(printf '%s' "$3" | tr -d '"\\' | tr '\n' ' ')
+    mkdir -p /run/rockbase 2>/dev/null
+    printf '{"phase":"%s","progress":%s,"message":"%s","ts":%s}\n' \
+        "$phase" "$progress" "$safe_msg" "$(date +%s)" > "$STATE_FILE.tmp" 2>/dev/null
+    mv "$STATE_FILE.tmp" "$STATE_FILE" 2>/dev/null
+}
+
 # uboot env keys
 ENV_SLOT=ota_part
 ENV_UPGRADE=upgrade_available
@@ -40,6 +58,7 @@ log() {
 
 die() {
     log "ERROR: $*"
+    set_state failed -1 "Upgrade failed: $*"
     ota_restore
     exit 1
 }
@@ -132,14 +151,39 @@ mj_num() {
 # download with resume; if the server lacks Range support (curl err 33),
 # fall back to a clean full download. GitHub Releases supports Range; simple
 # test servers (python http.server) do not.
+# Optional 3rd arg: expected total bytes -> report download progress to STATE_FILE.
 fetch() {
-    local out=$1 url=$2
+    local out=$1 url=$2 total=${3:-0}
+    [ "$total" -gt 0 ] 2>/dev/null && set_state downloading 0 "Downloading firmware"
     curl --cacert /etc/ssl/certs/ca-certificates.crt \
-         --retry 5 -C - -fSL -o "$out" "$url" && return 0
+         --retry 5 -C - -fSL -o "$out" "$url" &
+    local pid=$! cur
+    while kill -0 "$pid" 2>/dev/null; do
+        if [ "$total" -gt 0 ] 2>/dev/null; then
+            cur=$(stat -c %s "$out" 2>/dev/null || echo 0)
+            [ "$cur" -gt 0 ] 2>/dev/null && \
+                set_state downloading $((cur * 100 / total)) "Downloading firmware"
+        fi
+        sleep 2
+    done
+    if wait "$pid"; then
+        [ "$total" -gt 0 ] 2>/dev/null && set_state downloading 100 "Download complete"
+        return 0
+    fi
     log "resume failed (server may lack Range); retrying full download"
     rm -f "$out"
     curl --cacert /etc/ssl/certs/ca-certificates.crt \
-         --retry 5 -fSL -o "$out" "$url"
+         --retry 5 -fSL -o "$out" "$url" &
+    pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        if [ "$total" -gt 0 ] 2>/dev/null; then
+            cur=$(stat -c %s "$out" 2>/dev/null || echo 0)
+            [ "$cur" -gt 0 ] 2>/dev/null && \
+                set_state downloading $((cur * 100 / total)) "Downloading firmware"
+        fi
+        sleep 2
+    done
+    wait "$pid"
 }
 
 # --- subcommands --------------------------------------------------------------
@@ -211,22 +255,32 @@ cmd_apply() {
     local sig="$img.sig"
 
     # real apply: free the SD card / network from other services before the
-    # heavy download+dd (dry-run keeps everything running on purpose)
-    [ "$force" = "1" ] && ota_quiesce
+    # heavy download+dd (dry-run keeps everything running on purpose).
+    # STATE_ENABLED stays 0 for dry-run so the LCD overlay never pops up.
+    if [ "$force" = "1" ]; then
+        ota_quiesce
+        STATE_ENABLED=1
+        set_state preparing -1 "Preparing for upgrade"
+    fi
 
     # download image + signature with resume (auto full-retry if no Range)
     log "downloading image: $imgurl"
-    fetch "$img" "$imgurl" || die "image download failed"
+    fetch "$img" "$imgurl" "${size:-0}" || die "image download failed"
+    # signature must always be fetched fresh: a stale cached .sig from a
+    # previous run would silently pass the -C - resume check and fail verify
+    rm -f "$sig"
     log "downloading signature: $sigurl"
     fetch "$sig" "$sigurl" || die "signature download failed"
 
     # 1) signature verify (authenticity) - hard requirement
     [ -r "$PUBKEY" ] || die "missing OTA public key: $PUBKEY"
+    set_state verifying -1 "Verifying signature"
     log "verifying signature"
     openssl dgst -sha256 -verify "$PUBKEY" -signature "$sig" "$img" >/dev/null 2>&1 \
         || die "signature verification FAILED - refusing to flash"
 
     # 2) integrity check (sha256)
+    set_state verifying -1 "Verifying checksum"
     log "verifying sha256"
     local actual
     actual=$(sha256sum "$img" | awk '{print $1}')
@@ -246,11 +300,25 @@ cmd_apply() {
         return 0
     fi
 
-    # 3) flash inactive slot
+    # 3) flash inactive slot (progress via dd's /proc/<pid>/io write_bytes)
     [ -b "$tgt_dev" ] || die "target device not found: $tgt_dev (A/B layout not present yet?)"
+    set_state flashing 0 "Writing system image"
     log "flashing $tgt_dev ..."
-    gunzip -c "$img" | dd of="$tgt_dev" bs=4M conv=fsync status=none \
-        || die "dd flash failed"
+    local flash_total=""
+    flash_total=$(cat "/sys/block/$(basename "$bd")/$(basename "$tgt_dev")/size" 2>/dev/null || true)
+    [ -n "$flash_total" ] && flash_total=$((flash_total * 512)) || flash_total=0
+    gunzip -c "$img" | dd of="$tgt_dev" bs=4M conv=fsync status=none &
+    local dd_pid=$! wb
+    while kill -0 "$dd_pid" 2>/dev/null; do
+        if [ "$flash_total" -gt 0 ]; then
+            wb=$(awk '/^write_bytes/{print $2}' "/proc/$dd_pid/io" 2>/dev/null || true)
+            [ -n "$wb" ] && [ "$wb" -gt 0 ] && \
+                set_state flashing $((wb * 100 / flash_total)) "Writing system image"
+        fi
+        sleep 2
+    done
+    wait "$dd_pid" || die "dd flash failed"
+    set_state flashing 100 "Write complete"
     sync
     log "flash done"
 
@@ -267,6 +335,7 @@ cmd_apply() {
     fi
 
     # 5) switch slot + arm rollback counter
+    set_state switching -1 "Switching to new system, rebooting"
     log "switching boot slot -> $tgt_slot (upgrade_available=1, bootcount=0)"
     fw_setenv "$ENV_SLOT" "$tgt_slot" \
               "$ENV_UPGRADE" "1" \
@@ -274,6 +343,9 @@ cmd_apply() {
 
     log "rebooting into new slot..."
     sync
+    # unmount blockdata before the forced reboot so the new slot does not
+    # inherit a dirty p4 (resize2fs refuses a dirty fs on first boot)
+    umount /root/block 2>/dev/null || true
     reboot -f
 }
 
