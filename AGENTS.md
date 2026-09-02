@@ -46,6 +46,9 @@ Seed 同步流程见 skill: `rockbase-seed`。
 local 包（`rockbase_lcdui` 等）源码改动后，顶层 `buildroot` 构建**会自动** rsync 检测变化并重编（已通过改写 `buildroot-overlay/package/pkg-generic.mk` 根治，`.stamp_rsynced` 每次增量 rsync + 变化时删除 build/install stamp）。仍可手动 `<pkg>-rebuild` 强制全量重建。
 → 详细流程见 skill: `rockbase-lvgl-ui`
 
+### 5b. Overlay 同步陷阱
+`tools/sync.mk` 的 `.overlay_sync` 只对 `buildroot-overlay/` 文件**新增/删除**敏感，对**内容修改不敏感**（`BR_OVERLAY_FS` 只列文件名）。改了 `package/pkg-generic.mk`、`package/Config.in`、`support/` 等顶层/非包目录文件的**内容**后，必须先 `make sync` 再构建，否则 buildroot 源码里仍是旧版。
+
 ### 6. WSL `/mnt/d` 挂载判断
 不要只根据沙箱报错判断 `/mnt/d` 只读。必须用 `findmnt` + `touch` 做真实写测试。以提权/非沙箱检查为准。
 

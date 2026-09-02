@@ -48,6 +48,7 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 | 构建前准备 | 非 seed 构建需要 `mkdir -p /tmp/rockbase-empty-seed` |
 | 并行编译 | 所有编译（全量/增量）必须显式多核并行：make 命令追加 `-j$(nproc)`；详见下方 **并行编译（强制）** 章节 |
 | Kernel patch 变更 | 只要改了 `buildroot-overlay/board/canaan/k230_rockbase/patches/linux/`，每个目标 defconfig 都必须先执行一次 `linux-dirclean` 再重编 |
+| Overlay 顶层文件内容修改 | 只改 `buildroot-overlay/` 下**顶层/非包目录**文件（如 `package/pkg-generic.mk`、`package/Config.in`、`support/`）的**内容**（非新增/删除）时，`.overlay_sync` 不会自动重跑，必须先 `make sync` 再构建；详见下方 **Overlay 同步陷阱** 章节 |
 | 网络接口 | 统一镜像（USB + SDIO 驱动都在，运行时 `rockbase_netsel.sh` 自动选择）；`K230_NET` 仅作测试开关；详见下方 **网络接口模式（统一镜像，K230_NET）** 章节 |
 
 ---
@@ -363,6 +364,32 @@ md5sum buildroot-overlay/package/rockbase_lcdui/src/main.cpp \
 ```
 
 ---
+
+## Overlay 同步陷阱（重要）
+
+`tools/sync.mk` 的 `.overlay_sync` stamp 只对 `buildroot-overlay/` 文件的**新增/删除**敏感，对**内容修改不敏感**：
+
+```make
+BR_OVERLAY_FS=$(shell find $(BR_OVERLAY_DIR) -type f ...)
+$(BR_SRC_DIR)/.overlay_sync: $(BR_SRC_DIR)/.download_extract $(BR_OVERLAY_FS)
+	rsync -a $(BR_OVERLAY_DIR)/ $(BR_SRC_DIR)/ ...
+```
+
+`BR_OVERLAY_FS` 只列**文件名**（不含 mtime/内容哈希），所以：
+
+- **新增/删除** overlay 文件 → 列表变化 → `.overlay_sync` 重跑 rsync ✅
+- **只改内容**（文件名不变）→ 列表不变 → `.overlay_sync` **不重跑**，buildroot 源码里仍是旧版 ❌
+
+**影响范围**：`buildroot-overlay/` 下所有顶层/非包目录文件，典型如 `package/pkg-generic.mk`、`package/Config.in`、`support/dependencies/*.mk`。包目录（`package/<pkg>/`）的 `.mk` 改动同理——但包 `.mk` 改动通常伴随源码改动，且 local 包源码改动会触发上面 LVGL 章节的 rsync 重编，所以最容易被忽略的是**纯构建系统文件**的内容修改。
+
+**正确做法**：改了这类文件内容后，先手动 sync 再构建：
+
+```bash
+make sync
+make CONF=k230_rockbase_defconfig buildroot -j$(nproc)
+```
+
+> 本次 `pkg-generic.mk` 是**新增文件**，所以首次构建会自动 sync 生效；但**以后若只改它的内容**，必须手动 `make sync`。
 
 ## 镜像产物说明
 
