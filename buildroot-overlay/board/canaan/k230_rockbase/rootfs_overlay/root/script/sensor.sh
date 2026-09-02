@@ -3,7 +3,7 @@ set -ex
 s="${1:-192.168.1.1}"
 p="${2:-12345678790}"
 u="wangjianxin"
-t="/home/wangjianxin/k230/k230_linux_sdk/output/k230_rockbase_1g_defconfig/target"
+t="/home/wangjianxin/k230/k230_linux_sdk/output/k230_rockbase_defconfig/target"
 
 sshpass  -p "$p" scp $u@$s:${t}/../../../buildroot-overlay/package/uvc-gadget/uvc-gadget.sh .
 sshpass  -p "$p" scp $u@$s:${t}/usr/lib/libuvcgadget.so.0.4.0  /usr/lib

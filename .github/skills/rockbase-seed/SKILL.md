@@ -49,18 +49,10 @@ seed/root-block/
 > **注意**：seed 镜像通常配合默认 `sdio_wifi` 模式；若当前实验是 `usb`，需追加 `K230_NET=usb`。
 > 完整的 `K230_NET` 说明见 `rockbase-build` skill。
 
-### 1G 带 seed
+### 带 seed
 
 ```bash
-make CONF=k230_rockbase_1g_defconfig buildroot -j$(nproc) \
-  K230_BLOCKDATA_SIZE=24G \
-  K230_IMAGE_GZIP=0
-```
-
-### 2G 带 seed
-
-```bash
-make CONF=k230_rockbase_2g_defconfig buildroot -j$(nproc) \
+make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
   K230_BLOCKDATA_SIZE=24G \
   K230_IMAGE_GZIP=0
 ```

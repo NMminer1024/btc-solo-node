@@ -82,17 +82,7 @@ seed/root-block/
 
 ```bash
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_1g_defconfig buildroot \
-  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
-  K230_BLOCKDATA_SIZE=256M \
-  K230_IMAGE_GZIP=0
-```
-
-2G：
-
-```bash
-mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_2g_defconfig buildroot \
+make CONF=k230_rockbase_defconfig buildroot \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
@@ -109,16 +99,7 @@ make CONF=k230_rockbase_2g_defconfig buildroot \
 带 seed 构建示例：
 
 ```bash
-make CONF=k230_rockbase_1g_defconfig buildroot \
-  BLOCK_SEED_DIR=seed/root-block \
-  K230_BLOCKDATA_SIZE=24G \
-  K230_IMAGE_GZIP=0
-```
-
-2G：
-
-```bash
-make CONF=k230_rockbase_2g_defconfig buildroot \
+make CONF=k230_rockbase_defconfig buildroot \
   BLOCK_SEED_DIR=seed/root-block \
   K230_BLOCKDATA_SIZE=24G \
   K230_IMAGE_GZIP=0

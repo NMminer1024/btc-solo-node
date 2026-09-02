@@ -1,5 +1,7 @@
 # Rockbase 当前交接文档
 
+> **⚠️ 2026-09 profile 合并说明**：1G/2G 已合并为单一 `k230_rockbase_defconfig`（内存由 U-Boot 运行时探测）。本文正文中的 `k230_rockbase_1g_defconfig` / `k230_rockbase_2g_defconfig` 及「1G/2G 板 MMC 拓扑相反」等表述为当时历史记录，现已过时。统一后所有板子 mmc0=SDIO WiFi、mmc1=SD card。详见 `AGENTS.md`「Profile 合并记录」。
+
 更新时间：2026-08-14 CST。
 
 本文档是新 agent 接手入口。更完整的背景见：

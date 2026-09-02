@@ -28,21 +28,18 @@ Seed 源设备：
 
 重要 MMC host 拓扑：
 
-- 1G / `124.15`、`124.30`、`124.35`：`mmc0=SDIO WiFi`，`mmc1=SD 卡`。
-- 2G / `124.23`：`mmc0=SD 卡`，`mmc1=SDIO WiFi`。
-
-这个编号差异非常重要。分析日志时不要固定假设 `mmc0` 或 `mmc1`，必须结合当次启动日志确认哪个 host 是 WiFi SDIO。
+- 所有板子统一接线：`mmc0=SDIO WiFi`，`mmc1=SD 卡`（SD 卡走 SDIO1 启动）。
+- 内存 1G/2G 由 U-Boot 运行时探测（`detect_ddr_size()`），无需按内存拆分 profile。
 
 ## 构建基线
 
 主要 defconfig：
 
-- 1G：`k230_rockbase_1g_defconfig`
-- 2G：`k230_rockbase_2g_defconfig`
+- 单一 `k230_rockbase_defconfig`（1G/2G 已合并，内存运行时探测）
 
 rootfs 容量基线：
 
-- `BR2_TARGET_ROOTFS_EXT2_SIZE="2G"`（1G/2G 两个 Rockbase defconfig 已统一）
+- `BR2_TARGET_ROOTFS_EXT2_SIZE="2G"`
 
 当前诊断状态：
 
@@ -79,21 +76,11 @@ K230_IMAGE_GZIP=0
 
 如果镜像约 `32G`，通常说明走到了默认 `24G` blockdata 或类似 seed 路径，需要用 `K230_BLOCKDATA_SIZE=256M` 重新构建。
 
-默认 1G 构建命令：
+默认构建命令：
 
 ```bash
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_1g_defconfig buildroot \
-  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
-  K230_BLOCKDATA_SIZE=256M \
-  K230_IMAGE_GZIP=0
-```
-
-默认 2G 构建命令：
-
-```bash
-mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_2g_defconfig buildroot \
+make CONF=k230_rockbase_defconfig buildroot \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
@@ -104,21 +91,19 @@ make CONF=k230_rockbase_2g_defconfig buildroot \
 Rockbase 的 `post-image.sh` 会在镜像生成后自动导出：
 
 - 默认导出根目录：`/mnt/d/code/pony/IoT/k230/img`
-- 1G 导出目录前缀：`sysimage-sdcard-rockbase-1g-<build_stamp>`
-- 2G 导出目录前缀：`sysimage-sdcard-rockbase-2g-<build_stamp>`
+- 导出目录前缀：`sysimage-sdcard-rockbase-<build_stamp>`
 - 最终文件名：`sysimage-sdcard.img`
 
 示例输出：
 
 ```text
-/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-1g-20260811-104352/sysimage-sdcard.img
-/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-2g-20260811-104909/sysimage-sdcard.img
+/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-20260811-104352/sysimage-sdcard.img
 ```
 
 如果要指定导出目录：
 
 ```bash
-make CONF=k230_rockbase_1g_defconfig buildroot \
+make CONF=k230_rockbase_defconfig buildroot \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0 \
@@ -130,7 +115,7 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 如果想保留 WSL 侧镜像用于调试：
 
 ```bash
-make CONF=k230_rockbase_1g_defconfig buildroot \
+make CONF=k230_rockbase_defconfig buildroot \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0 \
@@ -140,7 +125,7 @@ make CONF=k230_rockbase_1g_defconfig buildroot \
 也可以在已有 WSL 侧镜像时使用 `copy-img` 手动复制：
 
 ```bash
-make CONF=k230_rockbase_1g_defconfig copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/IoT/k230/img
+make CONF=k230_rockbase_defconfig copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/IoT/k230/img
 ```
 
 但常规路径优先使用 `post-image.sh` 自动导出。
@@ -172,7 +157,7 @@ seed/root-block/
 seed 镜像示例：
 
 ```bash
-make CONF=k230_rockbase_1g_defconfig buildroot \
+make CONF=k230_rockbase_defconfig buildroot \
   BLOCK_SEED_DIR=seed/root-block \
   K230_BLOCKDATA_SIZE=24G \
   K230_IMAGE_GZIP=0

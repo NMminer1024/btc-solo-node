@@ -1,5 +1,7 @@
 # Rockbase Freeze 调试里程碑
 
+> **⚠️ 2026-09 profile 合并说明**：1G/2G 已合并为单一 `k230_rockbase_defconfig`。本文正文中的 `k230_rockbase_1g_defconfig` / `k230_rockbase_2g_defconfig` 及 `k230-rockbase-2g-lcd.dts` 等为当时历史记录，现已过时（2G 专属 DTS/defconfig 已删除）。详见 `AGENTS.md`「Profile 合并记录」。
+
 本文档保存 Freeze 排查中最重要的阶段性结论。临时流水材料可放在本地 `output/freeze-log.md`，重要结论应及时整理到本文档。
 
 ## 2026-08-05：早期真实卡死

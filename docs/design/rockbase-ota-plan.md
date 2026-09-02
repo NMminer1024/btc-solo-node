@@ -1,5 +1,7 @@
 # Rockbase OTA 升级方案（保用户参数 · A/B 双槽 · 自动回滚）
 
+> **⚠️ 2026-09 profile 合并说明**：1G/2G 已合并为单一 `k230_rockbase_defconfig`（内存由 U-Boot 运行时探测）。本文正文中的 defconfig 引用为当时历史记录，现已过时。详见 `AGENTS.md`「Profile 合并记录」。
+
 - 版本：v1.0（设计定稿，待实施 P1）
 - 日期：2026-08-21
 - 适用范围：Rockbase 1G / 2G（K230，SD 卡启动）

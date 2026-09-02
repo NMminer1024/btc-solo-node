@@ -3,7 +3,7 @@
 ## 项目身份
 
 - Primary board: `Rockbase` (K230-based Bitcoin pruned validating node + local Stratum/solo mining)
-- Primary defconfig: `k230_rockbase_1g_defconfig` (1G), `k230_rockbase_2g_defconfig` (2G)
+- Primary defconfig: `k230_rockbase_defconfig`（1G/2G 统一；内存大小由 U-Boot 运行时探测，见 [profile 合并记录](#profile合并记录)）
 - Web root: `buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/root/web`
 - Rootfs overlay: `buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay`
 
@@ -12,7 +12,7 @@
 | IP | 型号 | MMC 拓扑 |
 |----|------|----------|
 | `192.168.124.15` | 1G | mmc0=SDIO WiFi, mmc1=SD card |
-| `192.168.124.23` | 2G | mmc0=SD card, mmc1=SDIO WiFi |
+| `192.168.124.23` | 2G | mmc0=SDIO WiFi, mmc1=SD card（已统一接线） |
 | `192.168.124.30` | 1G | mmc0=SDIO WiFi, mmc1=SD card；当前烧 usb 模式镜像 |
 | `192.168.124.35` | 1G | mmc0=SDIO WiFi, mmc1=SD card (SD64G) |
 
@@ -24,7 +24,7 @@
 
 Seed 同步流程见 skill: `rockbase-seed`。
 
-**注意：1G/2G 的 MMC host 编号相反。** 分析日志时不要固定假设 mmc0/mmc1 角色，必须结合当次启动日志确认。
+**注意：所有板子已统一接线为 mmc0=SDIO WiFi、mmc1=SD card（SD 卡走 SDIO1 启动）。** 若遇到早期 01studio 接线的旧板，仍需结合当次启动日志确认。
 
 ## 始终生效的核心规则
 
@@ -53,15 +53,25 @@ Seed 同步流程见 skill: `rockbase-seed`。
 导出到 `/mnt/d/code/pony/IoT/k230/img/`。如果沙箱写失败，不要停，请求提权重试。
 
 ### 8. CMA 基线
-64M CMA 是 1G/2G 当前工作基线。如果重新调优：先测 32M，再 16M；128M 仅在 64M 出现 DMA/WiFi 不稳定时使用。
+64M CMA 是当前工作基线。如果重新调优：先测 32M，再 16M；128M 仅在 64M 出现 DMA/WiFi 不稳定时使用。
 
 ## 当前诊断状态
 
 - 最新关键提交: `936ea15b`（禁用 `0034`，源码默认恢复 DMA）
 - `dev` 分支源码已不再应用 `0034-rockbase-sdhci-force-pio-dma-diagnostic.patch`，**重新构建的新镜像默认恢复 DMA**
-- 注意：`1G` 和 `2G` 各自复用独立的 `output/<CONF>/build/linux-*`；**共享 kernel patch 变更后，必须对每个目标 defconfig 单独执行 `linux-dirclean` 再重编**，否则可能导出旧的 PIO kernel
+- 注意：统一后仅单一 `output/k230_rockbase_defconfig/build/linux-*`；**共享 kernel patch 变更后，执行 `linux-dirclean` 再重编**，否则可能导出旧的 PIO kernel
 - Rootfs 基线: 2G，非 6G
 - Swap 已禁用
+
+## Profile 合并记录
+
+**2026-09（本次变更）：1G/2G profile 合并为单一 `k230_rockbase_defconfig`。**
+
+- 原 `k230_rockbase_1g_defconfig` → 重命名为 `k230_rockbase_defconfig`；原 `k230_rockbase_2g_defconfig` 及全部 2G 专属文件已删除（含 Linux DTS `k230-rockbase-2g-lcd.dts`、U-Boot `k230_rockbase_2g_defconfig`/`k230_rockbase_2g.dts`、`0031-rockbase-2g-touchscreen-size.patch`、`linux_2g_nocma.fragment`）。
+- 内存大小（1G/2G）由 U-Boot `detect_ddr_size()` **运行时探测**，DDR 训练参数两板一致（LPDDR4 2667），故无需按内存拆分 profile。
+- 统一后固定接线：mmc0=SDIO WiFi、mmc1=SD card，U-Boot 从 SDIO1 启动。
+- 导出镜像目录前缀统一为 `sysimage-sdcard-rockbase-<build_stamp>`（去掉了 `-1g`/`-2g` 后缀）。
+- 若今后再出现需要按硬件区分的变体，恢复独立 defconfig 前先确认是否真的无法运行时探测。
 
 ## Skill 索引
 

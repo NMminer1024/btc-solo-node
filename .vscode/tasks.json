@@ -12,7 +12,7 @@
                 }
             },
             "args": [
-                "CONF=k230_rockbase_1g_defconfig"
+                "CONF=k230_rockbase_defconfig"
             ],
             "group": "build",
             "problemMatcher": []

@@ -31,11 +31,11 @@ NETSEL_LOG=${NETSEL_LOG:-/tmp/rockbase-netsel.log}
 NETSEL_USB_WIFI_HELPER=${NETSEL_USB_WIFI_HELPER:-/usr/bin/rockbase_usb_wifi.sh}
 # Short poll window: USB enumeration may lag behind userspace startup.
 NETSEL_USB_WAIT_SEC=${NETSEL_USB_WAIT_SEC:-5}
-# SDIO WiFi controller platform device. 1G and 2G boards differ in which
-# sdhci hosts the 8189fs (1G: 91580000.sdhci0/mmc0, 2G: 91581000.sdhci1/mmc1),
-# so the device is resolved dynamically by scanning for the SDIO WiFi
-# function (vendor 0x024c = Realtek). NETSEL_SDHCI_DEV can force a specific
-# device for testing.
+# SDIO WiFi controller platform device. All Rockbase boards host the 8189fs
+# on sdhci0 (91580000.sdhci0/mmc0); the device is still resolved dynamically
+# by scanning for the SDIO WiFi function (vendor 0x024c = Realtek) so the
+# script stays robust across board revisions. NETSEL_SDHCI_DEV can force a
+# specific device for testing.
 NETSEL_SDHCI_DEV=${NETSEL_SDHCI_DEV:-}
 NETSEL_SDHCI_DRIVER=${NETSEL_SDHCI_DRIVER:-sdhci-dwcmshc-kendryte}
 NETSEL_SDIO_WIFI_VENDOR=${NETSEL_SDIO_WIFI_VENDOR:-024c}

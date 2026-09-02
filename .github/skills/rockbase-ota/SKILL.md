@@ -47,14 +47,14 @@ tools/ota-push.sh 192.168.124.30 v0.1.0     # 或显式指定
 板端 `nohup apply --force`。这里的 “push” 只是发布并触发 OTA；payload 必须由板端
 通过 HTTP/生产源下载，不能 `scp` 到目标机。
 
-**镜像来源**：`output/k230_rockbase_1g_defconfig/images/rootfs.ext2`。
+**镜像来源**：`output/k230_rockbase_defconfig/images/rootfs.ext2`。
 用户说「重新编译再升级」时才先构建（见 `rockbase-build` skill）；否则直接用现有构建产物。
 但每次触发 OTA 前都必须确认待打包文件来自最新编译结果：检查 `rootfs.ext2` 的 mtime、
 `/etc/version/release_version`，以及刚改过的关键文件是否已进入 `rootfs.ext2`。
 如果无法证明当前 OTA 包对应最新编译产物，先重编或停止并报告，不要拿旧包升级。
 
 **重要**：热部署到板上的修复不会自动进入 OTA 包。若刚修了 `rockbase-ota.sh`、
-`S00resizemmc` 或 `rockbase-lcdui`，必须重新构建 1G 镜像，并用 `debugfs` 从新的
+`S00resizemmc` 或 `rockbase-lcdui`，必须重新构建镜像，并用 `debugfs` 从新的
 `rootfs.ext2` 抽文件验证后再 OTA。
 
 **多台设备连续 OTA**：复用同一个已构建、已签名、已由 HTTP 服务发布的包即可；
@@ -130,6 +130,6 @@ ssh root@192.168.124.30 '
 
 ## 已知边界
 
-- 只支持 1G 板（`k230_rockbase_1g_defconfig`）；2G 未适配（mmc 设备号相反）。
+- 镜像来自统一 `k230_rockbase_defconfig`（1G/2G 已合并，mmc 拓扑统一为 mmc0=SDIO WiFi / mmc1=SD）。
 - 生产源（GitHub Releases + `ota.nmminer.com` 重定向）未上线，当前走 WSL 本地 HTTP。
 - 镜像包约 43MB（2G 槽 gzip），usb有线版板端下载+验签 ~10s，dd 2G 约 2~4 分钟。

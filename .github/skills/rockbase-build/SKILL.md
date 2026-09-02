@@ -80,7 +80,7 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 ```bash
 # 统一镜像（默认，不写 K230_NET 也等价）
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_1g_defconfig buildroot -j$(nproc) \
+make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
@@ -112,7 +112,7 @@ make CONF=k230_rockbase_1g_defconfig buildroot -j$(nproc) \
 
 ### 镜像目录命名
 
-导出目录格式：`sysimage-sdcard-rockbase-{1g,2g}-{flavor}-net-TIMESTAMP/`
+导出目录格式：`sysimage-sdcard-rockbase-{flavor}-net-TIMESTAMP/`
 
 - `{flavor}`：镜像类型标志
   - `-min-`：最小镜像（非 seed，`K230_BLOCKDATA_SIZE=256M`）
@@ -122,8 +122,8 @@ make CONF=k230_rockbase_1g_defconfig buildroot -j$(nproc) \
 判定依据：脚本按 `K230_BLOCKDATA_SIZE` 判断，`>= 1G` 视为完整镜像（`-full-`），否则为最小镜像（`-min-`）。
 
 示例：
-- `sysimage-sdcard-rockbase-1g-min-net-20260820-102416/`（1G 最小统一镜像）
-- `sysimage-sdcard-rockbase-2g-full-net-20260820-120000/`（2G 完整镜像，带 seed）
+- `sysimage-sdcard-rockbase-min-net-20260820-102416/`（最小统一镜像）
+- `sysimage-sdcard-rockbase-full-net-20260820-120000/`（完整镜像，带 seed）
 
 ### 镜像验收（统一镜像）
 
@@ -143,12 +143,11 @@ make CONF=k230_rockbase_1g_defconfig buildroot -j$(nproc) \
 
 ## Kernel Patch 变更规则（重要）
 
-`1G` 和 `2G` 各自有独立的 `output/<CONF>/build/linux-*` 目录。
+现在只有单一 `output/k230_rockbase_defconfig/build/linux-*` 目录（1G/2G 已合并为单一 profile）。
 
 这意味着：
 
-- 你在源码里禁用/新增/修改了 `patches/linux/*.patch`，**不会**自动让另一个 defconfig 的旧内核目录失效
-- 如果不先 `linux-dirclean`，Buildroot 可能直接复用旧的已打 patch 内核产物
+- 你在源码里禁用/新增/修改了 `patches/linux/*.patch` 后，如果不先 `linux-dirclean`，Buildroot 可能直接复用旧的已打 patch 内核产物
 - 结果就是：源码已经变了，但新导出的镜像仍然带着旧 kernel patch 行为
 
 ### 什么时候必须 `linux-dirclean`
@@ -156,27 +155,13 @@ make CONF=k230_rockbase_1g_defconfig buildroot -j$(nproc) \
 - 改了 `patches/linux/` 下任意 patch
 - 改了 `fragment/linux.fragment`（内核配置 fragment，如 `CONFIG_MT7601U=m`）
 - 预期 kernel 行为应变化，例如 `PIO ↔ DMA`、MMC/SDHCI/IRQ/DT 相关修改
-- 需要给 `1G`、`2G` 都出镜像，且这些镜像必须口径一致
 
 ### 正确做法
 
-1G：
-
 ```bash
-make CONF=k230_rockbase_1g_defconfig linux-dirclean
+make CONF=k230_rockbase_defconfig linux-dirclean
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_1g_defconfig buildroot -j$(nproc) \
-  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
-  K230_BLOCKDATA_SIZE=256M \
-  K230_IMAGE_GZIP=0
-```
-
-2G：
-
-```bash
-make CONF=k230_rockbase_2g_defconfig linux-dirclean
-mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_2g_defconfig buildroot -j$(nproc) \
+make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
@@ -184,21 +169,11 @@ make CONF=k230_rockbase_2g_defconfig buildroot -j$(nproc) \
 
 ## 默认构建命令
 
-### 1G 非 seed 最小镜像（默认 sdio_wifi）
+### 非 seed 最小镜像（默认 sdio_wifi）
 
 ```bash
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_1g_defconfig buildroot -j$(nproc) \
-  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
-  K230_BLOCKDATA_SIZE=256M \
-  K230_IMAGE_GZIP=0
-```
-
-### 2G 非 seed 最小镜像（默认 sdio_wifi）
-
-```bash
-mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_2g_defconfig buildroot -j$(nproc) \
+make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
@@ -215,7 +190,7 @@ make CONF=k230_rockbase_2g_defconfig buildroot -j$(nproc) \
 ### 手动复制已有镜像到 Windows
 
 ```bash
-make CONF=k230_rockbase_1g_defconfig copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/IoT/k230/img
+make CONF=k230_rockbase_defconfig copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/IoT/k230/img
 ```
 
 ---
@@ -233,18 +208,10 @@ make CONF=k230_rockbase_1g_defconfig copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/Io
 **命令**：
 
 ```bash
-# 1G 全量编译
-make CONF=k230_rockbase_1g_defconfig clean
+# 全量编译
+make CONF=k230_rockbase_defconfig clean
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_1g_defconfig buildroot -j$(nproc) \
-  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
-  K230_BLOCKDATA_SIZE=256M \
-  K230_IMAGE_GZIP=0
-
-# 2G 全量编译
-make CONF=k230_rockbase_2g_defconfig clean
-mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_2g_defconfig buildroot -j$(nproc) \
+make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
   K230_IMAGE_GZIP=0
@@ -293,8 +260,8 @@ make CONF=k230_rockbase_2g_defconfig buildroot -j$(nproc) \
 **正确修复**：对受影响的包跑 dirclean，迫使 Buildroot 重新编译并安装到 target：
 
 ```bash
-make CONF=k230_rockbase_1g_defconfig wpa_supplicant-dirclean
-make CONF=k230_rockbase_1g_defconfig wireless_tools-dirclean
+make CONF=k230_rockbase_defconfig wpa_supplicant-dirclean
+make CONF=k230_rockbase_defconfig wireless_tools-dirclean
 # 然后正常 make buildroot
 ```
 
@@ -318,7 +285,7 @@ make CONF=k230_rockbase_1g_defconfig wireless_tools-dirclean
 例如检查构建后的 `sdhci-of-kendryte.c`：
 
 ```bash
-sed -n '292,310p' output/k230_rockbase_1g_defconfig/build/linux-*/drivers/mmc/host/sdhci-of-kendryte.c
+sed -n '292,310p' output/k230_rockbase_defconfig/build/linux-*/drivers/mmc/host/sdhci-of-kendryte.c
 ```
 
 判读：
@@ -376,8 +343,7 @@ echo "[netsel log]"; tail -5 /tmp/rockbase-netsel.log
 任何 `rockbase_lcdui`/LVGL UI 源码改动后，**必须**在构建镜像前单独重建：
 
 ```bash
-make CONF=k230_rockbase_1g_defconfig rockbase_lcdui-rebuild -j$(nproc)
-make CONF=k230_rockbase_2g_defconfig rockbase_lcdui-rebuild -j$(nproc)
+make CONF=k230_rockbase_defconfig rockbase_lcdui-rebuild -j$(nproc)
 ```
 
 ---
@@ -387,7 +353,7 @@ make CONF=k230_rockbase_2g_defconfig rockbase_lcdui-rebuild -j$(nproc)
 | 产物 | 路径 |
 |------|------|
 | 构建中间文件 | `output/<CONF>/images/blockdata.ext4`、`sysimage-sdcard.img` |
-| Windows 导出 | `/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-{1g,2g}-{min\|full}-{net}-<timestamp>/sysimage-sdcard.img` |
+| Windows 导出 | `/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-{min\|full}-{net}-<timestamp>/sysimage-sdcard.img` |
 
 非 seed 镜像预期大小：`~2.4G ~ 2.6G`（rootfs 2G + blockdata 256M + 分区开销）。
 

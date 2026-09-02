@@ -9,7 +9,7 @@ description: 'Measure Rockbase board SD card sequential + 4K random IOPS read/wr
 
 - **必须停服务再测**：bitcoind 的 blockchain 数据在 SD 卡 `/root/block`（p3 分区），是最大的 SD 读写源；ckpool / miners-history / statusd 也会读/写 SD 卡，会严重干扰结果
 - **测前验证 CPU idle ≥ 50%**：K230 是弱 CPU，IO 测试本身也吃 CPU；否则测出的是 CPU 瓶颈，不是 SD 卡瓶颈
-- **测速首选 fio**：板子镜像已带 fio（`BR2_PACKAGE_FIO=y`，1G/2G 都已启用）。顺序读写、4K 随机 IOPS 全部用 fio，`--direct=1` 绕过 page cache 测真实落盘
+- **测速首选 fio**：板子镜像已带 fio（`BR2_PACKAGE_FIO=y`）。顺序读写、4K 随机 IOPS 全部用 fio，`--direct=1` 绕过 page cache 测真实落盘
 - **busybox dd 无速度输出**：本板 busybox 未编译 `FEATURE_DD_THIRD_STATUS_LINE`，dd 只输出 `100+0 records`，**没有 MB/s**。不要用 dd 测速；只有没装 fio 时才用 dd 循环 seek 粗估 IOPS
 - **写测试必须落盘**：fio 用 `--end_fsync=1` 强制写完刷盘；dd 用 `conv=fsync`，否则只写进 page cache 测的是内存速度
 - **测试走文件系统（fs），不直接测裸块设备**：测试文件落在挂载分区内（`/root/` 或 `/root/block/`），通过文件读写测速，反映应用真实可获得的 IO 性能
@@ -74,7 +74,7 @@ grep -o 'root=/dev/mmcblk[0-9]p[0-9]*' /proc/cmdline
 - `mmcblkXp2` = rootfs（测试默认目标）
 - `mmcblkXp3` = blockdata（bitcoind 数据，挂载在 `/root/block`）
 
-> 注意：1G 板子 mmc0=SDIO WiFi / mmc1=SD 卡；2G 板子反过来 mmc0=SD 卡 / mmc1=SDIO WiFi。**不要固定假设设备名**，以上面命令输出为准。
+> 注意：所有板子已统一接线 mmc0=SDIO WiFi / mmc1=SD 卡（SD 卡走 SDIO1 启动）。**不要固定假设设备名**，以上面命令输出为准。
 
 ### 2.2 确认剩余空间（测试文件 ~100 MB）
 
@@ -145,7 +145,7 @@ ssh -o StrictHostKeyChecking=no root@$IP \
 
 #### 方案 A（首选）：fio
 
-板子镜像已带 fio（`BR2_PACKAGE_FIO=y`，1G/2G 都已启用）。用下面命令（`--direct=1` 绕过 page cache，`iodepth=1` 模拟单线程同步随机访问）：
+板子镜像已带 fio（`BR2_PACKAGE_FIO=y`）。用下面命令（`--direct=1` 绕过 page cache，`iodepth=1` 模拟单线程同步随机访问）：
 
 ```bash
 IP=192.168.124.XX   # 替换为目标板子 IP

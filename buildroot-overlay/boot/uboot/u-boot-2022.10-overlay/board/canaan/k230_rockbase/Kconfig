@@ -39,31 +39,13 @@ choice
             "Rockbase LPDDR4 1600 training data without ODT"
 endchoice
 
-config ROCKBASE_01STUDIO_2G_HW
-    bool "Rockbase 2G image on 01Studio hardware"
-    help
-        Use the 01Studio SDIO boot path and Wi-Fi reset path while keeping
-        the Rockbase image profile and product stack.
-
-config K230_ROCKBASE_1G_LCD_RESET_GPIO
-    int "Rockbase 1G LCD reset GPIO"
+config K230_ROCKBASE_LCD_RESET_GPIO
+    int "Rockbase LCD reset GPIO"
     default 24
-    depends on !ROCKBASE_01STUDIO_2G_HW
 
-config K230_ROCKBASE_1G_LCD_BACKLIGHT_GPIO
-    int "Rockbase 1G LCD backlight GPIO"
+config K230_ROCKBASE_LCD_BACKLIGHT_GPIO
+    int "Rockbase LCD backlight GPIO"
     default 25
-    depends on !ROCKBASE_01STUDIO_2G_HW
-
-config K230_ROCKBASE_2G_LCD_RESET_GPIO
-    int "Rockbase 2G LCD reset GPIO"
-    default 24
-    depends on ROCKBASE_01STUDIO_2G_HW
-
-config K230_ROCKBASE_2G_LCD_BACKLIGHT_GPIO
-    int "Rockbase 2G LCD backlight GPIO"
-    default 25
-    depends on ROCKBASE_01STUDIO_2G_HW
 
 config K230_ROCKBASE_DISPLAY_BG_COLOR
     hex "Rockbase U-Boot display background color"

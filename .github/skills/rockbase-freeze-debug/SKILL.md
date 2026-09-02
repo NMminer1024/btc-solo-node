@@ -16,7 +16,7 @@ description: 'Debug Rockbase board freeze/lockup/hang issues. Collect logs, psto
 ### 1. 保存串口日志
 
 - 如果串口还在打印，**不要立刻断电**
-- 保存串口日志文件，记录板子 IP、板子类型（1G/2G）和大概卡死时间
+- 保存串口日志文件，记录板子 IP、板子内存型号（1G/2G，运行时检测）和大概卡死时间
 - 如果串口还在输出，继续录 2~5 分钟
 - 如果串口完全无输出，SSH/网页都无响应 → 硬复位
 
@@ -47,7 +47,7 @@ ssh root@<IP> 'mount | grep pstore; dmesg | grep -Ei "ramoops|pstore"; ls -lah /
 每次卡死至少记录：
 
 - 板子 IP
-- 1G 还是 2G
+- 内存 1G 还是 2G
 - `/etc/version/release_version` 镜像版本
 - 串口日志文件名
 - 最后一条串口时间

@@ -319,7 +319,7 @@ cmd_status() {
     cur=$(current_slot)
     inc=$(inactive_slot 2>/dev/null || echo "?")
     up=$(fw_printenv -n "$ENV_UPGRADE" 2>/dev/null || echo "?")
-    echo "product        : rockbase (1G)"
+    echo "product        : rockbase"
     echo "current slot   : $cur"
     echo "inactive slot  : $inc"
     echo "upgrade_pending: $up"

@@ -12,11 +12,11 @@
 #   tools/mk-ota-package.sh \
 #       --version v1.2.0 \
 #       --key /path/to/ota-private.pem \
-#       --slot-img output/k230_rockbase_1g_defconfig/images/rootfs.ext2 \
-#       [--kernel-images-dir output/k230_rockbase_1g_defconfig/images] \
+#       --slot-img output/k230_rockbase_defconfig/images/rootfs.ext2 \
+#       [--kernel-images-dir output/k230_rockbase_defconfig/images] \
 #       [--base-url https://github.com/<owner>/<repo>/releases/download/v1.2.0] \
 #       [--out-dir ota-dist/v1.2.0] \
-#       [--hw 1g] [--min-version v1.0.0]
+#       [--hw rockbase] [--min-version v1.0.0]
 #
 # NOTE: the private key must be kept OFFLINE and never committed to git.
 
@@ -31,7 +31,7 @@ SLOT_IMG=""
 KIMG_DIR=""
 BASE_URL="https://example.invalid/rockbase"   # must be overridden for real releases
 OUT_DIR=""
-HW="1g"
+HW="rockbase"
 MIN_VERSION="v1.0.0"
 
 while [ $# -gt 0 ]; do

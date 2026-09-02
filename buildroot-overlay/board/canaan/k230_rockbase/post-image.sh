@@ -37,7 +37,7 @@ gz_file_add_ver()
 		canaan_site_name="EVB-K230";
 	elif [ "${CONF}" = "k230_canmv_lckfb_defconfig" ] ; then
 		canaan_site_name="CanMV-K230_LCKFB";
-	elif [ "${CONF}" = "k230_rockbase_1g_defconfig" ] ; then
+	elif [ "${CONF}" = "k230_rockbase_defconfig" ] ; then
 		canaan_site_name="RockBase-K230";
 	elif [ "${CONF}" = "k230d_canmv_defconfig" ] ; then
 		canaan_site_name="CanMV-K230D";
@@ -320,13 +320,10 @@ sync_image_outputs()
 	if [ "${size_mb}" -ge 1024 ]; then
 		flavor_sfx="-full"
 	fi
-	local image_prefix="sysimage-sdcard-rockbase-1g${flavor_sfx}${net_sfx}"
+	local image_prefix="sysimage-sdcard-rockbase${flavor_sfx}${net_sfx}"
 	# 从 release_version 中提取首个 YYYYMMDD-HHMMSS 时间戳，保证每次导出落到新目录
 	build_stamp=$(grep -m1 ^sdk: "${TARGET_DIR}/etc/version/release_version" | grep -oE [0-9]{8}-[0-9]{6} | head -n1)
 	[ -z "$build_stamp" ] && build_stamp=$(date +%Y%m%d-%H%M%S)-$$
-	if [ "${CONF}" = "k230_rockbase_2g_defconfig" ]; then
-		image_prefix="sysimage-sdcard-rockbase-2g${flavor_sfx}${net_sfx}"
-	fi
 	export_dir="${K230_IMAGE_OUT_DIR}/${image_prefix}-${build_stamp}"
 	exported_image="${export_dir}/sysimage-sdcard.img"
 	mkdir -p "${export_dir}" || {

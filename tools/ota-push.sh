@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# ota-push.sh - One-shot OTA push: package current 1G build, serve it over
+# ota-push.sh - One-shot OTA push: package current build, serve it over
 #               HTTP from this WSL host, and trigger a real apply on the board.
 #
 # Usage:
@@ -11,7 +11,7 @@
 #   tools/ota-push.sh 192.168.124.30 v0.1.0-rc1
 #
 # Notes:
-# - Slot image: output/k230_rockbase_1g_defconfig/images/rootfs.ext2
+# - Slot image: output/k230_rockbase_defconfig/images/rootfs.ext2
 #   (build first with the rockbase-build skill if you need fresh code in it).
 # - Signing key lives OUTSIDE the repo at ~/.rockbase-ota-keys/ (private key
 #   must never be committed). Auto-generated on first use; the pubkey is then
@@ -31,7 +31,7 @@ VERSION=${2:-}
 [ -n "$BOARD" ] || die "usage: $PROG <board_ip> [version]"
 
 SDK_ROOT=$(cd "$(dirname "$0")/.." && pwd)
-SLOT_IMG="${SLOT_IMG:-$SDK_ROOT/output/k230_rockbase_1g_defconfig/images/rootfs.ext2}"
+SLOT_IMG="${SLOT_IMG:-$SDK_ROOT/output/k230_rockbase_defconfig/images/rootfs.ext2}"
 KEY_DIR="$HOME/.rockbase-ota-keys"
 PRIVKEY="$KEY_DIR/ota-private.pem"
 PUBKEY="$KEY_DIR/ota-pub.pem"

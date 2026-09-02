@@ -20,7 +20,7 @@ P2 的 Web 升级页（ota.cgi + 前端卡片 + LCD 进度展示）。
 
 | 约束 | 值 |
 |---|---|
-| 目标板型 | **只针对 1G 板**（`k230_rockbase_1g_defconfig`）。**2G defconfig 不要动**（曾误改已还原） |
+| 目标板型 | 统一 `k230_rockbase_defconfig`（1G/2G 已合并，mmc 拓扑统一） |
 | 镜像源 | 客户海外；自有域名 `nmminer.com` → GitHub Releases（纯免费） |
 | 签名 | **必须**（openssl dgst RSA/SHA256；私钥离线，公钥固化设备） |
 | 根分区 | **定 2G**（实测 gzip 后 ~43MB；缩 FS 不省下载只省 dd 时间，维持 2G 改动最小） |
@@ -153,7 +153,7 @@ kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=..
 | `tools/mk-ota-package.sh` | 构建端打包：gzip 槽镜像 + sha256 + openssl dgst 签名 + manifest.json | ✅ E2/E3 真包验证 |
 | `rootfs_overlay/etc/init.d/S98otaconfirm` | 确认服务：升级启动后等 web+sshd+bitcoind 健康则 `ota confirm` | ✅ E4 回滚后自动确认 |
 | `rootfs_overlay/etc/rockbase-ota-pub.pem` | 验签公钥（测试密钥） | ✅ 已固化进 overlay |
-| `k230_rockbase_1g_defconfig` | +`LIBUBOOTENV`、`LIBCURL(+CURL/_OPENSSL)`、`CA_CERTIFICATES`、`LIBOPENSSL_BIN` | ✅ 已编译进镜像 |
+| `k230_rockbase_defconfig` | +`LIBUBOOTENV`、`LIBCURL(+CURL/_OPENSSL)`、`CA_CERTIFICATES`、`LIBOPENSSL_BIN` | ✅ 已编译进镜像 |
 | `.gitignore` | +`*-private.pem` 防私钥误提交 | ✅ |
 | `rootfs_overlay/etc/init.d/S05config` | A1 v2：早期挂载 `LABEL=rockcfg`（p3）到 `/root/config` + 出厂默认播种 + 降级回退（blkid 表解析，busybox 无 `blkid -L`） | ✅ 板端验证 |
 | `rootfs_overlay/etc/rockbase-factory-defaults/` | A1：出厂默认 `bitcoin.conf`/`ckpool.conf`（原 rootfs 实体文件移入） | ✅ 板端 md5 与原文件一致 |
@@ -236,16 +236,16 @@ kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=..
 - **`reboot -f` 会弄脏 p4**：OTA 切槽后强重启不卸载文件系统，新槽首启 p4 脏 → 需 S00 e2fsck 修复链。已在 reboot 前加 `umount /root/block` 缓解（占用中 umount 失败也没关系，e2fsck 兜底）。
 - **顶层 `make CONF=... buildroot`** 会经 `sync` 把 `.config` 重置回 defconfig；单独重编某包用 `make -C output/buildroot-2025.02.1 O=$PWD/output/<conf> <pkg>` 绕过。
 
-## 11. 构建命令（1G，非 seed 最小镜像）
+## 11. 构建命令（非 seed 最小镜像）
 
 ```bash
 cd /home/bitpony/k230_linux_sdk
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_1g_defconfig buildroot \
+make CONF=k230_rockbase_defconfig buildroot \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M K230_IMAGE_GZIP=0 K230_KEEP_WSL_IMAGES=1
 ```
-导出到 `/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-1g-min-net-<ts>/`。
+导出到 `/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-min-net-<ts>/`。
 
 ## 12. 连接板子
 

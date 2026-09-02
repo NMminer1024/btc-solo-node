@@ -202,53 +202,6 @@ inherits runtime hardware description from CanMV v3.
 +	};
 +};
 --- /dev/null
-+++ b/arch/riscv/boot/dts/canaan/k230-rockbase-2g-lcd.dts
-@@ -0,0 +1,44 @@
-+// SPDX-License-Identifier: GPL-2.0 OR MIT
-+/*
-+ * RockBase K230 2G Linux DTS.
-+ *
-+ * Keep the Rockbase product identity, but use 01Studio LCD/SDIO wiring
-+ * for the 2G hardware variant and expose the full 2G DDR range to Linux.
-+ */
-+
-+#include "k230-canmv-01studio-lcd.dts"
-+
-+/ {
-+	model = "RockBase K230 2G on 01Studio hardware";
-+	compatible = "rockbase,k230-rockbase-01studio-2g", "canaan,canmv-k230", "canaan,kendryte-k230";
-+
-+	ddr: memory@0 {
-+		device_type = "memory";
-+		reg = <0x0 0x0 0x0 0x80000000>;
-+	};
-+
-+	reserved-memory {
-+		#address-cells = <2>;
-+		#size-cells = <2>;
-+		ranges;
-+
-+		ramoops@7fc00000 {
-+			compatible = "ramoops";
-+			reg = <0x0 0x7fc00000 0x0 0x400000>;
-+			no-map;
-+			record-size = <0x10000>;
-+			console-size = <0x80000>;
-+			pmsg-size = <0x10000>;
-+			max-reason = <2>;
-+		};
-+	};
-+};
-+
-+&vo {
-+	background = <0x808000>;
-+};
-+
-+&lcd {
-+	/delete-property/ dsi_reset-gpios;
-+	/delete-property/ backlight_gpio-gpios;
-+};
---- /dev/null
 +++ b/arch/riscv/boot/dts/canaan/k230-rockbase-lcd.dts
 @@ -0,0 +1,199 @@
 +// SPDX-License-Identifier: GPL-2.0 OR MIT

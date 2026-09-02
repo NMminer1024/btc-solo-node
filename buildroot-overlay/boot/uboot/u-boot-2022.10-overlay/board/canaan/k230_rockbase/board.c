@@ -27,11 +27,7 @@
 
 sysctl_boot_mode_e sysctl_boot_get_boot_mode(void)
 {
-#ifdef CONFIG_ROCKBASE_01STUDIO_2G_HW
-	return SYSCTL_BOOT_SDIO0;
-#else
 	return SYSCTL_BOOT_SDIO1;
-#endif
 }
 
 #ifdef CONFIG_BOARD_LATE_INIT
@@ -53,10 +49,6 @@ int if_sdio_wifi_reset(void)
 }
 int board_late_init(void)
 {
-#ifdef CONFIG_ROCKBASE_01STUDIO_2G_HW
-	wifi_gpio_rst(53);
-	env_set_ulong("mmc_boot_dev_num", g_bootmod - SYSCTL_BOOT_SDIO0);
-#else
     ofnode node;
 
     if(if_sdio_wifi_reset())
@@ -66,7 +58,6 @@ int board_late_init(void)
 	if (ofnode_valid(node)) {
         wifi_gpio_rst(1);
     }
-#endif
 
     return 0;
 }
