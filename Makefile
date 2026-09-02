@@ -72,7 +72,7 @@ ddr_test_img_% :sync buildroot ###128/512/1024/2048
 
 buildroot: sync $(BRW_BUILD_DIR)/.config
 	@tools/rockbase_net_mode.sh "$(K230_NET)" "$(BRW_BUILD_DIR)" "$(BR_SRC_DIR)" "$(CONF)"
-	make -C $(BRW_BUILD_DIR) all   BR2_PRIMARY_SITE=$(BR2_PRIMARY_SITE) K230_NET=$(K230_NET)
+	+make -C $(BRW_BUILD_DIR) all   BR2_PRIMARY_SITE=$(BR2_PRIMARY_SITE) K230_NET=$(K230_NET)
 
 .PHONY:dl
 dl:   $(BRW_BUILD_DIR)/.config
