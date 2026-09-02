@@ -148,7 +148,7 @@ ota_quiesce() {
     kill_cmdline_matches rockbase_supervisord.sh
     kill_cmdline_matches rockbase_statusd.sh
     kill_cmdline_matches rockbase_miners_cache.sh
-    kill_cmdline_matches rockbase_miners_history.sh
+    kill_cmdline_matches rockbase_miners_historyd.sh
     kill_cmdline_matches rockbase_serial_healthd.sh
     kill_cmdline_matches /etc/init.d/S43statusd
     kill_cmdline_matches /etc/init.d/S61bitcoind
@@ -162,7 +162,7 @@ ota_quiesce() {
     kill_cmdline_matches rockbase_supervisord.sh -9
     kill_cmdline_matches rockbase_statusd.sh -9
     kill_cmdline_matches rockbase_miners_cache.sh -9
-    kill_cmdline_matches rockbase_miners_history.sh -9
+    kill_cmdline_matches rockbase_miners_historyd.sh -9
     kill_cmdline_matches rockbase_serial_healthd.sh -9
     kill_cmdline_matches /etc/init.d/S43statusd -9
     kill_cmdline_matches /etc/init.d/S61bitcoind -9
