@@ -43,7 +43,7 @@ Seed 同步流程见 skill: `rockbase-seed`。
 → 构建命令见 skill: `rockbase-build`，seed 管理见 skill: `rockbase-seed`
 
 ### 5. LVGL UI 重建规则
-任何 `rockbase_lcdui`/LVGL UI 改动后，**必须**用 `rockbase_lcdui-rebuild` 单独重建，不要依赖顶层 `buildroot` 自动发现。
+local 包（`rockbase_lcdui` 等）源码改动后，顶层 `buildroot` 构建**会自动** rsync 检测变化并重编（已通过改写 `buildroot-overlay/package/pkg-generic.mk` 根治，`.stamp_rsynced` 每次增量 rsync + 变化时删除 build/install stamp）。仍可手动 `<pkg>-rebuild` 强制全量重建。
 → 详细流程见 skill: `rockbase-lvgl-ui`
 
 ### 6. WSL `/mnt/d` 挂载判断
