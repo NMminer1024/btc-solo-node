@@ -88,6 +88,14 @@ LD_LIBRARY_PATH=/tmp/iperf3-local/usr/lib/x86_64-linux-gnu /tmp/iperf3-local/usr
 
 server 默认监听 **5201** 端口，保持前台运行。
 
+> **⚠️ 端口避坑（2026-09-02 实测）**：WSL 入站防火墙可能只放行特定端口
+> （如 22/SSH、8000/OTA），iperf3 默认的 **5201** 会被 SYN 丢弃——板子连 5201
+> 超时，但连 8000 通；本地自连 5201 正常，证明是 WSL 防火墙按端口拦截，**非
+> server/端口本身问题**。换 5202 同样超时（不是 5201 特定问题）。
+> **直接用 8000 端口跑 iperf3**（`-p 8000`），先停掉占用 8000 的 OTA Python
+> server（`pkill -f "http.server 8000"`）。若 8000 也不通，再排查 WSL iptables
+> （需 root）。
+
 ### 标准测速命令（双向各 3 轮，所有板子统一用这个）
 
 ```bash
@@ -133,6 +141,23 @@ done
 
 ---
 
+## 附：WiFi 链路参数查询（换 WiFi 对比用）
+
+板子**无 `iw`/`ethtool`**，用 `iwconfig` + `wpa_cli` 拿关键参数（信号/速率/信道/加密）。
+换 WiFi 后跑一遍，对比 RSSI 和链路速率即可预判吞吐（RSSI 越强、速率越高 → 吞吐越好）：
+
+```bash
+ssh root@<IP> '
+echo "=== iwconfig (速率/信号/信道) ==="; iwconfig wlan0 2>/dev/null
+echo "=== wpa_cli status (SSID/频段/加密) ==="; wpa_cli -i wlan0 status 2>/dev/null
+echo "=== wpa_cli signal_poll (RSSI/LINKSPEED) ==="; wpa_cli -i wlan0 signal_poll 2>/dev/null
+echo "=== 驱动模块 ==="; lsmod 2>/dev/null | grep -iE "8188|8189|rtw|rtl"
+'
+```
+
+关键判读字段：`Bit Rate`（链路速率）、`Signal level`/`RSSI`（信号，越接近 0 越强）、
+`Frequency`（频段）、`pairwise_cipher`（加密）。基线对比见「SDIO WiFi 高速基线（124.40）」。
+
 ## 步骤四：结果判读
 
 ### 已验证基线（2026-08-13 实测）
@@ -165,6 +190,34 @@ SDIO WiFi 的 1 MB/s 瓶颈**不是** CPU、不是 SSH 加密、也不是我们�
 - 推断原因：RTL8189FS 驱动未实现有效的 A-MPDU 帧聚合，每帧都经历独立 SDIO CMD53 事务，SDIO 总线往返延迟累积导致吞吐受限
 
 对比结论：USB ETH（**百兆**转换器）在相同 CPU 空闲状态下稳定 12 MB/s，为 SDIO WiFi 的 **12 倍**。此 12 MB/s 受**百兆网卡**（100 Mbps）限速，非 USB 2.0 上限。
+
+#### SDIO WiFi 高速基线（124.40，2026-09-02 实测，iperf3 无加密）
+
+**测试设备**：`192.168.124.40`（SDIO WiFi，wlan0，驱动 `8189fs`——`lsmod` 确认；dmesg 里的 `rtl8188fs_xmit_handler` 只是诊断 hook 名，**不是**独立驱动）。停服务后 CPU idle 96%。
+
+**WiFi 链路参数**（`iwconfig wlan0` + `wpa_cli -i wlan0 status/signal_poll`，板子无 `iw`/`ethtool`，用这两个）：
+
+| 参数 | 124.40（快） | 124.15 基线（慢） | 说明 |
+|------|-------------|------------------|------|
+| SSID | NMTech-2.4G | — | 2.4G |
+| 频段/信道 | 2447 MHz (ch 9) | — | 2.4G |
+| **链路速率** | **150 Mb/s** | 72.2 Mb/s | 高 2 倍 |
+| **信号 RSSI** | **-34 dBm** | -56 dBm | **强 22 dBm** |
+| Link Quality | 70/70 | 54/70 | 满格 |
+| Tx-Power | 12 dBm | — | |
+| 加密 | WPA2-PSK / CCMP | — | |
+| wifi_generation | 4 (802.11n) | — | |
+
+| 方向 | Run 1 | Run 2 | Run 3 | 中位数 | 重传 |
+|------|-------|-------|-------|--------|------|
+| TX 上传 | 83.7 | 81.5 | 85.2 | **83.7 Mbits/s ≈ 10.5 MB/s** | 0 |
+| RX 下载 | 82.2 | 78.8 | 82.5 | **82.2 Mbits/s ≈ 10.3 MB/s** | 131/202/234 |
+
+**结论**：双向对称 ~10 MB/s（~82 Mbits/s），TX 零重传、RX 少量重传。**远高于** 124.15 基线（~1 MB/s）。
+
+**根因（已定位）**：同一 `8189fs` 驱动，124.40 快的原因是**信号极强（-34 vs -56 dBm，强 22 dBm）+ 链路速率高（150 vs 72.2 Mb/s）**。信号强 → 协商到更高 MCS 速率 → 每帧承载更多数据 → 同样 SDIO 事务次数下吞吐翻倍以上。124.15 的 -56 dBm 弱信号下只能协商 72.2 Mb/s，叠加 SDIO 事务开销后掉到 ~1 MB/s。**换 WiFi 时对比 RSSI 和链路速率即可预判吞吐**：RSSI 越接近 0（越强）、链路速率越高，吞吐越好。
+
+复测（避坑用 8000 端口）结果一致：TX 75~87、RX 78~81 Mbits/s。
 
 ### USB ETH 千兆口 + RTL8153 上限（2026-08-14 实测）
 
