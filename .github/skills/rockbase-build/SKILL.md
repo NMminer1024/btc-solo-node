@@ -43,7 +43,7 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 | 默认非 seed | 除非用户明确说"带 seed 镜像"，否则永远构建非 seed 最小镜像 |
 | 全量编译 | 清理所有编译产物（保留工具链和 `.config`），完全重新编译；详见下方 **全量编译** 章节 |
 | 完整镜像 | 带 seed 的镜像（`K230_BLOCKDATA_SIZE=20G` + 真实 seed 数据）；详见 `rockbase-seed` skill |
-| LVGL UI 重建 | 任何 LVGL/`rockbase_lcdui` 改动后，必须用 `rockbase_lcdui-rebuild` 单独重建 |
+| LVGL UI 重建 | 任何 local 包（尤其 `rockbase_lcdui`）源码改动后，构建镜像前必须用对应 `<pkg>-rebuild` 单独重建；顶层增量构建不会自动发现 local 包源码变更 |
 | WSL 导出 | 使用 `post-image.sh` 自动导出到 `/mnt/d/code/pony/IoT/k230/img/` |
 | 构建前准备 | 非 seed 构建需要 `mkdir -p /tmp/rockbase-empty-seed` |
 | 并行编译 | 所有编译（全量/增量）必须显式多核并行：make 命令追加 `-j$(nproc)`；详见下方 **并行编译（强制）** 章节 |
@@ -340,11 +340,26 @@ echo "[netsel log]"; tail -5 /tmp/rockbase-netsel.log
 
 ## LVGL UI 重建规则（重要）
 
-任何 `rockbase_lcdui`/LVGL UI 源码改动后，**必须**在构建镜像前单独重建：
+`rockbase_lcdui` 是 `SITE_METHOD=local` 的本地源码包，buildroot 用 **rsync 把源码拷贝进 build 目录后原地编译**，增量构建只看 stamp 文件（`.stamp_rsynced` / `.stamp_built`），**不会比较 local 包源码的 mtime**。
+
+⚠️ 这意味着：改了 `buildroot-overlay/package/rockbase_lcdui/src/` 下的源码后，只跑顶层 `make buildroot` **不会**自动重编，镜像会打包旧的二进制。
+
+**正确流程：构建镜像前，先强制重建 lcdui，再跑顶层构建。**
 
 ```bash
 make CONF=k230_rockbase_defconfig rockbase_lcdui-rebuild -j$(nproc)
 ```
+
+> `rockbase_lcdui-rebuild` 会删除 `.stamp_rsynced` / `.stamp_built` / install stamp，强制重新 rsync 最新源码再重编，是有效的。
+
+**构建后校验产物是否过期（md5 不同 = build 目录仍是旧源码，需 rebuild）：**
+
+```bash
+md5sum buildroot-overlay/package/rockbase_lcdui/src/main.cpp \
+        output/k230_rockbase_defconfig/build/rockbase_lcdui/main.cpp
+```
+
+> 该问题对所有 local 包（`display` / `aic8800` / `aic8800_sdio` / `bcmdhd` / `vg_lite` / `yolo` / `vvcam` / `mvx_player` 等 26 个）同样成立：改了任一 local 包源码后都要用对应 `<pkg>-rebuild` 重建，不要依赖顶层增量构建。
 
 ---
 

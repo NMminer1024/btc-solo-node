@@ -61,13 +61,21 @@ description: 'Develop and debug Rockbase LVGL LCD UI. Covers tileview, swipe, DR
 
 ## 镜像构建
 
-LVGL UI 改动后必须单独重建：
+`rockbase_lcdui` 是 `SITE_METHOD=local` 的本地源码包，buildroot 增量构建**不会**自动重编它——改了源码后只跑顶层 `make buildroot` 会打包旧二进制。**构建镜像前必须单独重建：**
 
 ```bash
 make CONF=k230_rockbase_defconfig rockbase_lcdui-rebuild -j$(nproc)
 ```
 
 然后再构建完整镜像。详见 `rockbase-build` skill。
+
+构建后校验 build 目录拷贝是否等于最新源码（md5 不同 = 未重编，需 rebuild）：
+
+```bash
+md5sum buildroot-overlay/package/rockbase_lcdui/src/main.cpp \
+        output/k230_rockbase_defconfig/build/rockbase_lcdui/main.cpp
+```
+
 注意：若当前使用非默认网络模式（如 `usb`），构建时须同时传入 `K230_NET=usb`，否则模式会重置为 `sdio_wifi`。
 
 完整镜像烧录后，必须做网络模式互斥验收：
