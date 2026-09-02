@@ -101,14 +101,14 @@ make CONF=k230_rockbase_defconfig buildroot \
 ```bash
 make CONF=k230_rockbase_defconfig buildroot \
   BLOCK_SEED_DIR=seed/root-block \
-  K230_BLOCKDATA_SIZE=24G \
+  K230_BLOCKDATA_SIZE=20G \
   K230_IMAGE_GZIP=0
 ```
 
 容量规则：
 
 - `K230_BLOCKDATA_SIZE` 必须大于 seed 数据实际大小。
-- 对 `~17G` seed，建议从 `24G` 开始，不要卡得太紧。
+- 对 `~17G` seed，建议从 `20G` 开始，不要卡得太紧。
 - seed 镜像会显著变大，导出和烧录时间都会增加。
 
 ## 更新 seed 的建议流程

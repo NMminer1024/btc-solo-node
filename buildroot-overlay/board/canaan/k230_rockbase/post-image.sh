@@ -10,7 +10,7 @@ K230_IMAGE_OUT_DIR=${K230_IMAGE_OUT_DIR:-/mnt/d/code/pony/IoT/k230/img}
 K230_IMAGE_GZIP=${K230_IMAGE_GZIP:-0}
 BLOCK_SEED_DIR_DEFAULT="${K230_SDK_ROOT}/seed/root-block"
 BLOCK_SEED_DIR="${BLOCK_SEED_DIR:-${ROCKBASE_BLOCK_SEED_DIR:-${BLOCK_SEED_DIR_DEFAULT}}}"
-K230_BLOCKDATA_SIZE=${K230_BLOCKDATA_SIZE:-24G}
+K230_BLOCKDATA_SIZE=${K230_BLOCKDATA_SIZE:-20G}
 K230_ROCKCFG_SIZE=${K230_ROCKCFG_SIZE:-256M}
 
 
@@ -308,7 +308,7 @@ sync_image_outputs()
 	local net_sfx="-net"
 	# Image flavor suffix: -min- (minimal, no real seed) vs -full- (with seed).
 	# Derived from K230_BLOCKDATA_SIZE: >= 1G means a full (seed) image, otherwise minimal.
-	local blockdata_size="${K230_BLOCKDATA_SIZE:-24G}"
+	local blockdata_size="${K230_BLOCKDATA_SIZE:-20G}"
 	local flavor_sfx="-min"
 	local size_num="${blockdata_size%[MGTmgt]}"
 	local size_unit="${blockdata_size: -1}"

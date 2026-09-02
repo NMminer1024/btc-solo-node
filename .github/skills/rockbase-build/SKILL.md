@@ -42,7 +42,7 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 |------|------|
 | 默认非 seed | 除非用户明确说"带 seed 镜像"，否则永远构建非 seed 最小镜像 |
 | 全量编译 | 清理所有编译产物（保留工具链和 `.config`），完全重新编译；详见下方 **全量编译** 章节 |
-| 完整镜像 | 带 seed 的镜像（`K230_BLOCKDATA_SIZE=24G` + 真实 seed 数据）；详见 `rockbase-seed` skill |
+| 完整镜像 | 带 seed 的镜像（`K230_BLOCKDATA_SIZE=20G` + 真实 seed 数据）；详见 `rockbase-seed` skill |
 | LVGL UI 重建 | 任何 LVGL/`rockbase_lcdui` 改动后，必须用 `rockbase_lcdui-rebuild` 单独重建 |
 | WSL 导出 | 使用 `post-image.sh` 自动导出到 `/mnt/d/code/pony/IoT/k230/img/` |
 | 构建前准备 | 非 seed 构建需要 `mkdir -p /tmp/rockbase-empty-seed` |
@@ -116,7 +116,7 @@ make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
 
 - `{flavor}`：镜像类型标志
   - `-min-`：最小镜像（非 seed，`K230_BLOCKDATA_SIZE=256M`）
-  - `-full-`：完整镜像（带 seed，`K230_BLOCKDATA_SIZE=24G`）
+  - `-full-`：完整镜像（带 seed，`K230_BLOCKDATA_SIZE=20G`）
 - 网络后缀固定为 `-net`（统一镜像，USB + SDIO 驱动都在）
 
 判定依据：脚本按 `K230_BLOCKDATA_SIZE` 判断，`>= 1G` 视为完整镜像（`-full-`），否则为最小镜像（`-min-`）。
@@ -227,14 +227,14 @@ make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
 
 ## 完整镜像（带 Seed）
 
-**定义**：包含真实 Bitcoin 区块数据的镜像，`K230_BLOCKDATA_SIZE=24G`，seed 数据写入独立 `blockdata.ext4` 分区。
+**定义**：包含真实 Bitcoin 区块数据的镜像，`K230_BLOCKDATA_SIZE=20G`，seed 数据写入独立 `blockdata.ext4` 分区。
 
 **与最小镜像的区别**：
 
 | 维度 | 最小镜像（默认） | 完整镜像（带 seed） |
 |------|-----------------|-------------------|
 | Seed 数据 | 空目录 | 真实区块数据（`seed/root-block/`） |
-| Blockdata 大小 | 256M | 24G |
+| Blockdata 大小 | 256M | 20G |
 | 镜像总大小 | ~2.4G–2.6G | ~26G+ |
 | 用途 | 开发调试、功能验证 | 生产部署、同步验证 |
 
@@ -329,7 +329,7 @@ echo "[netsel log]"; tail -5 /tmp/rockbase-netsel.log
 
 烧录时优先使用目录名带后缀的镜像：
 - `-min-` 对应最小镜像（非 seed，`K230_BLOCKDATA_SIZE=256M`）
-- `-full-` 对应完整镜像（带 seed，`K230_BLOCKDATA_SIZE=24G`）
+- `-full-` 对应完整镜像（带 seed，`K230_BLOCKDATA_SIZE=20G`）
 - `-net-` 对应统一网络镜像（2026-08-20 起；旧镜像为 `-sdio-`/`-usb-`）
 
 若实机行为与后缀不一致，先排查误烧录或混用旧目录，再排查构建流程。
@@ -357,7 +357,7 @@ make CONF=k230_rockbase_defconfig rockbase_lcdui-rebuild -j$(nproc)
 
 非 seed 镜像预期大小：`~2.4G ~ 2.6G`（rootfs 2G + blockdata 256M + 分区开销）。
 
-如果镜像约 32G，说明走到了 seed 路径或默认 24G blockdata，需要加 `K230_BLOCKDATA_SIZE=256M` 重新构建。
+如果镜像约 32G，说明走到了 seed 路径或默认 20G blockdata，需要加 `K230_BLOCKDATA_SIZE=256M` 重新构建。
 
 ---
 

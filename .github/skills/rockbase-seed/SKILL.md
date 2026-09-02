@@ -53,7 +53,7 @@ seed/root-block/
 
 ```bash
 make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
-  K230_BLOCKDATA_SIZE=24G \
+  K230_BLOCKDATA_SIZE=20G \
   K230_IMAGE_GZIP=0
 ```
 
@@ -66,7 +66,7 @@ make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
 ### 容量规则
 
 - `K230_BLOCKDATA_SIZE` 必须 > seed 实际大小
-- `~17G` seed 建议从 `24G` 开始
+- `~17G` seed 建议从 `20G` 开始
 - seed 镜像会显著变大，导出和烧录时间都会增加
 
 ### 网络模式互斥验收（烧录后必须执行）

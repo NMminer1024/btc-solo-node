@@ -74,7 +74,7 @@ K230_IMAGE_GZIP=0
 - 总镜像约 `2.4G ~ 2.6G`（rootfs 2G + blockdata 256M + boot/分区开销）。
 - `blockdata.ext4` 应为 `256M`。
 
-如果镜像约 `32G`，通常说明走到了默认 `24G` blockdata 或类似 seed 路径，需要用 `K230_BLOCKDATA_SIZE=256M` 重新构建。
+如果镜像约 `32G`，通常说明走到了默认 `20G` blockdata 或类似 seed 路径，需要用 `K230_BLOCKDATA_SIZE=256M` 重新构建。
 
 默认构建命令：
 
@@ -152,14 +152,14 @@ seed/root-block/
 - 运行时 `S59blockdata` 将 blockdata 分区挂载到 `/root/block`。
 - `bitcoind` 的 datadir 是 `/root/block`。
 
-带 seed 构建时必须让 `K230_BLOCKDATA_SIZE` 足够容纳 seed，例如 `24G` 级别；否则 `mkfs.ext4 -d` 会失败或镜像空间不足。
+带 seed 构建时必须让 `K230_BLOCKDATA_SIZE` 足够容纳 seed，例如 `20G` 级别；否则 `mkfs.ext4 -d` 会失败或镜像空间不足。
 
 seed 镜像示例：
 
 ```bash
 make CONF=k230_rockbase_defconfig buildroot \
   BLOCK_SEED_DIR=seed/root-block \
-  K230_BLOCKDATA_SIZE=24G \
+  K230_BLOCKDATA_SIZE=20G \
   K230_IMAGE_GZIP=0
 ```
 

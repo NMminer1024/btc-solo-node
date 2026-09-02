@@ -44,7 +44,7 @@
 | p1 boot | 30M | 80M ext4 | `Image` / `k.dtb` / `fw_jump_add_uboot_head.bin` |
 | p2 rootfs | 128M | 2G ext4 | 完整系统（实际仅用 ~170MB） |
 | p3 config | 紧随 p2 | 256M ext4 `LABEL=rockcfg` | A1 v2 新增：用户配置分区，挂载 `/root/config` |
-| p4 blockdata | 紧随 p3 | 构建时 256M/24G | 首启被 S00resizemmc 扩到卡尾，挂载 `/root/block` = bitcoind datadir |
+| p4 blockdata | 紧随 p3 | 构建时 256M/20G | 首启被 S00resizemmc 扩到卡尾，挂载 `/root/block` = bitcoind datadir |
 
 > 注：A1 v2 之前的老镜像为「p1 boot / p2 rootfs / p3 blockdata（扩到卡尾）」，
 > 无 config 分区。开发期不做兼容。
