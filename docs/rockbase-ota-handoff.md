@@ -22,7 +22,7 @@ P2 的 Web 升级页（ota.cgi + 前端卡片 + LCD 进度展示）。
 | 约束 | 值 |
 |---|---|
 | 目标板型 | 统一 `k230_rockbase_defconfig`（1G/2G 已合并，mmc 拓扑统一） |
-| 镜像源 | 客户海外；自有域名 `nmminer.com` → GitHub Releases（纯免费） |
+| 镜像源 | 客户海外；自有域名 `nmminer.com` → 公开 GitHub Releases 独立发布仓库（纯免费） |
 | 签名 | **必须**（openssl dgst RSA/SHA256；私钥离线，公钥固化设备） |
 | 根分区 | **定 2G**（实测 gzip 后 ~43MB；缩 FS 不省下载只省 dd 时间，维持 2G 改动最小） |
 | 升级范围 | 只升系统，**不覆盖用户参数**（WiFi/ckpool/bitcoin 配置） |
@@ -195,13 +195,13 @@ kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=..
 ~~阶段 E1~E4 全链路~~ 2026-08-24 完成（见第 4 节阶段 E 表格与三个修复坑）。
 ~~`ota-push.sh` + skill 一键推送（B→A）~~ 2026-08-24 实测闭环；`ota` 分支已 ff 合并进 `dev`。
 
-**接手第一件事：E6 回归 + 阶段 C 剩余项（GitHub Releases + 域名重定向），
+**接手第一件事：E6 回归 + 阶段 C 剩余项（公开 GitHub Releases 独立发布仓库，域名入口可后置），
 或直接进 P2（Web 升级页 + LCD OTA 进度）。后续开发直接在 `dev` 分支进行。**
 
 ## 8. 下一步该做什么（按优先级）
 
 1. **E6 回归**：seed 镜像构建不受影响、USB/SDIO 网络切换不受影响。
-2. **阶段 C 剩余**：GitHub Releases 真实发布 + `ota.nmminer.com` 301 重定向链路（本机 HTTP 已验证）。
+2. **阶段 C 剩余**：公开 GitHub Releases 真实发布仓库；`ota.nmminer.com` 入口层可后置（本机 HTTP 已验证）。
 3. **P2 Web 集成**：`/root/web/api/ota.cgi`（status/check/apply + 进度轮询）+
    前端「系统升级」卡片 + LCD OTA 进度展示。
 
@@ -229,7 +229,7 @@ kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=..
 - **busybox fdisk 新建分区的默认值取"第一个空闲区域"**：卡上前部有 uboot raw 间隙时，
   空回车会把新分区建到那个间隙里（曾误建 p4=16-61439 盖住 SPL/env 区，幸好只改表没写数据）。
   建分区必须**显式给首尾扇区**，w 之前用 `p` 打印确认。
-- **简单 HTTP 服务器不支持 Range**：curl `-C -` 报 `(33)`，脚本已加 `fetch()` 全量重下容错。GitHub Releases 支持 Range，生产无碍。
+- **简单 HTTP 服务器不支持 Range**：curl `-C -` 报 `(33)`，脚本已加 `fetch()` 全量重下容错。公开 GitHub Releases 支持 Range，生产无碍。
 - **curl `-C -` 对已完整的本地文件直接跳过下载**（服务器 416 → curl 视为完成）：板上 WORKDIR 缓存的旧 `.sig` 不会被重下，重签后会验签失败。修复：apply 下载 sig 前 `rm -f`（小文件不需要续传）；img.gz 有 sha256 兜底不受影响。
 - **OTA 密钥对必须单一来源**：签名私钥 `~/.rockbase-ota-keys/ota-private.pem`（WSL 侧持久目录），源码固化公钥 `rootfs_overlay/etc/rockbase-ota-pub.pem` 必须与它配对（2026-08-24 已统一；曾有两套密钥导致验签失败）。`/tmp/ota-keys/` 是早期临时密钥，已废弃勿用。
 - **`reboot -f` 会弄脏 p4**：OTA 切槽后强重启不卸载文件系统，新槽首启 p4 脏 → 需 S00 e2fsck 修复链。已在 reboot 前加 `umount /root/block` 缓解（占用中 umount 失败也没关系，e2fsck 兜底）。

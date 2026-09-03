@@ -178,27 +178,29 @@ Web 集成：新增 `/root/web/api/ota.cgi`（status/check/apply + 进度日志�
 ### 2.5 镜像源与安全（已定案）
 
 已定决策：客户主要在**国外**、有自有域名 **nmminer.com**、倾向**纯免费 GitHub**、**上镜像签名**。
+源码仓库与发布仓库分离：源码仓库可私有，**发布仓库必须公开**，只放 Release 产物与 manifest。
 
-#### 2.5.1 源布局：自有域名分层 + GitHub Releases 后端
+#### 2.5.1 源布局：自有域名分层 + 独立公开 GitHub Releases 后端
 
-设备固件里**只写死自有域名**，不直接写 GitHub 地址。这样将来换/加后端
-（Cloudflare R2、CDN、对象存储）都不需要改设备固件，只改 DNS。
+设备固件里优先写死稳定入口 URL，不直接耦合到具体仓库。若后续保留
+`ota.nmminer.com`，可再做 DNS/301 入口层；当前阶段可直接用公开 GitHub Releases 地址跑通。
 
 ```
 设备请求  https://ota.nmminer.com/rockbase/manifest.json
-              │  (DNS CNAME / 301 重定向)
+              │  (DNS CNAME / 301，可选入口层)
               ▼
-        GitHub Releases  <owner>/<repo> 的 release asset
+        GitHub Releases  <release-owner>/<release-repo> 的公开 release asset
 ```
 
-- 主入口：`https://ota.nmminer.com/rockbase/manifest.json`
-  - 做法 A（推荐，零运维）：`ota.nmminer.com` 做 **HTTP 301** 到
-    `https://github.com/<owner>/<repo>/releases/latest/download/manifest.json`。
-  - 做法 B：DNS CNAME 到一个能回源 GitHub 的静态托管（如 GitHub Pages / Cloudflare），
-    由它代理 Release asset。
-- 槽镜像等大文件：manifest 内的 `url` 字段直接指向 GitHub Releases 的
+- 主入口优先级：
+  - 先直接使用公开发布仓库的 Release URL 跑通
+  - 如需对外稳定域名，再补 `ota.nmminer.com` 入口层（301 或 CNAME）
+- 槽镜像等大文件：manifest 内的 `url` 字段直接指向公开 GitHub Releases 的
   `.../releases/download/<tag>/slot-<ver>.img.gz`（GitHub 支持 Range，curl `-C -` 可断点）。
 - GitHub Releases 单文件上限 2GB，本方案 ~200MB 远低于上限，纯免费够用。
+- 推荐仓库拓扑：
+  - `rockbase`：源码仓库，可私有
+  - `rockbase-ota-release`：发布仓库，必须公开，只存 `manifest.json` / `slot-*.img.gz` / `slot-*.img.gz.sig`
 
 #### 2.5.2 签名校验（必须，P1 即上）
 
@@ -231,10 +233,10 @@ HTTPS 只保证「传输没被改」，不保证「源头是官方」。GitHub �
   "min_version": "v1.0.0",
   "released": "2026-09-01",
   "slot": {
-    "url": "https://github.com/<owner>/<repo>/releases/download/v1.2.0/slot-v1.2.0.img.gz",
+    "url": "https://github.com/<release-owner>/<release-repo>/releases/download/v1.2.0/slot-v1.2.0.img.gz",
     "sha256": "<hex>",
     "size": 204472320,
-    "sig_url": "https://github.com/<owner>/<repo>/releases/download/v1.2.0/slot-v1.2.0.img.gz.sig"
+    "sig_url": "https://github.com/<release-owner>/<release-repo>/releases/download/v1.2.0/slot-v1.2.0.img.gz.sig"
   }
 }
 ```
@@ -448,8 +450,8 @@ P1 采用「整槽 ext2 + gzip」，43MB 已足够快，不折腾裁剪与增量
    - `curl -C -` 断点续传（**人为断网再续，验证续传**）；
    - dgst 验签（**故意改一个字节，验证拒绝**）；
    - sha256 校验。
-5. 用 GitHub Releases 发测试 release，`ota.nmminer.com` 301 指向它，
-   验证重定向链路（`curl -fSL` 跟两次跳转）。
+5. 先用公开 GitHub Releases 发测试 release，入口域名后置；
+   验证 `curl -fSL` 下载、验签、校验全通。
 
 通过标准：GitHub 下载 → 验签 → 校验全通；篡改包被拒；断点续传可用。
 
