@@ -24,7 +24,31 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
      `output/k230_rockbase_defconfig/images/rootfs.ext2`（见 `rockbase-build` skill）。
      用之前先确认它是最新编译结果（检查 mtime、`/etc/version/release_version`，
      或用 `debugfs -R 'cat ...'` 抽关键文件核对），不要拿旧编译产物打包发布。
-2. **发布前必须核对签名密钥一致性**（这是本流程最容易踩的坑，2026-09-03 真机测试时
+2. **版本命名规则（必须统一）**：
+   - 格式：`vX.X.XX-<board-model>-YYYYMMDD-<shortsha>-ota`
+   - 当前 Rockbase K230 板固定使用：`vX.X.XX-rockbase-k230-YYYYMMDD-<shortsha>-ota`
+   - 示例：`vx.x.xx-rockbase-k230-20260904-562bc52-ota`
+   - `vX.X.XX`：产品发布版本号；当前尚未定版时可先用占位值，后续由真实版本替代。
+   - `board-model`：当前固定为 `rockbase-k230`；以后增加其他板型时替换为对应板型 slug。
+   - `YYYYMMDD`：优先取待发布 `SLOT_IMG` 的 `/etc/version/release_version` 里的构建日期，不用当前日期猜。
+   - `shortsha`：优先取待发布 `SLOT_IMG` 的 `/etc/version/release_version` 里的源码短 hash；取不到再用源码仓库 `git rev-parse --short HEAD`。
+   - 版本名同时用于 tag、`release-packages/$VERSION/`、`slot-$VERSION.img.gz` 和 manifest 里的 `version`，四处必须完全一致。
+   - 去掉时间戳后，同一 `vX.X.XX + board-model + YYYYMMDD + shortsha` 只能发布一次；如果远端已有同名 tag，停止并让用户提升产品版本号或基于新 commit 重新构建，不要覆盖已有 release。
+
+   生成 `VERSION` 的推荐片段：
+   ```bash
+   SLOT_IMG=output/k230_rockbase_defconfig/images/rootfs.ext2
+   PRODUCT_VERSION="${PRODUCT_VERSION:-vx.x.xx}"
+   BOARD_MODEL="${BOARD_MODEL:-rockbase-k230}"
+   image_version=$(debugfs -R 'cat /etc/version/release_version' "$SLOT_IMG" 2>/dev/null \
+     | sed -n 's/^sdk://p' | head -1)
+   build_date=$(printf '%s\n' "$image_version" | grep -oE '[0-9]{8}-[0-9]{6}' | head -1 | cut -d- -f1)
+   shortsha=$(printf '%s\n' "$image_version" | grep -oE '[0-9a-f]{7,12}' | tail -1)
+   [ -n "$build_date" ] || build_date=$(date +%Y%m%d)
+   [ -n "$shortsha" ] || shortsha=$(git rev-parse --short HEAD)
+   VERSION="${PRODUCT_VERSION}-${BOARD_MODEL}-${build_date}-${shortsha}-ota"
+   ```
+3. **发布前必须核对签名密钥一致性**（这是本流程最容易踩的坑，2026-09-03 真机测试时
    实际踩过一次）：
    ```bash
    md5sum ~/.rockbase-ota-keys/ota-pub.pem \
@@ -37,29 +61,29 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
      `/etc/rockbase-ota-pub.pem`（临时补丁）才能吃到这次发布的包，直到镜像重新编译烧录。
    - 不要跳过这一步直接签名发布，否则问题只会在真机 apply 验签阶段才暴露。
    - 背景与细节见 `docs/rockbase-ota-handoff.md` 第 13.4 节、repo memory `ota-signing-key.md`。
-3. 先确认对 `RELEASE_REPO` 有写权限；用 `git push --dry-run origin main` 或等价操作验证。
+4. 先确认对 `RELEASE_REPO` 有写权限；用 `git push --dry-run origin main` 或等价操作验证。
    如果 `Permission denied`，立刻停止并让用户补写权限，不要继续试发布。
    发布仓库提交必须使用 `NMminer1024` 身份，不要走默认 `github.com` 的 `betterpony` 身份。
    推送时应显式使用 `github.com-NMminer1024` 这个 SSH host。
-4. 优先复用 `~/ota-dist/<version>/` 下已经生成好的包。
-5. 发布前先本地验签：
+5. 优先复用 `~/ota-dist/<version>/` 下已经生成好的包。
+6. 发布前先本地验签：
    - `openssl dgst -sha256 -verify <(openssl pkey -in "$PRIVATE_KEY" -pubout) -signature "$PKG_DIR/slot-$VERSION.img.gz.sig" "$PKG_DIR/slot-$VERSION.img.gz"`
    - `sha256sum` 必须和 `manifest.json` 里的值一致。
-6. 如果包不存在、已过期，或 `manifest` 指向了错误仓库，就重新生成：
+7. 如果包不存在、已过期，或 `manifest` 指向了错误仓库，就重新生成：
    - `tools/mk-ota-package.sh --version "$VERSION" --key "$PRIVATE_KEY" --slot-img "$SLOT_IMG" --base-url "https://github.com/$RELEASE_REPO/releases/download/$VERSION" --out-dir "$PKG_DIR"`
-7. 把发布仓库里的 `release-packages/$VERSION/` 和 GitHub Actions workflow 一起提交并推送。
+8. 把发布仓库里的 `release-packages/$VERSION/` 和 GitHub Actions workflow 一起提交并推送。
    提交作者也应为 `NMminer1024 <nmminer1024@users.noreply.github.com>`。
-8. 用版本 tag 触发 workflow：
+9. 用版本 tag 触发 workflow：
    - `git tag -a "$VERSION" -m "$VERSION"`
    - `git push origin main --tags`
-9. 发布后做闭环收尾检查：
+10. 发布后做闭环收尾检查：
    - 先等 GitHub Actions / Release 生成完成；如果刚推完就查不到资产，先轮询重试
    - `curl -sfI -L "https://github.com/$RELEASE_REPO/releases/tag/$VERSION"`，确认 release 页面可打开
    - `curl -sfI -L "https://github.com/$RELEASE_REPO/releases/download/$VERSION/manifest.json"`
    - `curl -sfI -L "https://github.com/$RELEASE_REPO/releases/download/$VERSION/slot-$VERSION.img.gz"`
    - `curl -sfI -L "https://github.com/$RELEASE_REPO/releases/download/$VERSION/slot-$VERSION.img.gz.sig"`
    如果任一项失败，立刻停下来修流程或等 GitHub Actions 完成，不要假设发布成功。
-10. 发布只是这条链路的中间一环：`rockbase-build`（编译）→ 本 skill（打包发布）→
+11. 发布只是这条链路的中间一环：`rockbase-build`（编译）→ 本 skill（打包发布）→
     `rockbase-ota`（真机 apply，优先用生产域名 `https://ota.nmminer.com/rockbase/manifest.json`
     或本文 curl 验证过的 GitHub 直链触发 `rockbase-ota.sh check/apply`）。
 
