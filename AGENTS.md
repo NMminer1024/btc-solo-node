@@ -88,7 +88,15 @@ local 包（`rockbase_lcdui` 等）源码改动后，顶层 `buildroot` 构建**
 | Web/API 开发 | `rockbase-web` |
 | 网络测速（停服务→验CPU→SSH吞吐测试） | `rockbase-netspeed` |
 | CPU 压力分布测试（按页面/进程，`/root/script/cpu_page.sh`） | `rockbase-cpupress` |
-| OTA 升级真机（「ota升级124.30」→ 打包/签名/HTTP 服务/触发/验证） | `rockbase-ota` |
+| OTA 发布到 GitHub Releases（打版本包/签名/发布到公开发布仓库） | `rockbase-ota-release` |
+| OTA 升级真机（「ota升级124.30」→ 触发/监控/验证） | `rockbase-ota` |
+
+> **OTA 完整链路顺序**：`rockbase-build`（编译镜像）→ `rockbase-ota-release`（打包签名并发布到
+> `NMminer1024/btc-solo-node-release`）→ `rockbase-ota`（真机 apply，统一用生产域名
+> `ota.nmminer.com` 或 GitHub 直链）。
+> 三步之间必须核对**签名密钥一致性**（`~/.rockbase-ota-keys/ota-pub.pem` md5 需同时等于源码
+> `buildroot-overlay/.../etc/rockbase-ota-pub.pem` 和目标设备当前 `/etc/rockbase-ota-pub.pem`），
+> 详见 `docs/rockbase-ota-handoff.md` 第 13.4 节与 repo memory `ota-signing-key.md`。
 
 ## 参考文档
 

@@ -1,18 +1,26 @@
 # Rockbase OTA 开发 Handoff（接手用）
 
 > 写给接手 OTA 开发的 agent/人。读完这份 + `docs/design/rockbase-ota-plan.md` 即可无缝继续。
-> 更新日期：2026-08-24　当前分支：`dev`（`ota` 分支已 ff 合并进 dev，见第 2 节）
+> 更新日期：2026-09-03　当前分支：`dev`（`ota` 分支已 ff 合并进 dev，见第 2 节）
 
 ---
 
 ## 0. 一句话现状
 
-**A/B OTA 主框架全链路（E1~E4）已于 2026-08-24 在 124.30 真机验证通过，且
-`tools/ota-push.sh` 一键推送（打包→本机 HTTP→板端下载验签→dd 写槽→切槽重启→确认）
-已在 B→A 方向实测闭环**：双槽切换、配置/数据保留、写盘中途断电安全、bootcount
-超限自动回滚全部工作。`ota` 分支已 ff 合并进 `dev`。
-剩余：E6 回归、阶段 C 的 GitHub 发布链路、
-P2 的 Web 升级页（ota.cgi + 前端卡片 + LCD 进度展示）。
+**A/B OTA 主框架全链路（E1~E4）已于 2026-08-24 在 124.30 真机验证通过**：
+双槽切换、配置/数据保留、写盘中途断电安全、bootcount 超限自动回滚全部工作。
+`ota` 分支已 ff 合并进 `dev`。
+
+**2026-09-03：生产发布链路 + 域名入口层全部上线并在 124.40 真机验证通过**：
+公开发布仓库 `NMminer1024/btc-solo-node-release`（GitHub Actions 打 tag 自动发布）
++ `ota.nmminer.com` Cloudflare Redirect Rule 入口层（设计见
+`docs/design/rockbase-ota-plan.md` 2.5.1）。设备侧用生产域名
+`https://ota.nmminer.com/rockbase/manifest.json` 走通完整 apply（下载→验签→
+dd→切槽→自动 confirm）。**真机/生产测试统一用生产域名 `ota.nmminer.com` 或
+GitHub Releases 直链触发 `rockbase-ota.sh check/apply`**，流程见 skill
+`rockbase-ota`。
+
+剩余：E6 回归、P2 的 Web 升级页（ota.cgi + 前端卡片 + LCD 进度展示）。
 （E5 已取消：1G/2G 内存已统一为 U-Boot 运行时探测、mmc 拓扑统一，无需单独验证 2G 板。）
 
 ---
@@ -81,7 +89,13 @@ ota 分支（已全部 ff 合并进 dev @ 131a4fca，后续直接在 dev 上开�
 - `CONFIG_BOOTCOUNT_LIMIT=y` + `CONFIG_BOOTCOUNT_ENV=y` 已加进 uboot defconfig 并重编；
   **bootcount 自动 +1 / 超限触发 altbootcmd 待新镜像烧录后验证**（属阶段 E 的 E4）。
 
-### 阶段 C：工具链 + 签名端到端（部分已并入 A3 完成）🔄 部分完成
+### 阶段 C：工具链 + 签名端到端（部分已并入 A3 完成）✅ 已全部完成（2026-09-03）
+
+- 工具链 + 签名（libcurl/openssl/ca-certificates + dgst 验签）：并入 A3，2026-08-21 验证。
+- 公开 GitHub Releases 发布仓库 `NMminer1024/btc-solo-node-release`：已上线，
+  GitHub Actions 打 tag 自动发布 `manifest.json`/`slot-*.img.gz`/`.sig`。
+- `ota.nmminer.com` 域名入口层（Cloudflare Redirect Rule）：已上线，见
+  `docs/design/rockbase-ota-plan.md` 2.5.1 的具体配置步骤。
 
 ### 阶段 D：分区改造（唯一需重烧）🔄 源码已改完，镜像构建中（2026-08-24）
 
@@ -201,9 +215,11 @@ kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=..
 ## 8. 下一步该做什么（按优先级）
 
 1. **E6 回归**：seed 镜像构建不受影响、USB/SDIO 网络切换不受影响。
-2. **阶段 C 剩余**：公开 GitHub Releases 真实发布仓库；`ota.nmminer.com` 入口层可后置（本机 HTTP 已验证）。
-3. **P2 Web 集成**：`/root/web/api/ota.cgi`（status/check/apply + 进度轮询）+
+2. **P2 Web 集成**：`/root/web/api/ota.cgi`（status/check/apply + 进度轮询）+
    前端「系统升级」卡片 + LCD OTA 进度展示。
+3. **镜像层公钥同步**（见第 13 节）：源码 overlay 公钥已在 2026-09-03 更新为与
+   当前签名私钥配对的新公钥，但两个槽的镜像内容还是旧公钥，需要重新编译烧录
+   才能让 A/B 两槽都真正带上新公钥，彻底消除"切槽后验签失败"的隐患。
 
 回退预案：新布局有问题就重烧 dev 分支旧布局镜像。
 
@@ -232,6 +248,11 @@ kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=..
 - **简单 HTTP 服务器不支持 Range**：curl `-C -` 报 `(33)`，脚本已加 `fetch()` 全量重下容错。公开 GitHub Releases 支持 Range，生产无碍。
 - **curl `-C -` 对已完整的本地文件直接跳过下载**（服务器 416 → curl 视为完成）：板上 WORKDIR 缓存的旧 `.sig` 不会被重下，重签后会验签失败。修复：apply 下载 sig 前 `rm -f`（小文件不需要续传）；img.gz 有 sha256 兜底不受影响。
 - **OTA 密钥对必须单一来源**：签名私钥 `~/.rockbase-ota-keys/ota-private.pem`（WSL 侧持久目录），源码固化公钥 `rootfs_overlay/etc/rockbase-ota-pub.pem` 必须与它配对（2026-08-24 已统一；曾有两套密钥导致验签失败）。`/tmp/ota-keys/` 是早期临时密钥，已废弃勿用。
+  **2026-09-02 私钥又被 `ota-push.sh` 自动重新生成过一次（旧私钥已丢失）**，
+  2026-09-03 已把源码公钥同步为新私钥配对的公钥，但**每次真实 OTA 切槽都会用
+  镜像自带的旧公钥覆盖当前槽**（整槽刷入，不是增量），在镜像重新编译烧录之前，
+  每次切到未刷新过的槽都要手动 `scp` 新公钥补丁，详见第 13.4 节和 repo memory
+  `ota-signing-key.md`。
 - **`reboot -f` 会弄脏 p4**：OTA 切槽后强重启不卸载文件系统，新槽首启 p4 脏 → 需 S00 e2fsck 修复链。已在 reboot 前加 `umount /root/block` 缓解（占用中 umount 失败也没关系，e2fsck 兜底）。
 - **顶层 `make CONF=... buildroot`** 会经 `sync` 把 `.config` 重置回 defconfig；单独重编某包用 `make -C output/buildroot-2025.02.1 O=$PWD/output/<conf> <pkg>` 绕过。
 
@@ -259,10 +280,100 @@ ssh -o StrictHostKeyChecking=no root@192.168.124.30   # 无密码（key 已信�
 
 ---
 
-## 13. 接手检查清单（5 分钟上手）
+## 13. 生产发布链路与 `ota.nmminer.com` 入口层（2026-09-03 上线，真机已验证）
+
+设计定案见 `docs/design/rockbase-ota-plan.md` 2.5.1；本节记接手需要的落地事实。
+
+### 13.1 拓扑（已上线，不是设计草案）
+
+```
+设备/浏览器请求  https://ota.nmminer.com/rockbase/manifest.json
+                    │  Cloudflare Redirect Rule（zone: nmminer.com），302
+                    ▼
+  https://github.com/NMminer1024/btc-solo-node-release/releases/latest/download/manifest.json
+                    │  GitHub 302（latest tag 自动解析）
+                    ▼
+        具体 tag 的 manifest.json（200）
+                    │  manifest 内 slot.url / sig_url 是绝对 GitHub Releases URL
+                    ▼
+        设备直连 GitHub 下载 slot-*.img.gz / .sig（不再经过 ota.nmminer.com）
+```
+
+- 发布仓库：`NMminer1024/btc-solo-node-release`（公开），GitHub Actions 在打
+  `v*` tag 时自动发布 `manifest.json` / `slot-*.img.gz` / `slot-*.img.gz.sig`。
+  发布流程见 skill `rockbase-ota-release`。
+- Cloudflare Redirect Rule 只需要处理 `/rockbase/manifest.json` 这一条路径，
+  不需要对 `slot-*.img.gz`/`.sig` 做任何转发/代理——manifest 里已经是绝对
+  GitHub 直链。
+- 用 302（不是 301）：以后要调整发布仓库或转发目标时，客户端/浏览器不会因为
+  301 的强缓存而继续访问旧地址。
+
+### 13.2 Cloudflare 具体配置（供复制/迁移用）
+
+1. DNS → Records：`ota` A 记录，内容随意（如 `192.0.2.1`，不会被真正连接），
+   **Proxy status 必须是 Proxied（橙色云朵）**——Redirect Rules 只对代理状态的
+   记录生效。
+2. Rules → Redirect Rules，新增一条：
+   - 匹配（通配符模式，无需自定义表达式）：请求 URL 精确等于
+     `https://ota.nmminer.com/rockbase/manifest.json`
+   - 动作：目标 URL 为
+     `https://github.com/NMminer1024/btc-solo-node-release/releases/latest/download/manifest.json`，
+     状态码 302，不保留查询字符串。
+3. DNS 记录新建后到全球 anycast 节点生效有传播延迟（通常几十秒到几分钟）。
+   排查传播是否完成：直接查 zone 的权威 NS（如 `dig @pam.ns.cloudflare.com
+   ota.nmminer.com A +norecurse`），对比返回的 SOA 序列号与 `dig @<NS>
+   nmminer.com SOA +short` 的当前序列号是否一致；不一致说明命中的边缘节点还没
+   同步，属正常传播延迟，不是配置错误。
+
+### 13.3 本地网络 DNS 负缓存坑（2026-09-03 实测踩过，非生产问题）
+
+如果测试时所在局域网的路由器/DNS 在 `ota.nmminer.com` 记录创建**之前**就查询过
+该域名（会得到 NXDOMAIN），某些路由器的本地 DNS 转发链路（如 OpenWrt 的
+`dnsmasq` 前置 `smartdns`/`AdGuardHome`）会把这个负面结果缓存很久（例如
+dnsmasq 配了 `min_ttl=3600`，负缓存最长可能撑住 1 小时），导致**局域网外的设备
+能正常解析，局域网内反而解析不到**。这不是 Cloudflare 或发布链路的问题，
+排查/修复方法：
+- 直接查路由器的上游 DNS（如 `nslookup ota.nmminer.com <上游DNS服务器IP>`）
+  确认记录本身是否已经能查到。
+- 确认后重启路由器上负责本地转发/缓存的服务清掉负缓存
+  （如 `/etc/init.d/smartdns restart && /etc/init.d/dnsmasq restart`），
+  或者等负缓存 TTL 自然过期。
+
+### 13.4 签名密钥单一来源（务必核对，否则真机 apply 会验签失败）
+
+- 详见 repo memory `ota-signing-key.md`。核心结论：**每次真实 OTA 切槽都是把
+  整槽内容替换成构建镜像自带的内容**，包括 `/etc/rockbase-ota-pub.pem`；如果
+  源码里固化的公钥和当前签名私钥（`~/.rockbase-ota-keys/ota-private.pem`）不
+  配对，新切换到的槽会在下次验签时失败（`signature verification FAILED`）。
+- 2026-09-02 签名私钥被 `ota-push.sh` 自动重新生成过一次（旧私钥已丢失），
+  2026-09-03 已把源码 overlay 的公钥同步为新私钥配对的公钥，但**镜像还没有
+  重新编译烧录**——在此之前，每次切到尚未用新镜像刷新过的槽，都要先手动
+  `scp` 新公钥到该槽的 `/etc/rockbase-ota-pub.pem`，apply 前用
+  `md5sum` 核对源码 / `~/.rockbase-ota-keys/ota-pub.pem` / 板子当前
+  `/etc/rockbase-ota-pub.pem` 三者一致。
+- 长期修复：重新编译烧录镜像，让 A/B 两槽都固化新公钥，之后可去掉这条
+  手动同步步骤。
+
+### 13.5 2026-09-03 124.40 真机全链路验证记录
+
+- `check`/`apply` 均直接使用生产域名 `https://ota.nmminer.com/rockbase/manifest.json`
+  作为 `manifest_url`。
+- 完整走通：域名解析 → Cloudflare 302 → GitHub `latest` 302 → manifest 200 →
+  设备直连 GitHub 下载 slot/sig → 验签 → sha256 → dd 写非活动槽（p1/p2 均验证过）→
+  切槽重启 → `S98otaconfirm` 在 <120s 内自动确认（`upgrade_available=0`，
+  `bootcount=0`）→ 配置（`/root/config/bitcoin.conf` md5 不变）与服务
+  （bitcoind/httpd/sshd/lcdui/ckpool）全部恢复正常。
+- 中途一次 apply 因签名密钥不匹配失败（见 13.4），补 scp 公钥后重试即通过；
+  非域名/发布链路本身的问题。
+
+---
+
+## 14. 接手检查清单（5 分钟上手）
 
 - [ ] `git checkout dev && git log --oneline -6` 确认在最新 dev（ota 已合并）
-- [ ] 读 `docs/design/rockbase-ota-plan.md` 第 2、7 章
-- [ ] A2/A3 均已完成验证（第 4、6 节），无需复查
-- [ ] 下一步：A1（推荐，见第 8 节）或 B
-- [ ] 遵守第 9、10 节的规则与坑
+- [ ] 读 `docs/design/rockbase-ota-plan.md` 第 2、7 章（含 2.5.1 生产域名入口层）
+- [ ] A2/A3/阶段 C（GitHub 发布仓库 + `ota.nmminer.com` 入口层）均已完成验证，无需复查
+- [ ] 下一步：E6 回归 或 P2 Web 集成（见第 8 节）
+- [ ] 遵守第 9、10 节的规则与坑，以及第 13.4 节的签名密钥核对步骤
+- [ ] 真机测试 OTA 统一用生产域名 `ota.nmminer.com` 或 GitHub Releases 直链触发
+      `rockbase-ota.sh check/apply`

@@ -20,17 +20,48 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
    - `RELEASE_REPO`，默认 `NMminer1024/btc-solo-node-release`
    - `PKG_DIR`，默认 `~/ota-dist/$VERSION`
    - `PRIVATE_KEY`，默认 `~/.rockbase-ota-keys/ota-private.pem`
-   - `SLOT_IMG`，只在需要重打包时才用
-2. 优先复用 `~/ota-dist/<version>/` 下已经生成好的包。
-3. 发布前先本地验签：
+   - `SLOT_IMG`，只在需要重打包时才用；**默认取最近一次编译产物**
+     `output/k230_rockbase_defconfig/images/rootfs.ext2`（见 `rockbase-build` skill）。
+     用之前先确认它是最新编译结果（检查 mtime、`/etc/version/release_version`，
+     或用 `debugfs -R 'cat ...'` 抽关键文件核对），不要拿旧编译产物打包发布。
+2. **发布前必须核对签名密钥一致性**（这是本流程最容易踩的坑，2026-09-03 真机测试时
+   实际踩过一次）：
+   ```bash
+   md5sum ~/.rockbase-ota-keys/ota-pub.pem \
+     buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/etc/rockbase-ota-pub.pem
+   ```
+   两个 md5 必须一致。如果不一致，说明 `PRIVATE_KEY` 和源码里固化、随镜像烧录到设备的
+   公钥不是一对——用这把私钥签出来的包，**任何还没重新烧录过新镜像的设备验签都会失败**。
+   - 如果源码公钥是旧的：先把 `~/.rockbase-ota-keys/ota-pub.pem` 同步进源码 overlay 文件并提交，
+     再继续发布；同时提醒用户已部署但未重新烧录的设备需要手动同步新公钥到
+     `/etc/rockbase-ota-pub.pem`（临时补丁）才能吃到这次发布的包，直到镜像重新编译烧录。
+   - 不要跳过这一步直接签名发布，否则问题只会在真机 apply 验签阶段才暴露。
+   - 背景与细节见 `docs/rockbase-ota-handoff.md` 第 13.4 节、repo memory `ota-signing-key.md`。
+3. 先确认对 `RELEASE_REPO` 有写权限；用 `git push --dry-run origin main` 或等价操作验证。
+   如果 `Permission denied`，立刻停止并让用户补写权限，不要继续试发布。
+   发布仓库提交必须使用 `NMminer1024` 身份，不要走默认 `github.com` 的 `betterpony` 身份。
+   推送时应显式使用 `github.com-NMminer1024` 这个 SSH host。
+4. 优先复用 `~/ota-dist/<version>/` 下已经生成好的包。
+5. 发布前先本地验签：
    - `openssl dgst -sha256 -verify <(openssl pkey -in "$PRIVATE_KEY" -pubout) -signature "$PKG_DIR/slot-$VERSION.img.gz.sig" "$PKG_DIR/slot-$VERSION.img.gz"`
    - `sha256sum` 必须和 `manifest.json` 里的值一致。
-4. 如果包不存在、已过期，或 `manifest` 指向了错误仓库，就重新生成：
+6. 如果包不存在、已过期，或 `manifest` 指向了错误仓库，就重新生成：
    - `tools/mk-ota-package.sh --version "$VERSION" --key "$PRIVATE_KEY" --slot-img "$SLOT_IMG" --base-url "https://github.com/$RELEASE_REPO/releases/download/$VERSION" --out-dir "$PKG_DIR"`
-5. 用公开 GitHub Releases 发布：
-   - 新发布：`gh release create "$VERSION" ... --repo "$RELEASE_REPO"`
-   - 已存在发布：`gh release upload "$VERSION" ... --repo "$RELEASE_REPO" --clobber`
-6. 发布后重新拉取资产 URL，确认匿名可访问。
+7. 把发布仓库里的 `release-packages/$VERSION/` 和 GitHub Actions workflow 一起提交并推送。
+   提交作者也应为 `NMminer1024 <nmminer1024@users.noreply.github.com>`。
+8. 用版本 tag 触发 workflow：
+   - `git tag -a "$VERSION" -m "$VERSION"`
+   - `git push origin main --tags`
+9. 发布后做闭环收尾检查：
+   - 先等 GitHub Actions / Release 生成完成；如果刚推完就查不到资产，先轮询重试
+   - `curl -sfI -L "https://github.com/$RELEASE_REPO/releases/tag/$VERSION"`，确认 release 页面可打开
+   - `curl -sfI -L "https://github.com/$RELEASE_REPO/releases/download/$VERSION/manifest.json"`
+   - `curl -sfI -L "https://github.com/$RELEASE_REPO/releases/download/$VERSION/slot-$VERSION.img.gz"`
+   - `curl -sfI -L "https://github.com/$RELEASE_REPO/releases/download/$VERSION/slot-$VERSION.img.gz.sig"`
+   如果任一项失败，立刻停下来修流程或等 GitHub Actions 完成，不要假设发布成功。
+10. 发布只是这条链路的中间一环：`rockbase-build`（编译）→ 本 skill（打包发布）→
+    `rockbase-ota`（真机 apply，优先用生产域名 `https://ota.nmminer.com/rockbase/manifest.json`
+    或本文 curl 验证过的 GitHub 直链触发 `rockbase-ota.sh check/apply`）。
 
 ## 约束
 
@@ -38,6 +69,8 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
 - 不上传私钥，不把私钥提交进仓库。
 - 验签失败就停止，不准发布。
 - 源码仓库和发布仓库要分开。
+- 没有发布仓库写权限时，不要尝试绕过流程。
+- **签名密钥必须与源码固化公钥配对**，发布前核对不一致就先处理，不要带着不匹配的密钥发布。
 
 ## 常用命令
 
@@ -49,10 +82,19 @@ tools/mk-ota-package.sh \
   --base-url "https://github.com/$RELEASE_REPO/releases/download/$VERSION" \
   --out-dir "$PKG_DIR"
 
-gh release create "$VERSION" \
-  "$PKG_DIR/manifest.json" \
-  "$PKG_DIR/slot-$VERSION.img.gz" \
-  "$PKG_DIR/slot-$VERSION.img.gz.sig" \
-  --repo "$RELEASE_REPO" \
-  --title "$VERSION"
+git add -A
+git commit -m "feat: publish OTA release $VERSION"
+git tag -a "$VERSION" -m "$VERSION"
+git push origin main --tags
+
+curl -sfI -L "https://github.com/$RELEASE_REPO/releases/tag/$VERSION"
+curl -sfI -L "https://github.com/$RELEASE_REPO/releases/download/$VERSION/manifest.json"
+curl -sfI -L "https://github.com/$RELEASE_REPO/releases/download/$VERSION/slot-$VERSION.img.gz"
+curl -sfI -L "https://github.com/$RELEASE_REPO/releases/download/$VERSION/slot-$VERSION.img.gz.sig"
+
+# 如果刚推送完成，这里允许短暂等待 GitHub Actions
+for i in 1 2 3 4 5; do
+  curl -sfI -L "https://github.com/$RELEASE_REPO/releases/download/$VERSION/manifest.json" && break
+  sleep 10
+done
 ```

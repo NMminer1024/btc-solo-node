@@ -22,7 +22,7 @@ description: 'Rockbase A/B OTA 升级真机流程。Use when: ota升级, OTA 升
 - 写盘进度以目标分区 `/proc/diskstats` 写扇区增量为准，并写入
   `/run/rockbase/ota-state.json`（LCD 覆膜）和 `/dev/console`（串口日志）。
   不要再用 pipeline `$!` + `/proc/<pid>/io` 判断 dd 进度。
-- **必须 nohup 跑 apply**：SSH 会话死掉会杀远程 dd（E2 踩过）。`tools/ota-push.sh` 已处理。
+- **必须 nohup 跑 apply**：SSH 会话死掉会杀远程 dd（E2 踩过），见下方标准流程的 `nohup ... &` 用法。
 - **OTA payload 只能让设备自己下载**：不要把 `manifest.json`、`slot-*.img.gz`、
   `slot-*.img.gz.sig` 用 `scp` 传到目标机再 `file://` apply。`scp` 包到板上是早期调试手段，
   不能作为真机 OTA 验证路径；如果设备拉不到 HTTP/GitHub 源，先修路由/HTTP 服务/发布源，
@@ -35,17 +35,39 @@ description: 'Rockbase A/B OTA 升级真机流程。Use when: ota升级, OTA 升
 
 ## 标准流程
 
-### 1. 发布并触发（WSL 侧一条命令）
+### 0. 发布前置检查（每次真机 apply 前必做）
+
+真实 OTA 切槽会把目标槽整个替换成镜像自带内容，包括 `/etc/rockbase-ota-pub.pem`。
+apply 前先核对三处签名公钥一致，避免验签失败（2026-09-03 124.40 真机测试时踩过）：
 
 ```bash
-tools/ota-push.sh 192.168.124.30            # 版本号自动取镜像 release_version
-tools/ota-push.sh 192.168.124.30 v0.1.0     # 或显式指定
+md5sum ~/.rockbase-ota-keys/ota-pub.pem \
+  buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/etc/rockbase-ota-pub.pem
+ssh root@<IP> 'md5sum /etc/rockbase-ota-pub.pem'
 ```
 
-脚本自动完成：密钥检查（`~/.rockbase-ota-keys/`，不在仓库内）→ 板端公钥比对 →
-`mk-ota-package.sh` 打包签名 → HTTP 服务（`~/ota-dist`，PID 文件管理，幂等）→
-板端 `nohup apply --force`。这里的 “push” 只是发布并触发 OTA；payload 必须由板端
-通过 HTTP/生产源下载，不能 `scp` 到目标机。
+三个 md5 必须一致。不一致就先 `scp ~/.rockbase-ota-keys/ota-pub.pem root@<IP>:/etc/rockbase-ota-pub.pem`
+把板子当前槽同步到最新公钥，再继续。详见 `docs/rockbase-ota-handoff.md` 第 13.4 节。
+
+完整链路顺序：`rockbase-build`（编译）→ `rockbase-ota-release`（打包签名发布）→
+本 skill（真机 apply）。三步之间共享同一把签名密钥。
+
+### 1. 真机升级（生产域名或 GitHub 直链）
+
+手动跑板端 agent，验证的就是设备实际会走的真实链路：
+
+```bash
+MANIFEST_URL="https://ota.nmminer.com/rockbase/manifest.json"
+# 或直接用 GitHub 直链：
+# MANIFEST_URL="https://github.com/NMminer1024/btc-solo-node-release/releases/latest/download/manifest.json"
+
+ssh root@<IP> "rockbase-ota.sh check '$MANIFEST_URL'"      # 先确认能解析出正确版本/sha256
+ssh root@<IP> "nohup rockbase-ota.sh apply '$MANIFEST_URL' --force \
+  > /root/block/ota/apply-manual.log 2>&1 & echo started pid \$!"   # nohup 防 SSH 断连杀 dd
+```
+
+前提：该版本已经用 `rockbase-ota-release` skill 发布到
+`NMminer1024/btc-solo-node-release`，且 0 节的密钥核对已通过。
 
 **镜像来源**：`output/k230_rockbase_defconfig/images/rootfs.ext2`。
 用户说「重新编译再升级」时才先构建（见 `rockbase-build` skill）；否则直接用现有构建产物。
@@ -57,15 +79,14 @@ tools/ota-push.sh 192.168.124.30 v0.1.0     # 或显式指定
 `S00resizemmc` 或 `rockbase-lcdui`，必须重新构建镜像，并用 `debugfs` 从新的
 `rootfs.ext2` 抽文件验证后再 OTA。
 
-**多台设备连续 OTA**：复用同一个已构建、已签名、已由 HTTP 服务发布的包即可；
-不要为了第二台设备改 manifest 成 `file://`，也不要把包复制到目标机。触发前必须确认
-目标机能从自身网络访问 manifest URL，例如：
+**多台设备连续 OTA**：复用同一个已发布到公开仓库的包即可，依次对每台设备重复上面的
+`check`/`apply` 命令。触发前必须确认目标机能从自身网络访问生产域名或 GitHub，例如：
 
 ```bash
-ssh root@<IP> 'curl --cacert /etc/ssl/certs/ca-certificates.crt --retry 2 -sfI http://<host>:8000/<ver>/manifest.json'
+ssh root@<IP> 'curl --cacert /etc/ssl/certs/ca-certificates.crt --retry 2 -sfI https://ota.nmminer.com/rockbase/manifest.json'
 ```
 
-如果这里失败，先修 HTTP 监听地址、路由、防火墙或改用生产发布源；未修通前不执行 OTA。
+如果这里失败，先修域名/DNS/路由/防火墙问题；未修通前不执行 OTA。
 
 ### 2. 监控 dd 进度（约 2~4 分钟）
 
@@ -131,5 +152,9 @@ ssh root@192.168.124.30 '
 ## 已知边界
 
 - 镜像来自统一 `k230_rockbase_defconfig`（1G/2G 已合并，mmc 拓扑统一为 mmc0=SDIO WiFi / mmc1=SD）。
-- 生产源（GitHub Releases + `ota.nmminer.com` 重定向）未上线，当前走 WSL 本地 HTTP。
+- 生产源（公开 GitHub Releases `NMminer1024/btc-solo-node-release` + `ota.nmminer.com`
+  Cloudflare 重定向入口层）已上线并在真机验证通过，详见
+  `docs/rockbase-ota-handoff.md` 第 13 节。真机测试统一直接用
+  `https://ota.nmminer.com/rockbase/manifest.json` 或 GitHub Releases 直链跑
+  `rockbase-ota.sh check/apply`。
 - 镜像包约 43MB（2G 槽 gzip），usb有线版板端下载+验签 ~10s，dd 2G 约 2~4 分钟。

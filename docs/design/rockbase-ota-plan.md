@@ -180,27 +180,59 @@ Web 集成：新增 `/root/web/api/ota.cgi`（status/check/apply + 进度日志�
 已定决策：客户主要在**国外**、有自有域名 **nmminer.com**、倾向**纯免费 GitHub**、**上镜像签名**。
 源码仓库与发布仓库分离：源码仓库可私有，**发布仓库必须公开**，只放 Release 产物与 manifest。
 
-#### 2.5.1 源布局：自有域名分层 + 独立公开 GitHub Releases 后端
+#### 2.5.1 源布局：自有域名入口层 + 独立公开 GitHub Releases 后端（**已上线，2026-09-03 生产验证通过**）
 
-设备固件里优先写死稳定入口 URL，不直接耦合到具体仓库。若后续保留
-`ota.nmminer.com`，可再做 DNS/301 入口层；当前阶段可直接用公开 GitHub Releases 地址跑通。
+设备固件/OTA 客户端里写死的稳定入口 URL 是 `https://ota.nmminer.com/rockbase/manifest.json`，
+不直接耦合具体发布仓库或 tag。真正的资产（manifest.json / slot-*.img.gz / .sig）全部放在公开
+GitHub Releases，域名层只做一次 302 转发，指向该仓库的 **`releases/latest/download/`** 路径——
+每次发新版本 tag 一个 release，域名入口自动跟着指向最新版，不需要改任何转发配置。
 
 ```
 设备请求  https://ota.nmminer.com/rockbase/manifest.json
-              │  (DNS CNAME / 301，可选入口层)
+              │  Cloudflare Redirect Rules，302
               ▼
-        GitHub Releases  <release-owner>/<release-repo> 的公开 release asset
+  https://github.com/<release-owner>/<release-repo>/releases/latest/download/manifest.json
+              │  GitHub 302（latest tag 解析）
+              ▼
+        GitHub Releases 具体 tag 的 manifest.json（200，内容见 2.5.3）
 ```
 
-- 主入口优先级：
-  - 先直接使用公开发布仓库的 Release URL 跑通
-  - 如需对外稳定域名，再补 `ota.nmminer.com` 入口层（301 或 CNAME）
+manifest.json 里的 `slot.url` / `slot.sig_url` 是指向具体 tag 的**绝对 GitHub Releases URL**，
+设备下载大文件时直接打 GitHub，不再经过 `ota.nmminer.com`——域名层只需要转发这一条
+`/rockbase/manifest.json` 路径，不需要做成通用反向代理。
+
+**Cloudflare 配置（zone: `nmminer.com`，已在生产环境配置，供后续复制/迁移参考）**：
+
+1. DNS → Records：新增一条 `ota` 的 A 记录（内容可以是任意占位 IP，比如 `192.0.2.1`，
+   实际不会被连接到，因为下面的 Redirect Rule 会在到达源站前拦截请求）。
+   **Proxy status 必须是 Proxied（橙色云朵）**——Redirect Rules 只对代理状态的记录生效，
+   灰色云朵（DNS only）不会触发规则。
+2. Rules → Redirect Rules：新增一条规则（名称任意，如 `ota-manifest-redirect`）：
+   - 匹配（通配符模式即可，不需要自定义表达式）：
+     - 请求 URL：`https://ota.nmminer.com/rockbase/manifest.json`（精确匹配，无需 `*`）
+   - 动作：
+     - 目标 URL（静态或动态皆可）：`https://github.com/<release-owner>/<release-repo>/releases/latest/download/manifest.json`
+     - 状态码：**302**（不要用 301——301 会被客户端/浏览器长期缓存，以后要调整转发目标时更换困难；302 每次都会重新请求源站）
+     - 保留查询字符串：关
+3. 生效前提：DNS 记录写入后需要等 Cloudflare 全球 anycast 网络传播（一般几十秒到几分钟）。
+   排查传播是否完成，可直接查 Cloudflare 权威 NS（`dig @<zone的NS，如 pam.ns.cloudflare.com> ota.nmminer.com A +norecurse`），
+   对比返回的 SOA 序列号与 zone 当前 SOA 序列号（`dig @<NS> nmminer.com SOA +short`）是否一致；
+   不一致说明命中了还没同步的边缘节点，属正常传播延迟，不是配置错误。
+4. **本地网络 DNS 负缓存陷阱（2026-09-03 实测踩过）**：如果在记录创建*之前*就有客户端/路由器
+   查询过 `ota.nmminer.com`（会得到 NXDOMAIN），且路由器的本地 DNS 转发链路（如 OpenWrt 的
+   `dnsmasq` + `smartdns`/`AdGuardHome`）配置了较大的 `min_ttl`（例如 dnsmasq 的
+   `min_ttl=3600`），这个负面结果会被强制缓存长达该 TTL，即使 Cloudflare 侧记录早已生效，
+   局域网内的设备依然解析失败，而局域网外的设备可以正常解析。**这不是生产配置的问题**，
+   是本地网络的 DNS 缓存问题，修法是重启该路由器上的 DNS 转发/解析服务（如
+   `/etc/init.d/smartdns restart` 和 `/etc/init.d/dnsmasq restart`）清掉负缓存，
+   或者等 TTL 自然过期。
+
 - 槽镜像等大文件：manifest 内的 `url` 字段直接指向公开 GitHub Releases 的
   `.../releases/download/<tag>/slot-<ver>.img.gz`（GitHub 支持 Range，curl `-C -` 可断点）。
 - GitHub Releases 单文件上限 2GB，本方案 ~200MB 远低于上限，纯免费够用。
-- 推荐仓库拓扑：
-  - `rockbase`：源码仓库，可私有
-  - `rockbase-ota-release`：发布仓库，必须公开，只存 `manifest.json` / `slot-*.img.gz` / `slot-*.img.gz.sig`
+- 实际仓库拓扑（已落地）：
+  - `NMminer1024/btc-fullnode`：源码仓库（本仓库），私有
+  - `NMminer1024/btc-solo-node-release`：发布仓库，公开，只存 `manifest.json` / `slot-*.img.gz` / `slot-*.img.gz.sig`，由 GitHub Actions 在打 tag 时自动发布
 
 #### 2.5.2 签名校验（必须，P1 即上）
 
@@ -364,8 +396,8 @@ P1 采用「整槽 ext2 + gzip」，43MB 已足够快，不折腾裁剪与增量
 
 - P1（出货前必须）：分区布局 + uboot A/B/回滚 + 配置外置 + OTA 脚本
   （manifest 拉取 + 断点续传 + **dgst 验签**）+ 确认服务 + 验签公钥入库。
-- P2（可后置，OTA 自举升级）：Web 升级页（ota.cgi + 前端卡片）、下载进度展示、
-  `ota.nmminer.com` 域名层上线（先用 GitHub 直连跑通再切域名）。
+- P2（可后置，OTA 自举升级）：Web 升级页（ota.cgi + 前端卡片）、下载进度展示。
+  （`ota.nmminer.com` 域名层已于 2026-09-03 上线并真机验证，见 2.5.1，不再是 P2 待办项。）
 - P3（可选）：小 recovery 分区兜底；swupdate 替换自研脚本（buildroot 已有该包，
   但项目惯例为 shell，P1 用脚本更顺）。
 
@@ -450,10 +482,13 @@ P1 采用「整槽 ext2 + gzip」，43MB 已足够快，不折腾裁剪与增量
    - `curl -C -` 断点续传（**人为断网再续，验证续传**）；
    - dgst 验签（**故意改一个字节，验证拒绝**）；
    - sha256 校验。
-5. 先用公开 GitHub Releases 发测试 release，入口域名后置；
+5. 用公开 GitHub Releases 发布真实 release，`ota.nmminer.com` 入口层同步验证；
    验证 `curl -fSL` 下载、验签、校验全通。
 
 通过标准：GitHub 下载 → 验签 → 校验全通；篡改包被拒；断点续传可用。
+**2026-09-03 已在 124.40 真机完整验证**：`ota.nmminer.com/rockbase/manifest.json`
+→ Cloudflare 302 → GitHub `releases/latest/download/manifest.json` → 200，
+manifest 内 `slot.url`/`sig_url` 直连 GitHub 下载，验签+sha256+dd+切槽+自动 confirm 全部通过。
 
 ### 阶段 D：分区改造（唯一需重烧，放最后）
 
