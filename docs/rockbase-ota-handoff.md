@@ -11,8 +11,9 @@
 `tools/ota-push.sh` 一键推送（打包→本机 HTTP→板端下载验签→dd 写槽→切槽重启→确认）
 已在 B→A 方向实测闭环**：双槽切换、配置/数据保留、写盘中途断电安全、bootcount
 超限自动回滚全部工作。`ota` 分支已 ff 合并进 `dev`。
-剩余：E5（2G 板适配，需先评估 2G defconfig）、E6 回归、阶段 C 的 GitHub 发布链路、
+剩余：E6 回归、阶段 C 的 GitHub 发布链路、
 P2 的 Web 升级页（ota.cgi + 前端卡片 + LCD 进度展示）。
+（E5 已取消：1G/2G 内存已统一为 U-Boot 运行时探测、mmc 拓扑统一，无需单独验证 2G 板。）
 
 ---
 
@@ -104,7 +105,7 @@ ota 分支（已全部 ff 合并进 dev @ 131a4fca，后续直接在 dev 上开�
 | E2 | 真 OTA apply 写对侧槽 | ✅ A→B：切 `ota_part=2` 从 B 起（版本标记 `99999999-e2test`）、p3/p4 完好、confirm 后 `upgrade_available=0 bootcount=0`。B→A：`ota-push.sh` 一键推送 `v20260824-112046-ota` 到 slot A、重启起 p1、修复 p4 后 confirm 成功。最终回归：`v20260824-165803-ota` 从 p2 写 p1，进度 0→94%，`flash done`→切 p1→自动 confirm 成功。过程中暴露并修复多个坑（见下） |
 | E3 | dd 写 A 槽中途断电（49% 处） | ✅ 上电照常用 slot B 启动，env 未污染，p4 journal replay 正常 |
 | E4 | 破坏 A 槽 + 切 `ota_part=1` | ✅ 串口实测 bootcount 1→2→3 递增，超限自动 altbootcmd 回滚 slot B；回滚后 S98otaconfirm 自动确认 |
-| E5 | 2G 板（mmcblk0） | ⬜ 未测（2G defconfig 按约束未动，需另行评估） |
+| E5 | ~~2G 板（mmcblk0）~~ | ✅ 已取消：1G/2G 内存统一（U-Boot 运行时探测）、mmc 拓扑统一，无需单独验证 |
 | E6 | 回归：seed 构建、网络切换 | ⬜ 未测 |
 
 **E2 暴露并修复的关键坑（均已在 124.30 真机验证）**：
@@ -203,8 +204,6 @@ kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=..
 2. **阶段 C 剩余**：GitHub Releases 真实发布 + `ota.nmminer.com` 301 重定向链路（本机 HTTP 已验证）。
 3. **P2 Web 集成**：`/root/web/api/ota.cgi`（status/check/apply + 进度轮询）+
    前端「系统升级」卡片 + LCD OTA 进度展示。
-4. **E5（需用户拍板）**：2G 板适配——2G defconfig 按约束一直没动，
-   要做的话需同步阶段 B/C/D 的全部改动并注意 mmc 设备号相反（mmcblk0）。
 
 回退预案：新布局有问题就重烧 dev 分支旧布局镜像。
 
@@ -215,7 +214,7 @@ kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=..
 1. **热部署优先**：改功能先 scp/ssh 到真板（现为有线 `124.30`，见第 12 节）验证，通过后再写回源码，不要反过来。
 2. **变更追踪**：热调试期间追踪所有改过的业务文件，固化时逐项勾销。
 3. **"打进镜像"≠编译**：用户说"打进镜像"只固化已验证改动，不编译除非明确要求。
-4. **1G/2G MMC 拓扑相反**：1G `mmc0=SDIO WiFi, mmc1=SD`（root=`mmcblk1p2`）；2G 相反。别固定假设。
+4. **MMC 拓扑已统一**：所有板子 `mmc0=SDIO WiFi, mmc1=SD`（root=`mmcblk1p2`）；内存 1G/2G 由 U-Boot 运行时探测，无需按型号区分。
 5. **共享 patch 变更**：改 kernel/uboot 共享 patch 后，每个 defconfig 要单独 `linux-dirclean`/`uboot-dirclean` 再重编。
 
 ## 10. 板端/构建的坑（已踩过，记入 repo memory `build-notes.md`）

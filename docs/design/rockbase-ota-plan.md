@@ -56,7 +56,7 @@ SPL → uboot → run blinux
   ext4load mmc ${mmc_boot_dev_num}:1 fw_jump / Image / k.dtb → bootm
 ```
 
-- `mmc_boot_dev_num` 由 board.c 按启动源运行时设置（1G=1，2G=0）。
+- `mmc_boot_dev_num` 由 board.c 按启动源运行时设置（mmc 拓扑已统一：mmc0=SDIO WiFi、mmc1=SD，SD 启动为 1）。
 - 内核 `root=`：`board_fdt_chosen_bootargs()`（board/canaan/common/k230_img.c）
   先读 env `bootargs`；为空则按 bootmode 硬编码 `root=/dev/mmcblk{0,1}p2 rw`。
 
@@ -227,7 +227,6 @@ HTTPS 只保证「传输没被改」，不保证「源头是官方」。GitHub �
 ```json
 {
   "product": "rockbase",
-  "hw": ["1g", "2g"],
   "version": "v1.2.0",
   "min_version": "v1.0.0",
   "released": "2026-09-01",
@@ -240,7 +239,6 @@ HTTPS 只保证「传输没被改」，不保证「源头是官方」。GitHub �
 }
 ```
 
-- `hw` 区分 1g/2g，设备按自身型号匹配，防止刷错镜像。
 - `min_version` 用于跨大版本强制过渡（如必须先升中间版）。
 - `size` 供下载前检查 blockdata 剩余空间、并在 dd 前核对解压后大小。
 
@@ -333,7 +331,7 @@ P1 采用「整槽 ext2 + gzip」，43MB 已足够快，不折腾裁剪与增量
 | 10 | tools/ 新增 | `mk-ota-package.sh`（构建 OTA 包 + manifest + dgst 签名） |
 | 11 | 仓库根 `.gitignore` | 增加 `*-private.pem`，防私钥误提交 |
 
-注意：共享 kernel patch / uboot overlay 变更后，1G/2G 两个 defconfig 要各自
+注意：共享 kernel patch / uboot overlay 变更后，单一 `k230_rockbase_defconfig` 要
 `linux-dirclean`（uboot 同理）再重编，避免导出旧产物（项目已有教训）。
 
 ---
@@ -355,7 +353,7 @@ P1 采用「整槽 ext2 + gzip」，43MB 已足够快，不折腾裁剪与增量
    WiFi / ckpool / bitcoin 配置原样保留。
 3. dd 写槽中途断电 → 设备仍从旧槽正常启动。
 4. 切槽后人为破坏新槽 → 3 次启动后自动回滚旧槽。
-5. 1G（mmcblk1）与 2G（mmcblk0）各跑一遍，验证设备号自适应。
+5. ~~1G（mmcblk1）与 2G（mmcblk0）各跑一遍~~（已取消：内存统一自动识别、mmc 拓扑统一）。
 6. 回归：seed 镜像构建、USB / SDIO 网络模式切换不受影响。
 
 ---
@@ -478,7 +476,7 @@ P1 采用「整槽 ext2 + gzip」，43MB 已足够快，不折腾裁剪与增量
 | E2 | OTA 到 slot B | 切槽成功、版本变化、WiFi/ckpool/bitcoin 配置保留 |
 | E3 | dd 写 B 中途断电 | 仍从 A 正常启动（A/B 价值所在） |
 | E4 | 切槽后破坏 B（如 dd 冲掉 B 的 kernel） | 3 次启动后自动回滚 A |
-| E5 | 1G(mmcblk1) + 2G(mmcblk0) 各跑一遍 | 设备号自适应 |
+| E5 | ~~1G(mmcblk1) + 2G(mmcblk0) 各跑一遍~~ | 已取消：内存统一自动识别、mmc 拓扑统一 |
 | E6 | 回归：seed 镜像构建、USB/SDIO 网络切换 | 不受影响 |
 
 ### 回退与分支基线
