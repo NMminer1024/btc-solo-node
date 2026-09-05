@@ -106,6 +106,15 @@ gen_version()
 			nncase_ver=$(cat ${nncase_ver_file} | grep NNCASE_VERSION -w | cut -d\" -f 2)
 	fi
 
+	# Human-readable product version (MAJOR.MINOR.PATCH), single source of truth
+	# is the repo-root VERSION file. See skill rockbase-version for the bump rules.
+	local product_ver_file="${K230_SDK_ROOT}/VERSION"
+	local product_ver="0.0.0"
+	if [ -e "${product_ver_file}" ]; then
+		product_ver=$(head -n1 "${product_ver_file}" | tr -d ' \t\r\n')
+	fi
+	[ -n "${product_ver}" ] || product_ver="0.0.0"
+
 	local tracked_ver_file="${BR_OVERLAY_DIR}/${BR2_ROOTFS_OVERLAY}/${ver_file}"
 
 	set +e; commitid=$(awk -F- '/^sdk:/ { print $6}' "${tracked_ver_file}"); set -e
@@ -123,9 +132,13 @@ gen_version()
 	sdk_ver="${last_tag}-$(date "+%Y%m%d-%H%M%S")-$(whoami)-$(hostname)-${commitid}-nncase${nncase_ver}"
 	echo -e "#############SDK VERSION######################################" > "${rootfs_dir}/${ver_file}"
 	echo -e "sdk:${sdk_ver}" >> "${rootfs_dir}/${ver_file}"
+	echo -e "product:v${product_ver}" >> "${rootfs_dir}/${ver_file}"
 	echo -e "CONF:${CONF%_defconfig}" >> "${rootfs_dir}/${ver_file}"
 	echo -e "##############################################################" >> "${rootfs_dir}/${ver_file}"
-	echo "build version: ${sdk_ver}"
+	# Plain, single-line readable version for LCD UI / web / OTA check to read
+	# without parsing the multi-line sdk banner above.
+	echo -n "v${product_ver}" > "${rootfs_dir}/etc/version/product_version"
+	echo "build version: ${sdk_ver} (product v${product_ver})"
 
 	cd -
 }

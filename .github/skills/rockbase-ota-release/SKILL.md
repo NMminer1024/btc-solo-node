@@ -29,8 +29,10 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
 2. **版本命名规则（必须统一）**：
    - 格式：`vX.X.XX-<board-model>-YYYYMMDD-<shortsha>-ota`
    - 当前 Rockbase K230 板固定使用：`vX.X.XX-rockbase-k230-YYYYMMDD-<shortsha>-ota`
-   - 示例：`vx.x.xx-rockbase-k230-20260904-562bc52-ota`
-   - `vX.X.XX`：产品发布版本号；当前尚未定版时可先用占位值，后续由真实版本替代。
+   - 示例：`v0.0.10-rockbase-k230-20260904-562bc52-ota`
+   - `vX.X.XX`：产品发布版本号，唯一真源是仓库根目录的 `VERSION` 文件（纯数字
+     `MAJOR.MINOR.PATCH`，不带 `v` 前缀，例如 `0.0.10`）；发布时读它加上 `v` 前缀，
+     不要再用占位值。版本号含义、何时该加哪一位、如何升级见 skill `rockbase-version`。
    - `board-model`：当前固定为 `rockbase-k230`；以后增加其他板型时替换为对应板型 slug。
    - `YYYYMMDD`：优先取待发布 `SLOT_IMG` 的 `/etc/version/release_version` 里的构建日期，不用当前日期猜。
    - `shortsha`：优先取待发布 `SLOT_IMG` 的 `/etc/version/release_version` 里的源码短 hash；取不到再用源码仓库 `git rev-parse --short HEAD`。
@@ -40,8 +42,10 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
    生成 `VERSION` 的推荐片段：
    ```bash
    SLOT_IMG=output/k230_rockbase_defconfig/images/rootfs.ext2
-   PRODUCT_VERSION="${PRODUCT_VERSION:-vx.x.xx}"
+   PRODUCT_VERSION="${PRODUCT_VERSION:-v$(cat VERSION | tr -d ' \t\r\n')}"
    BOARD_MODEL="${BOARD_MODEL:-rockbase-k230}"
+   # 发布前如果这次要升版本号，先编辑仓库根 VERSION 文件再来这里生成 PRODUCT_VERSION
+   # （具体升哪一位见 skill rockbase-version），不要直接手写覆盖。
    image_version=$(debugfs -R 'cat /etc/version/release_version' "$SLOT_IMG" 2>/dev/null \
      | sed -n 's/^sdk://p' | head -1)
    build_date=$(printf '%s\n' "$image_version" | grep -oE '[0-9]{8}-[0-9]{6}' | head -1 | cut -d- -f1)
