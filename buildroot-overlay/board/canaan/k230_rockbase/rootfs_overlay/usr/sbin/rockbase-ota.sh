@@ -485,6 +485,16 @@ cmd_apply() {
     require curl openssl sha256sum gunzip dd
     acquire_apply_lock
 
+    # Enable the state file as soon as this is a real (--force) attempt, not
+    # only after quiesce - otherwise a failure during the manifest fetch below
+    # is silently swallowed by set_state's STATE_ENABLED guard and the LCD/web
+    # overlay never shows anything (die() calls set_state, but it's a no-op
+    # while STATE_ENABLED=0). Dry-run (no --force) still leaves this at 0.
+    if [ "$force" = "1" ]; then
+        STATE_ENABLED=1
+        set_state preparing -1 "Fetching manifest"
+    fi
+
     mkdir -p "$WORKDIR"
     local mf="$WORKDIR/$MANIFEST_NAME"
     log "=== OTA apply start (force=$force) ==="
@@ -504,10 +514,8 @@ cmd_apply() {
 
     # real apply: free the SD card / network from other services before the
     # heavy download+dd (dry-run keeps everything running on purpose).
-    # STATE_ENABLED stays 0 for dry-run so the LCD overlay never pops up.
     if [ "$force" = "1" ]; then
         ota_quiesce
-        STATE_ENABLED=1
         set_state preparing -1 "Preparing for upgrade"
     fi
 
