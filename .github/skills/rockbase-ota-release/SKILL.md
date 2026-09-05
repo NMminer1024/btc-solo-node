@@ -29,10 +29,11 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
 2. **版本命名规则（必须统一）**：
    - 格式：`vX.X.XX-<board-model>-YYYYMMDD-<shortsha>-ota`
    - 当前 Rockbase K230 板固定使用：`vX.X.XX-rockbase-k230-YYYYMMDD-<shortsha>-ota`
-   - 示例：`v0.0.10-rockbase-k230-20260904-562bc52-ota`
+   - 示例：`v0.0.01-rockbase-k230-20260905-abc1234-ota`
    - `vX.X.XX`：产品发布版本号，唯一真源是仓库根目录的 `VERSION` 文件（纯数字
-     `MAJOR.MINOR.PATCH`，不带 `v` 前缀，例如 `0.0.10`）；发布时读它加上 `v` 前缀，
-     不要再用占位值。版本号含义、何时该加哪一位、如何升级见 skill `rockbase-version`。
+     `MAJOR.MINOR.PATCH`，不带 `v` 前缀，**PATCH 始终两位**，例如 `0.0.01`）；
+     发布时读它加上 `v` 前缀，不要再用占位值。版本号含义、何时该加哪一位、
+     如何升级见 skill `rockbase-version`。
    - `board-model`：当前固定为 `rockbase-k230`；以后增加其他板型时替换为对应板型 slug。
    - `YYYYMMDD`：优先取待发布 `SLOT_IMG` 的 `/etc/version/release_version` 里的构建日期，不用当前日期猜。
    - `shortsha`：优先取待发布 `SLOT_IMG` 的 `/etc/version/release_version` 里的源码短 hash；取不到再用源码仓库 `git rev-parse --short HEAD`。
