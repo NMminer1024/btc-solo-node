@@ -53,6 +53,9 @@ constexpr uint32_t kPresentIntervalMs = 20;
 constexpr size_t kStratumChartMaxPoints = 500;
 constexpr const char* kBootLogoRawPath = "/usr/share/rockbase-lcdui/boot-logo-800x480.argb";
 constexpr const char* kStatusCachePath = "/tmp/status-api.json";
+constexpr const char* kOtaCheckStatePath = "/run/rockbase/ota-check-state.json";
+constexpr uint32_t kFirmwareAutoCheckIntervalMs = 60000;  // auto check-async cadence
+constexpr uint32_t kFirmwareFirstCheckDelayMs = 60000;    // first auto check after boot
 constexpr const char* kMinersCachePath = "/run/rockbase/miners.json";
 constexpr const char* kMinersHistoryCachePath = "/run/rockbase/miners-history-node.json";
 constexpr const char* kTimezoneFilePath = "/etc/TZ";
@@ -2944,6 +2947,70 @@ void mark_dirty_pages(uint32_t dirty_mask) {
     }
 }
 
+// Firmware card: reflect the latest check-async result in the card's fill
+// color so the user can see at a glance whether an update is available.
+//   update_available -> amber fill (matches the System page accent)
+//   up_to_date       -> green fill
+//   checking/failed/none -> default dark fill, "Check Update"
+// The card is a tap target (kConfigHotspots) that opens the interactive
+// check overlay; this function only updates the passive status display.
+void update_firmware_card() {
+    if (g_tiles.system_update_card == nullptr || g_tiles.system_update_label == nullptr) {
+        return;
+    }
+    // Throttle the state-file read to ~1 Hz: the main loop runs at ~50 Hz
+    // and this must not add file IO to the display path.
+    static uint32_t last_read_ms = 0;
+    const uint32_t now_ms = tick_ms();
+    if (last_read_ms != 0 && now_ms - last_read_ms < 1000) {
+        return;
+    }
+    last_read_ms = now_ms;
+
+    std::string json;
+    if (!read_text_file(kOtaCheckStatePath, json, 4096)) {
+        return;  // no check result yet; keep the default look
+    }
+    const std::string phase = json_value(json, "phase", "");
+    // The auto check-async rewrites the file to "checking" for several
+    // seconds every 60 s, and a transient network blip writes "failed".
+    // Neither is a terminal result: keep the last known display instead of
+    // flashing the card back to the default on every poll.
+    if (phase != "update_available" && phase != "up_to_date") {
+        return;
+    }
+    const std::string latest = json_value(json, "latest_version", "");
+
+    uint32_t bg = 0x101820;  // default dark (same as create_card_ex)
+    lv_opa_t bg_opa = LV_OPA_80;
+    std::string text = "Check Update";
+    if (phase == "update_available") {
+        bg = 0x3a2a12;  // amber fill: update available
+        bg_opa = LV_OPA_COVER;
+        text = latest.empty() ? "Update Available" : ("Update " + latest);
+    }
+    else {  // up_to_date
+        bg = 0x12291c;  // green fill: already on the latest version
+        bg_opa = LV_OPA_COVER;
+        text = "Up To Date";
+    }
+    // Only touch the styles when the visual state actually changed, so the
+    // 1 Hz poll does not invalidate the card (and force a page re-snapshot)
+    // on every tick.
+    static uint32_t last_bg = 0;
+    static lv_opa_t last_opa = LV_OPA_80;
+    if (bg != last_bg || bg_opa != last_opa) {
+        last_bg = bg;
+        last_opa = bg_opa;
+        lv_obj_set_style_bg_color(g_tiles.system_update_card, lv_color_hex(bg), 0);
+        lv_obj_set_style_bg_opa(g_tiles.system_update_card, bg_opa, 0);
+        g_page_cache_dirty[2] = true;  // System page
+    }
+    if (set_label(g_tiles.system_update_label, text)) {
+        g_page_cache_dirty[2] = true;  // System page
+    }
+}
+
 void refresh_status_cb(lv_timer_t*) {
     if (ui_interacting()) {
         g_status_refresh_pending = true;
@@ -3140,6 +3207,26 @@ int main() {
         g_miners_overlay.update();
         g_ota_overlay.update();  // self-manages open/close from /run/rockbase/ota-state.json
         g_firmware_update_overlay.update();
+
+        // Passive firmware status: kick a background check-async every
+        // kFirmwareAutoCheckIntervalMs (first one after boot delay) and
+        // refresh the Firmware card fill from the latest result. Skipped
+        // while an interactive check/apply is in progress (the overlay owns
+        // the state file then) or while the OTA overlay is active.
+        {
+            static uint32_t last_auto_check_ms = 0;
+            const uint32_t boot_ms = tick_ms();
+            if (boot_ms >= kFirmwareFirstCheckDelayMs &&
+                (last_auto_check_ms == 0 || boot_ms - last_auto_check_ms >= kFirmwareAutoCheckIntervalMs) &&
+                !g_firmware_update_overlay.active() && !g_ota_overlay.active()) {
+                last_auto_check_ms = boot_ms;
+                if (std::system("nohup rockbase-ota.sh check-async >/tmp/rockbase-ota-check.log 2>&1 &") != 0) {
+                    std::fprintf(stderr, "rockbase-lcdui: failed to launch auto check-async\n");
+                }
+            }
+            update_firmware_card();
+        }
+
         process_deferred_refreshes_if_idle();
         refresh_one_dirty_page_if_idle();
 
