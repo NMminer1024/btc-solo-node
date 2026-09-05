@@ -28,6 +28,7 @@
 #include "timezone_overlay.h"
 #include "wifi_config_overlay.h"
 #include "ota_overlay.h"
+#include "firmware_update_overlay.h"
 
 namespace {
 
@@ -120,12 +121,13 @@ struct TileRuntime {
     lv_chart_series_t* stratum_series_5m = nullptr;
     lv_chart_series_t* stratum_series_6h = nullptr;
     lv_chart_series_t* stratum_series_1d = nullptr;
-    lv_obj_t* system_load = nullptr;
+    lv_obj_t* system_cpu_busy = nullptr;
     lv_obj_t* system_mem = nullptr;
     lv_obj_t* system_disk = nullptr;
-    lv_obj_t* system_temp = nullptr;
     lv_obj_t* system_uptime = nullptr;
-    lv_obj_t* system_swap = nullptr;
+    lv_obj_t* system_temp = nullptr;
+    lv_obj_t* system_update_card = nullptr;
+    lv_obj_t* system_update_label = nullptr;
     lv_obj_t* network_ip = nullptr;
     lv_obj_t* network_ssid = nullptr;
     lv_obj_t* network_rssi = nullptr;
@@ -168,9 +170,6 @@ struct DashboardData {
     std::string btc_address = "-";
     std::string load_display = "-";
     std::string load_pct = "-";
-    std::string load_avg_display = "-";
-    std::string load_avg_1 = "-";
-    std::string load_avg_5 = "-";
     std::string mem_used_display = "-";
     std::string mem_total_display = "-";
     std::string disk_size_info = "-";
@@ -233,7 +232,6 @@ struct StratumPageModel {
 
 struct SystemPageModel {
     std::string cpu_busy = "--";
-    std::string load_avg = "--";
     std::string mem = "--";
     std::string disk = "--";
     std::string uptime = "--";
@@ -267,7 +265,7 @@ constexpr uint32_t page_dirty_bit(uint32_t page) {
 constexpr TileSpec kTiles[kTileCount] = {
     {"Bitcoind", "Local Bitcoin solo node overview", 0x0a141b, 0xf0b44c, true},
     {"Stratum", "", 0x101418, 0x51c7a3, true},
-    {"System", "CPU, memory, disk and process placeholder", 0x13151e, 0x8fb7ff, true},
+    {"System", "CPU, memory, disk, uptime and firmware status", 0x13151e, 0x8fb7ff, true},
     {"Network", "WiFi, timezone and network details", 0x101719, 0xff8c64, true},
 };
 
@@ -321,6 +319,8 @@ bool g_timezone_overlay_open_pending = false;
 MinersOverlay g_miners_overlay;
 bool g_miners_overlay_open_pending = false;
 OtaOverlay g_ota_overlay;
+FirmwareUpdateOverlay g_firmware_update_overlay;
+bool g_firmware_update_overlay_open_pending = false;
 int g_pressed_hotspot_index = -1;
 bool g_show_page_indicator = false;
 
@@ -339,7 +339,8 @@ uint32_t tick_ms() {
 bool ui_interacting(uint32_t now_ms = tick_ms()) {
     (void)now_ms;
     return g_touch.down || g_pager_anim_active || g_wifi_config_overlay.active() ||
-           g_timezone_overlay.active() || g_miners_overlay.active() || g_ota_overlay.active();
+           g_timezone_overlay.active() || g_miners_overlay.active() || g_ota_overlay.active() ||
+           g_firmware_update_overlay.active();
 }
 
 struct ConfigHotspot {
@@ -363,8 +364,13 @@ void open_miners_overlay() {
     g_miners_overlay_open_pending = true;
 }
 
+void open_firmware_update_overlay() {
+    g_firmware_update_overlay_open_pending = true;
+}
+
 constexpr ConfigHotspot kConfigHotspots[] = {
     {1, 42, 118, 716, 308, open_miners_overlay},
+    {2, 546, 294, 210, 104, open_firmware_update_overlay},
     {3, 420, 148, 338, 84, open_wifi_config_overlay},
     {3, 42, 244, 338, 84, open_timezone_overlay},
 };
@@ -1703,9 +1709,6 @@ bool load_dashboard_data(DashboardData& data) {
 
     data.load_display = json_value(system, "load_display");
     data.load_pct = json_value(system, "load_pct");
-    data.load_avg_display = json_value(system, "load_avg_display");
-    data.load_avg_1 = json_value(system, "load_avg_1");
-    data.load_avg_5 = json_value(system, "load_avg_5");
     data.mem_used_display = json_value(system, "mem_used_display");
     data.mem_total_display = json_value(system, "mem_total_display");
     data.disk_size_info = json_value(system, "disk_size_info");
@@ -2507,12 +2510,6 @@ bool build_ui_model(UiModel& model) {
     model.stratum.miners_snapshot = data.miners_snapshot;
 
     model.system.cpu_busy = data.load_pct != "-" ? data.load_pct + "%" : "--";
-    if (data.load_avg_1 != "-" && data.load_avg_5 != "-") {
-        model.system.load_avg = std::string("1m ") + data.load_avg_1 + "\n5m " + data.load_avg_5;
-    }
-    else {
-        model.system.load_avg = "--";
-    }
     model.system.mem = join_value(data.mem_used_display, " / ", data.mem_total_display);
     model.system.disk = data.disk_size_info;
     model.system.uptime = data.uptime;
@@ -2776,12 +2773,20 @@ void build_system_tile(lv_obj_t* tv) {
     const lv_color_t accent = lv_color_hex(spec.accent);
     lv_obj_t* tile = create_tile_base(tv, 2, spec);
 
-    g_tiles.system_load = create_card(tile, 42, 148, 210, 112, "CPU Busy", "--", accent);
-    g_tiles.system_mem = create_card(tile, 294, 148, 210, 112, "Load Avg", "--", accent);
-    g_tiles.system_disk = create_card(tile, 546, 148, 210, 112, "Memory", "--", accent);
-    g_tiles.system_temp = create_card(tile, 42, 294, 210, 104, "Block Disk", "--", accent);
-    g_tiles.system_uptime = create_card(tile, 294, 294, 210, 104, "Uptime", "--", accent);
-    g_tiles.system_swap = create_card(tile, 546, 294, 210, 104, "Temp", "--", accent);
+    g_tiles.system_cpu_busy = create_card(tile, 42, 148, 210, 112, "CPU Busy", "--", accent);
+    g_tiles.system_mem = create_card(tile, 294, 148, 210, 112, "Memory", "--", accent);
+    g_tiles.system_disk = create_card(tile, 546, 148, 210, 112, "Block Disk", "--", accent);
+    g_tiles.system_uptime = create_card(tile, 42, 294, 210, 104, "Uptime", "--", accent);
+    g_tiles.system_temp = create_card(tile, 294, 294, 210, 104, "Temp", "--", accent);
+
+    lv_obj_t* update_card = nullptr;
+    g_tiles.system_update_label = create_card_ex(tile, 546, 294, 210, 104, "Firmware", "Check Update",
+                                                 accent, &lv_font_montserrat_18, 34, &update_card, nullptr);
+    g_tiles.system_update_card = update_card;
+    // Not a real LVGL click target: this page is shown from a pre-rendered
+    // snapshot (see refresh_page_cache), which hides the live widgets, so
+    // LV_EVENT_CLICKED never fires here. Tap detection goes through
+    // kConfigHotspots (raw touch-coordinate hit test) like the other overlays.
 }
 
 void build_network_tile(lv_obj_t* tv) {
@@ -2906,12 +2911,11 @@ uint32_t apply_ui_model(const UiModel& model) {
     }
 
     dirty = false;
-    dirty |= set_label(g_tiles.system_load, model.system.cpu_busy);
-    dirty |= set_label(g_tiles.system_mem, model.system.load_avg);
-    dirty |= set_label(g_tiles.system_disk, model.system.mem);
-    dirty |= set_label(g_tiles.system_temp, model.system.disk);
+    dirty |= set_label(g_tiles.system_cpu_busy, model.system.cpu_busy);
+    dirty |= set_label(g_tiles.system_mem, model.system.mem);
+    dirty |= set_label(g_tiles.system_disk, model.system.disk);
     dirty |= set_label(g_tiles.system_uptime, model.system.uptime);
-    dirty |= set_label(g_tiles.system_swap, model.system.temp);
+    dirty |= set_label(g_tiles.system_temp, model.system.temp);
     if (dirty) {
         dirty_mask |= page_dirty_bit(2);
     }
@@ -3127,28 +3131,34 @@ int main() {
             g_miners_overlay.open();
             g_miners_overlay_open_pending = false;
         }
+        if (g_firmware_update_overlay_open_pending && !g_firmware_update_overlay.active()) {
+            g_firmware_update_overlay.open();
+            g_firmware_update_overlay_open_pending = false;
+        }
         g_wifi_config_overlay.update();
         g_timezone_overlay.update();
         g_miners_overlay.update();
         g_ota_overlay.update();  // self-manages open/close from /run/rockbase/ota-state.json
+        g_firmware_update_overlay.update();
         process_deferred_refreshes_if_idle();
         refresh_one_dirty_page_if_idle();
 
         bool custom_present = false;
         if (!g_wifi_config_overlay.active() && !g_timezone_overlay.active() && !g_miners_overlay.active() &&
-            !g_ota_overlay.active() && g_touch.down) {
+            !g_ota_overlay.active() && !g_firmware_update_overlay.active() && g_touch.down) {
             const int32_t scroll_x = visual_scroll_x_from_touch();
             if (g_swipe_drag_started) {
                 custom_present = present_pager_frame(scroll_x);
             }
         }
         else if (!g_wifi_config_overlay.active() && !g_timezone_overlay.active() && !g_miners_overlay.active() &&
-                 !g_ota_overlay.active() && g_pager_anim_active) {
+                 !g_ota_overlay.active() && !g_firmware_update_overlay.active() && g_pager_anim_active) {
             custom_present = present_pager_snap_anim(now_ms);
         }
 
         g_custom_frame_presenting = !g_wifi_config_overlay.active() && !g_timezone_overlay.active() &&
                                     !g_miners_overlay.active() && !g_ota_overlay.active() &&
+                                    !g_firmware_update_overlay.active() &&
                                     (g_touch.down || custom_present);
         uint32_t next_ms = lv_timer_handler();
         g_custom_frame_presenting = false;
