@@ -25,7 +25,8 @@ void ConfirmOverlay::open(const char* title, const char* message,
     title_ = title != nullptr ? title : "";
     message_ = message != nullptr ? message : "";
     confirm_text_ = confirm_text != nullptr ? confirm_text : "OK";
-    cancel_text_ = cancel_text != nullptr ? cancel_text : "Cancel";
+    single_button_ = cancel_text == nullptr;
+    cancel_text_ = cancel_text != nullptr ? cancel_text : "";
     result_ = Result::None;
     overlay_.show(title_.c_str());
     build();
@@ -65,21 +66,30 @@ void ConfirmOverlay::build() {
     lv_obj_set_style_text_color(msg, lv_color_hex(0xc7d2d8), 0);
     lv_label_set_long_mode(msg, LV_LABEL_LONG_WRAP);
 
-    lv_obj_t* cancel = lv_btn_create(content);
-    lv_obj_set_size(cancel, 220, 72);
-    lv_obj_set_pos(cancel, 136, 360);
-    style_button(cancel, 0x35414a);
-    button_label(cancel, cancel_text_.c_str());
-    lv_obj_add_event_cb(cancel, [](lv_event_t* e) {
-        auto* self = static_cast<ConfirmOverlay*>(lv_event_get_user_data(e));
-        if (self != nullptr) {
-            self->result_ = Result::Cancelled;
-        }
-    }, LV_EVENT_CLICKED, this);
+    if (!single_button_) {
+        lv_obj_t* cancel = lv_btn_create(content);
+        lv_obj_set_size(cancel, 220, 72);
+        lv_obj_set_pos(cancel, 136, 360);
+        style_button(cancel, 0x35414a);
+        button_label(cancel, cancel_text_.c_str());
+        lv_obj_add_event_cb(cancel, [](lv_event_t* e) {
+            auto* self = static_cast<ConfirmOverlay*>(lv_event_get_user_data(e));
+            if (self != nullptr) {
+                self->result_ = Result::Cancelled;
+            }
+        }, LV_EVENT_CLICKED, this);
+    }
 
     lv_obj_t* ok = lv_btn_create(content);
-    lv_obj_set_size(ok, 220, 72);
-    lv_obj_set_pos(ok, 404, 360);
+    if (single_button_) {
+        // Wide and centered - a single button doesn't need to share the row.
+        lv_obj_set_size(ok, 480, 72);
+        lv_obj_set_pos(ok, 140, 360);
+    }
+    else {
+        lv_obj_set_size(ok, 220, 72);
+        lv_obj_set_pos(ok, 404, 360);
+    }
     style_button(ok, 0x2d8f5a);
     button_label(ok, confirm_text_.c_str());
     lv_obj_add_event_cb(ok, [](lv_event_t* e) {

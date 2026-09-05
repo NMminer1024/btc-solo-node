@@ -31,4 +31,7 @@ private:
     std::string message_;
     std::string confirm_text_;
     std::string cancel_text_;
+    // cancel_text == nullptr in open() means "single button": no Cancel
+    // button at all, just a wide centered confirm button (see build()).
+    bool single_button_ = false;
 };

@@ -176,7 +176,7 @@ void FirmwareUpdateOverlay::poll_state_file() {
         const std::string msg = std::string("You're already on the latest version (") +
                                  (current_version_.empty() ? "--" : current_version_) +
                                  "). Update anyway? (debug)";
-        confirm_.open("Already Up To Date", msg.c_str(), "Update Anyway", "OK");
+        confirm_.open("Already Up To Date", msg.c_str(), "Update Anyway", nullptr);
     }
     else if (phase_name == "update_available") {
         phase_ = Phase::UpdateAvailable;
