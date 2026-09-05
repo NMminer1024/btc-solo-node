@@ -169,9 +169,14 @@ void FirmwareUpdateOverlay::poll_state_file() {
 
     if (phase_name == "up_to_date") {
         phase_ = Phase::UpToDate;
-        show_message("Check for Updates",
-                     std::string("You're already on the latest version (") +
-                         (current_version_.empty() ? "--" : current_version_) + ").");
+        overlay_.hide();  // swap the plain message modal for a yes/no prompt
+        // Debug-stage escape hatch: re-flash the same version without having
+        // to bump VERSION for every test iteration. Safe to leave enabled -
+        // apply always writes the inactive slot, never the running one.
+        const std::string msg = std::string("You're already on the latest version (") +
+                                 (current_version_.empty() ? "--" : current_version_) +
+                                 "). Update anyway? (debug)";
+        confirm_.open("Already Up To Date", msg.c_str(), "Update Anyway", "OK");
     }
     else if (phase_name == "update_available") {
         phase_ = Phase::UpdateAvailable;
