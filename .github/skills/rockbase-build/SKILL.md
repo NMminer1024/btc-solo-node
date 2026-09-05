@@ -7,21 +7,23 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 
 ---
 
-## ⚠️⚠️⚠️ 铁律：编译输出必须可见 ⚠️⚠️⚠️
+## ⚠️⚠️⚠️ 铁律：编译输出必须可观察 ⚠️⚠️⚠️
 
 > **这是本 skill 最重要的规则，每次构建前请必读！**
 >
-> 执行 `make buildroot` 或任何编译命令时，**必须让编译输出直接显示在终端**，方便开发者观察进度和排查错误。
+> 执行 `make buildroot` 或任何编译命令时，**必须让编译输出可被观察**（直接显示在终端，或写入日志文件供 `tail` 查看），方便开发者观察进度和排查错误。
 >
-> **❌ 禁止做法：**
-> - 不要加 `&> /dev/null`、`> /dev/null 2>&1`、`| tee /dev/null` 等重定向隐藏输出
-> - 不要用 `| tail` 截断输出
+> **❌ 禁止做法（任何场景都禁止）：**
+> - 不要加 `&> /dev/null`、`> /dev/null 2>&1`、`| tee /dev/null` 等重定向**丢弃**输出
+> - 不要用 `| tail` 截断**实时**输出流
 > - 不要用 `make -s`（silent 模式）
-> - 不要用后台模式（`mode=async`）执行编译，编译是一-shot 任务，应用 `mode=sync`
 >
-> **✅ 正确做法：**
-> - 直接在前台运行 `make CONF=... buildroot ...`，让完整输出流显示在终端
-> - 输出量较大时，Buildroot 自身会控制输出粒度，不需要额外压制
+> **✅ 正确做法（按编译时长二选一）：**
+> - **短编译 / 增量编译**（预计 < 10 分钟，输出量小）：直接在前台 `mode=sync` 运行 `make CONF=... buildroot ...`，让完整输出流显示在终端。
+> - **长编译 / 全量编译**（30min+，输出几百 KB~MB）：必须用 `nohup` 后台 + 日志文件 + 轮询，**禁止用 `mode=sync`**。详见下方 **长编译运行方式（全量编译必读）** 章节。
+>
+> **为什么长编译不能用 `mode=sync`（关键教训，已固化）：**
+> `run_in_terminal` 的 `mode=sync` 在**输出超过 ~20KB 时会截断并中断任务**。全量编译输出量远超此阈值，会被中途杀掉——症状：命令返回 "Large tool result written to file"，但 build 目录停止更新、无最终产物、`build-time.log` 停在某个中间阶段（如 boost install-staging）。因此长编译**必须** `nohup` 后台，输出重定向到日志文件（这不是"丢弃输出"，而是可 `tail` 观察的日志）。
 
 ---
 
@@ -33,6 +35,65 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 - Buildroot 内部默认已是 `nproc+1` 并行（`BR2_JLEVEL=0` 时），但显式指定可避免歧义、保证跨环境行为一致
 - 禁止使用 `-j1` 或任何串行编译方式
 - 本规则适用于所有构建入口：`buildroot`、`clean`、`linux-dirclean`、`rockbase_lcdui-rebuild` 等
+
+---
+
+## 长编译运行方式（全量编译必读）
+
+> **本章节是长编译（全量编译 / 30min+ 构建）的唯一权威运行方式。执行长编译时以本 skill 为准，不要依赖会话记忆里的临时做法。**
+
+### 为什么必须 nohup 后台
+
+`run_in_terminal` 的 `mode=sync` 在输出超过 ~20KB 时会截断并杀掉任务。全量编译输出几百 KB~MB，用 sync 必被中途杀掉。因此长编译**必须** `nohup` 后台 + 日志文件 + 轮询。
+
+### 标准流程
+
+**1. 启动后台编译（输出写日志，不丢弃）：**
+
+```bash
+cd /home/bitpony/Desktop/mining/btc-solo-node
+nohup make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
+  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
+  K230_BLOCKDATA_SIZE=256M \
+  K230_IMAGE_GZIP=0 \
+  > /tmp/rockbase-build.log 2>&1 &
+echo "PID=$!"
+```
+
+**2. 轮询进度（每次观察三处）：**
+
+```bash
+BT=output/k230_rockbase_defconfig/build/build-time.log
+pgrep -x make >/dev/null && echo "RUNNING" || echo "MAKE_EXITED"
+tail -1 "$BT" 2>/dev/null          # 精确到当前包/阶段
+tail -15 /tmp/rockbase-build.log   # 原始 make 输出末尾
+```
+
+**3. 判断是否被异常中断（而非正常结束）：**
+
+正常结束应有最终产物；若 `pgrep -x make` 无进程但满足以下任一条，说明被杀/失败：
+- `find output -newermt '-1 minute' | wc -l` 计数为 0（build 目录停止更新）
+- 无 `output/<CONF>/images/sysimage-sdcard.img`
+- `build-time.log` 停在中间阶段（如 boost install-staging）而非 `end` 收尾
+
+### 轮询循环模板（可整段执行）
+
+```bash
+cd /home/bitpony/Desktop/mining/btc-solo-node
+BT=output/k230_rockbase_defconfig/build/build-time.log
+for i in $(seq 1 40); do
+  if pgrep -x make >/dev/null; then
+    echo "[$i] RUNNING | $(tail -1 "$BT" 2>/dev/null)"
+    sleep 60
+  else
+    echo "[$i] MAKE_EXITED"; break
+  fi
+done
+echo "=== 最终 build-time 末尾 ==="; tail -8 "$BT" 2>/dev/null
+echo "=== build log 末尾 ==="; tail -15 /tmp/rockbase-build.log
+```
+
+> 40 × 60s ≈ 40 分钟覆盖一次全量编译；若预计更久，调大 `seq` 上限。
 
 ---
 
@@ -206,16 +267,22 @@ make CONF=k230_rockbase_defconfig copy-img IMG_OUTPUT_DIR=/mnt/d/code/pony/IoT/k
 - 切换 Buildroot 版本或 overlay 结构变更后
 - 排查"改了源码但镜像没变"类问题
 
-**命令**：
+**命令**（全量编译是长编译，**必须**按上方 **长编译运行方式** 章节用 `nohup` 后台 + 轮询，禁止 `mode=sync`）：
 
 ```bash
-# 全量编译
-make CONF=k230_rockbase_defconfig clean
+# 1) 清理（短任务，可前台 sync）
+make CONF=k230_rockbase_defconfig clean -j$(nproc)
 mkdir -p /tmp/rockbase-empty-seed
-make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
+
+# 2) 全量编译（长任务，nohup 后台 + 日志 + 轮询）
+cd /home/bitpony/Desktop/mining/btc-solo-node
+nohup make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
-  K230_IMAGE_GZIP=0
+  K230_IMAGE_GZIP=0 \
+  > /tmp/rockbase-build.log 2>&1 &
+echo "PID=$!"
+# 之后按"长编译运行方式"章节的轮询模板观察进度
 ```
 
 **说明**：
@@ -223,6 +290,7 @@ make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
 - 工具链是外部工具链（`BR2_TOOLCHAIN_EXTERNAL`），不在 `output/` 目录内，天然不受影响
 - 全量编译耗时较长（所有包重新编译），仅在必要时使用
 - 如果连 `.config` 也要重置（重新从 defconfig 生成），直接 `rm -rf output/<CONF>/` 再构建
+- **运行方式以本 skill 为准**：长编译的 nohup/轮询做法已固化在本 skill，执行时直接遵循本 skill，不要依赖会话记忆里的临时做法
 
 ---
 
