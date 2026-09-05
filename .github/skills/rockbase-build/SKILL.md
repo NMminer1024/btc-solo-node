@@ -60,6 +60,19 @@ nohup make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
 echo "PID=$!"
 ```
 
+**1b. 实时观察编译过程（让用户看见，必须执行）：**
+
+启动后台编译后，**立即**用 `run_in_terminal` 的 `mode=async` 跑一次 `tail -f`，把编译输出实时流式显示给用户：
+
+```bash
+tail -f /tmp/rockbase-build.log
+```
+
+- 用 `mode=async`（**不是** `mode=sync`）：`tail -f` 永不退出，sync 会一直阻塞；async 会先返回一段实时输出快照，之后编译每产生新日志，终端就会持续刷新，用户能直接看见编译过程。
+- 这一步**不替代**下方的轮询（步骤 2），二者并行：`tail -f` 负责"让用户看见"，轮询负责"判断进度/是否结束"。
+- 编译结束后（步骤 2 检测到 `MAKE_EXITED`），用 `kill_terminal` 关掉这个 `tail -f` 终端，避免它一直挂着。
+- 若用户主动 `Ctrl+C` 中断了 `tail -f`，不影响后台编译，无需重启。
+
 **2. 轮询进度（每次观察三处）：**
 
 ```bash
@@ -282,7 +295,9 @@ nohup make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
   K230_IMAGE_GZIP=0 \
   > /tmp/rockbase-build.log 2>&1 &
 echo "PID=$!"
-# 之后按"长编译运行方式"章节的轮询模板观察进度
+# 之后按"长编译运行方式"章节：
+#   步骤 1b 用 mode=async 跑 tail -f /tmp/rockbase-build.log 让用户实时看见编译过程
+#   步骤 2  用轮询模板观察进度 / 判断是否结束
 ```
 
 **说明**：
