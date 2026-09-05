@@ -314,6 +314,26 @@ void OtaOverlay::open() {
     lv_obj_set_style_text_font(failed_hint_label_, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(failed_hint_label_, lv_color_hex(0x9aa6ac), 0);
     lv_obj_set_style_text_align(failed_hint_label_, LV_TEXT_ALIGN_CENTER, 0);
+
+    // Close (X) button: only shown in the Failed state (see apply_state).
+    // Lets the user dismiss a failed-upgrade overlay without a power cycle.
+    close_btn_ = lv_btn_create(panel);
+    lv_obj_set_size(close_btn_, 44, 44);
+    lv_obj_set_pos(close_btn_, 576, 12);
+    lv_obj_set_style_radius(close_btn_, 22, 0);
+    lv_obj_set_style_bg_color(close_btn_, lv_color_hex(0x1a262e), 0);
+    lv_obj_set_style_bg_opa(close_btn_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(close_btn_, 1, 0);
+    lv_obj_set_style_border_color(close_btn_, lv_color_hex(0x2d4654), 0);
+    lv_obj_set_style_shadow_width(close_btn_, 0, 0);
+    lv_obj_set_style_pad_all(close_btn_, 0, 0);
+    lv_obj_t* x_label = lv_label_create(close_btn_);
+    lv_label_set_text(x_label, LV_SYMBOL_CLOSE);
+    lv_obj_set_style_text_font(x_label, &lv_font_montserrat_22, 0);
+    lv_obj_set_style_text_color(x_label, lv_color_hex(0xf4efe2), 0);
+    lv_obj_center(x_label);
+    lv_obj_add_event_cb(close_btn_, on_close_btn, LV_EVENT_CLICKED, this);
+    set_hidden(close_btn_, true);  // hidden until the phase becomes Failed
 }
 
 void OtaOverlay::close() {
@@ -330,6 +350,24 @@ void OtaOverlay::close() {
     warn_line1_ = nullptr;
     warn_line2_ = nullptr;
     failed_hint_label_ = nullptr;
+    close_btn_ = nullptr;
+}
+
+void OtaOverlay::on_close_btn(lv_event_t* e) {
+    auto* self = static_cast<OtaOverlay*>(lv_event_get_user_data(e));
+    if (self != nullptr) {
+        self->dismiss();
+    }
+}
+
+void OtaOverlay::dismiss() {
+    // Only the Failed state may be dismissed; a live upgrade must stay on
+    // screen (hiding it would not stop the write and would mislead the user).
+    if (phase_ != Phase::Failed) return;
+    unlink(kOtaStatePath);
+    phase_ = Phase::Hidden;
+    message_.clear();
+    close();
 }
 
 void OtaOverlay::apply_state() {
@@ -347,6 +385,7 @@ void OtaOverlay::apply_state() {
     set_hidden(warn_line1_, failed);
     set_hidden(warn_line2_, failed);
     set_hidden(failed_hint_label_, !failed);
+    set_hidden(close_btn_, !failed);
     if (failed) {
         set_label_if_changed(message_label_, message_.empty() ? default_message(phase_) : message_);
         return;
