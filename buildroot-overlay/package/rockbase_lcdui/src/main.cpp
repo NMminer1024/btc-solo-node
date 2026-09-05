@@ -1944,7 +1944,7 @@ void touch_read_cb(lv_indev_t*, lv_indev_data_t* data) {
 
     static bool was_down = false;
     if (g_wifi_config_overlay.active() || g_timezone_overlay.active() || g_miners_overlay.active() ||
-        g_ota_overlay.active()) {
+        g_ota_overlay.active() || g_firmware_update_overlay.active()) {
         if (g_wifi_config_overlay.active() && g_wifi_config_overlay_wait_release) {
             if (!g_touch.down) {
                 g_wifi_config_overlay_wait_release = false;
