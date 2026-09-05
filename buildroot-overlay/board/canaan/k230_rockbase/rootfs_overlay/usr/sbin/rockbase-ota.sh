@@ -5,6 +5,9 @@
 # Subcommands:
 #   status                 Show current slot / pending state / last error
 #   check [url]            Fetch manifest.json and report pending version
+#   check-async [url]      Same fetch, backgrounded; writes result to
+#                          $CHECK_STATE_FILE for lcdui/web to poll (used by the
+#                          LCD "Firmware / Check Update" card)
 #   apply <manifest_url>   Download -> verify sig+sha256 -> dd to inactive slot -> switch
 #   confirm                Mark current slot good (clear bootcount/upgrade_available)
 #   rollback               Manually switch back to the previous slot and reboot
@@ -36,6 +39,14 @@ STATE_FILE=${OTA_STATE_FILE:-/run/rockbase/ota-state.json}
 STATE_ENABLED=0   # only a real apply (--force) drives the overlay
 APPLY_LOCKDIR=${OTA_APPLY_LOCKDIR:-/run/rockbase/ota-apply.lock}
 
+# Machine-readable "is there an update" result, polled by lcdui's Firmware
+# check-update card (see check-async below) and potentially by web.
+CHECK_STATE_FILE=${OTA_CHECK_STATE_FILE:-/run/rockbase/ota-check-state.json}
+CHECK_LOCKDIR=${OTA_CHECK_LOCKDIR:-/run/rockbase/ota-check.lock}
+MANIFEST_URL_FILE=${OTA_MANIFEST_URL_FILE:-/etc/rockbase-ota-manifest-url}
+MANIFEST_URL_DEFAULT="https://ota.nmminer.com/rockbase/manifest.json"
+PRODUCT_VERSION_FILE=${OTA_PRODUCT_VERSION_FILE:-/etc/version/product_version}
+
 # set_state <phase> <progress 0-100|-1 indeterminate> <message> [speed_bps]
 set_state() {
     [ "$STATE_ENABLED" = "1" ] || return 0
@@ -46,6 +57,59 @@ set_state() {
     printf '{"phase":"%s","progress":%s,"message":"%s","speed_bps":%s,"ts":%s}\n' \
         "$phase" "$progress" "$safe_msg" "$speed_bps" "$(date +%s)" > "$STATE_FILE.tmp" 2>/dev/null
     mv "$STATE_FILE.tmp" "$STATE_FILE" 2>/dev/null
+}
+
+# set_check_state <phase> <current_ver> <latest_ver> <manifest_url> <message>
+# phase: checking | up_to_date | update_available | failed
+set_check_state() {
+    local phase=$1 current=$2 latest=$3 manifest_url=$4 safe_msg
+    safe_msg=$(printf '%s' "$5" | tr -d '"\\' | tr '\n' ' ')
+    mkdir -p /run/rockbase 2>/dev/null
+    printf '{"phase":"%s","current_version":"%s","latest_version":"%s","manifest_url":"%s","message":"%s","ts":%s}\n' \
+        "$phase" "$current" "$latest" "$manifest_url" "$safe_msg" "$(date +%s)" \
+        > "$CHECK_STATE_FILE.tmp" 2>/dev/null
+    mv "$CHECK_STATE_FILE.tmp" "$CHECK_STATE_FILE" 2>/dev/null
+}
+
+# default_manifest_url: read /etc/rockbase-ota-manifest-url, fall back to the
+# production domain. Lets the manifest source be reconfigured without a
+# rebuild (e.g. staging/canary rollout).
+default_manifest_url() {
+    local url=""
+    if [ -r "$MANIFEST_URL_FILE" ]; then
+        url=$(sed -n '1p' "$MANIFEST_URL_FILE" | tr -d ' \t\r\n')
+    fi
+    [ -n "$url" ] || url="$MANIFEST_URL_DEFAULT"
+    printf '%s\n' "$url"
+}
+
+# current_product_version: human-readable vX.Y.Z installed on this slot.
+# See skill rockbase-version for what the file means / how it's generated.
+current_product_version() {
+    local v=""
+    [ -r "$PRODUCT_VERSION_FILE" ] && v=$(cat "$PRODUCT_VERSION_FILE" 2>/dev/null | tr -d ' \t\r\n')
+    [ -n "$v" ] || v="v0.0.0"
+    printf '%s\n' "$v"
+}
+
+# version_gt a b: numeric MAJOR.MINOR.PATCH compare (not string compare - do
+# not change this to `[ "$a" \> "$b" ]`, that misorders e.g. 0.0.9 vs 0.0.10).
+version_gt() {
+    local a=${1#v} b=${2#v}
+    local a_maj a_min a_pat b_maj b_min b_pat
+    a_maj=${a%%.*}; a=${a#*.}; a_min=${a%%.*}; a_pat=${a#*.}
+    b_maj=${b%%.*}; b=${b#*.}; b_min=${b%%.*}; b_pat=${b#*.}
+    case "$a_maj" in ''|*[!0-9]*) a_maj=0 ;; esac
+    case "$a_min" in ''|*[!0-9]*) a_min=0 ;; esac
+    case "$a_pat" in ''|*[!0-9]*) a_pat=0 ;; esac
+    case "$b_maj" in ''|*[!0-9]*) b_maj=0 ;; esac
+    case "$b_min" in ''|*[!0-9]*) b_min=0 ;; esac
+    case "$b_pat" in ''|*[!0-9]*) b_pat=0 ;; esac
+    [ "$a_maj" -gt "$b_maj" ] && return 0
+    [ "$a_maj" -lt "$b_maj" ] && return 1
+    [ "$a_min" -gt "$b_min" ] && return 0
+    [ "$a_min" -lt "$b_min" ] && return 1
+    [ "$a_pat" -gt "$b_pat" ]
 }
 
 # uboot env keys
@@ -349,6 +413,63 @@ cmd_check() {
     echo "slot.sha256 : $(mj_str sha256 "$mf")"
 }
 
+# check-async [manifest_url]: same manifest fetch as `check`, but meant to be
+# launched backgrounded (e.g. by lcdui: `rockbase-ota.sh check-async &`).
+# Writes machine-readable progress/result to $CHECK_STATE_FILE instead of
+# printing to stdout, so a poller (lcdui/web) doesn't have to parse text.
+cmd_check_async() {
+    local url=${1:-$(default_manifest_url)}
+    local current_ver; current_ver=$(current_product_version)
+
+    mkdir -p /run/rockbase 2>/dev/null
+    if ! mkdir "$CHECK_LOCKDIR" 2>/dev/null; then
+        log "check-async: another check already in progress, skip"
+        return 0
+    fi
+    trap 'rm -rf "$CHECK_LOCKDIR"' EXIT INT TERM
+
+    set_check_state checking "$current_ver" "" "" "Checking for updates"
+
+    if [ -z "$url" ]; then
+        set_check_state failed "$current_ver" "" "" "no manifest URL configured"
+        return 0
+    fi
+
+    require curl
+    mkdir -p "$WORKDIR"
+    local mf="$WORKDIR/$MANIFEST_NAME"
+    if ! curl --cacert /etc/ssl/certs/ca-certificates.crt --max-time 20 \
+             --retry 2 -fSL -o "$mf" "$url" 2>>"$LOGFILE"; then
+        set_check_state failed "$current_ver" "" "$url" "manifest download failed"
+        return 0
+    fi
+
+    # manifest "version" is the full release tag, e.g.
+    # "v0.0.10-rockbase-k230-20260904-562bc52-ota" - only the leading
+    # vMAJOR.MINOR.PATCH segment (before the first '-') is comparable against
+    # the local /etc/version/product_version. See skill rockbase-version.
+    local latest_ver_raw; latest_ver_raw=$(mj_str version "$mf")
+    if [ -z "$latest_ver_raw" ]; then
+        set_check_state failed "$current_ver" "" "$url" "manifest missing version field"
+        return 0
+    fi
+    local latest_ver=${latest_ver_raw%%-*}
+    case "$latest_ver" in
+        v[0-9]*.[0-9]*.[0-9]*) ;;
+        *)
+            set_check_state failed "$current_ver" "$latest_ver_raw" "$url" \
+                "manifest version '$latest_ver_raw' is not in vX.Y.Z-... format"
+            return 0
+            ;;
+    esac
+
+    if version_gt "$latest_ver" "$current_ver"; then
+        set_check_state update_available "$current_ver" "$latest_ver" "$url" "update available"
+    else
+        set_check_state up_to_date "$current_ver" "$latest_ver" "$url" "already up to date"
+    fi
+}
+
 # apply <manifest_url> [--force]
 cmd_apply() {
     local url="" force=0
@@ -526,6 +647,7 @@ cmd=${1:-status}
 case "$cmd" in
     status)   cmd_status "$@" ;;
     check)    cmd_check "$@" ;;
+    check-async) cmd_check_async "$@" ;;
     apply)    cmd_apply "$@" ;;
     confirm)  cmd_confirm "$@" ;;
     rollback) cmd_rollback "$@" ;;
