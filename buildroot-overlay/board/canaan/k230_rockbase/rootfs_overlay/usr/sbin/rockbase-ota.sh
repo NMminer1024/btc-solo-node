@@ -306,7 +306,7 @@ fetch() {
     local out=$1 url=$2 total=${3:-0}
     [ "$total" -gt 0 ] 2>/dev/null && set_state downloading 0 "Downloading firmware"
     curl --cacert /etc/ssl/certs/ca-certificates.crt \
-         --retry 5 -C - -fSL -o "$out" "$url" &
+         --connect-timeout 20 --retry 5 -C - -fSL -o "$out" "$url" &
     local pid=$! cur now last_time last_bytes speed_bps elapsed pct next_report mib_cur mib_total
     last_time=$(date +%s)
     last_bytes=$(file_size_bytes "$out")
@@ -343,7 +343,7 @@ fetch() {
     log "resume failed (server may lack Range); retrying full download"
     rm -f "$out"
     curl --cacert /etc/ssl/certs/ca-certificates.crt \
-         --retry 5 -fSL -o "$out" "$url" &
+         --connect-timeout 20 --retry 5 -fSL -o "$out" "$url" &
     pid=$!
     last_time=$(date +%s)
     last_bytes=0
@@ -403,7 +403,7 @@ cmd_check() {
     local mf="$WORKDIR/$MANIFEST_NAME"
     log "fetching manifest: $url"
     curl --cacert /etc/ssl/certs/ca-certificates.crt \
-         --retry 3 -fSL -o "$mf" "$url" || die "manifest download failed"
+         --max-time 20 --retry 3 -fSL -o "$mf" "$url" || die "manifest download failed"
     echo "version     : $(mj_str version "$mf")"
     echo "min_version : $(mj_str min_version "$mf")"
     echo "released    : $(mj_str released "$mf")"
@@ -500,7 +500,7 @@ cmd_apply() {
     log "=== OTA apply start (force=$force) ==="
     log "fetching manifest: $url"
     curl --cacert /etc/ssl/certs/ca-certificates.crt \
-         --retry 3 -fSL -o "$mf" "$url" || die "manifest download failed"
+         --max-time 20 --retry 3 -fSL -o "$mf" "$url" || die "manifest download failed"
 
     local ver imgurl sigurl sha size
     ver=$(mj_str version "$mf");      [ -n "$ver" ]   || die "manifest: no version"
