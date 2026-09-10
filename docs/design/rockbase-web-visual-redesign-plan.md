@@ -1,7 +1,8 @@
 # Rockbase Web 视觉重构方案（迁移 ck-monitor 设计语言）
 
 > 创建：2026-09-10
-> 状态：**方案设计完成，待实施**
+> 状态：**已实施**——`v0.0.06`（首版改造）+ `v0.0.07`（环修复/Peers/块高/Difficulty 3 位小数/Miners 摘要恢复）
+> 均已 OTA 发布，待真机回归确认。接手进展见 `docs/rockbase-web-redesign-handoff.md`
 > 范围：`buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/root/web/`
 > （`index.html` / `style.css` / `app.js`，共 3 个前端文件）
 
