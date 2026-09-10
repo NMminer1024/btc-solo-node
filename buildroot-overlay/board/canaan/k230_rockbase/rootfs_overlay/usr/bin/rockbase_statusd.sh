@@ -332,6 +332,9 @@ collect_system() {
     disk_size_info="${disk_used_display} / ${disk_total_display}"
     [ -n "${disk_pct}" ] || disk_pct=0
 
+    product_version=$(cat /etc/version/product_version 2>/dev/null | tr -d ' \t\r\n')
+    [ -n "${product_version}" ] || product_version="-"
+
     temp="N/A"
     for t in /sys/class/thermal/thermal_zone*/temp /sys/class/hwmon/hwmon*/temp1_input; do
         [ -r "${t}" ] || continue
@@ -383,6 +386,7 @@ collect_system() {
         state_str rootfs_size_info "${rootfs_size_info}"
         state_raw block_disk_found "${block_disk_found}"
         state_str block_disk_path "${block_disk_path}"
+        state_str product_version "${product_version}"
     } | write_state_file "${SYSTEM_STATE}"
 }
 
@@ -660,6 +664,7 @@ render_status_json() {
     swap_total_display="-"
     block_disk_found=true
     block_disk_path="${DATADIR}"
+    product_version="-"
 
     headers="-"
     blocks="-"
@@ -1003,7 +1008,8 @@ render_status_json() {
     printf '    "swap_total_display": %s,\n' "$(json_str "${swap_total_display}")"
     printf '    "block_disk_found": %s,\n' "${block_disk_found}"
     printf '    "block_disk_value": %s,\n' "$(json_str "${block_disk_value}")"
-    printf '    "block_disk_path": %s\n' "$(json_str "${block_disk_path}")"
+    printf '    "block_disk_path": %s,\n' "$(json_str "${block_disk_path}")"
+    printf '    "product_version": %s\n' "$(json_str "${product_version}")"
     printf '  },\n'
 
     printf '  "bitcoin": {\n'
