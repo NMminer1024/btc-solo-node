@@ -978,6 +978,10 @@
     setText("minerWorkers", Number.isFinite(workers) ? formatCount(workers) : "--");
     setText("minerHash5m", toText(pool.hashrate5m, "--"));
     setText("minerBestShare", formatShare(pool.bestshare));
+    /* redesign: Miners view summary mirrors of the dashboard KPI cards */
+    setText("summaryWorkers", Number.isFinite(workers) ? formatCount(workers) : "--");
+    setText("summaryHash5m", toText(pool.hashrate5m, "--"));
+    setText("summaryBestShare", formatShare(pool.bestshare));
     setText("minersUpdated", formatApiAge(payload.generated_at) + " · next cache refresh " + toText(payload.next_refresh_seconds, "60") + "s");
     setText("minersSource", toText(payload.source && payload.source.users_dir, "/root/ckpool/logs/users"));
     setBadgeState("minersCacheBadge", stale ? "Stale Cache" : "Live Cache", stale ? "status-warm" : "status-ok");

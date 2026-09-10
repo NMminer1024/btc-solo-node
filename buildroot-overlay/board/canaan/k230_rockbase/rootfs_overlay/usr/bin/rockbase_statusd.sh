@@ -107,11 +107,8 @@ compact_metric() {
       u[1] = "K"; u[2] = "M"; u[3] = "G"; u[4] = "T"; u[5] = "P"; u[6] = "E"
       idx = 0
       while ((val >= 1000 || val <= -1000) && idx < 6) { val /= 1000; idx++ }
-      abs = val < 0 ? -val : val
       if (idx == 0) printf "%.0f", val
-      else if (abs >= 100) printf "%.0f%s", val, u[idx]
-      else if (abs >= 10) printf "%.1f%s", val, u[idx]
-      else printf "%.2f%s", val, u[idx]
+      else printf "%.3f%s", val, u[idx]
     }'
 }
 

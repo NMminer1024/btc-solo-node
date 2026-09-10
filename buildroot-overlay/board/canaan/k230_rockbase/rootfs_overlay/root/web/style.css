@@ -468,6 +468,18 @@ textarea {
 .stat-value.yellow { color: var(--yellow); }
 .stat-value.red    { color: var(--red); }
 
+.stat-sub {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ── Conic rings (kept, visually downgraded: thin track) ─── */
 
 .refresh-orb-chip {
@@ -479,17 +491,25 @@ textarea {
 
 .refresh-orb {
   --pct: 100;
+  position: relative;
   width: 34px;
   height: 34px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at center, var(--bg2) 68%, transparent 69%),
-    conic-gradient(var(--accent) calc(var(--pct) * 1%), var(--bg3) 0);
+  background: conic-gradient(var(--accent) calc(var(--pct) * 1%), var(--bg3) 0);
+}
+
+.refresh-orb::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--bg2);
 }
 
 .refresh-orb span {
+  position: relative;
   display: block;
   font-size: 0.62rem;
   line-height: 1;
@@ -512,17 +532,25 @@ textarea {
 
 .progress-orb-ring {
   --pct: 0;
+  position: relative;
   width: 96px;
   height: 96px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at center, var(--bg2) 76%, transparent 77%),
-    conic-gradient(var(--accent) calc(var(--pct) * 1%), var(--bg3) 0);
+  background: conic-gradient(var(--accent) calc(var(--pct) * 1%), var(--bg3) 0);
+}
+
+.progress-orb-ring::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: var(--bg2);
 }
 
 .progress-orb-ring span {
+  position: relative;
   font-size: 20px;
   font-weight: 700;
   color: var(--text);
@@ -665,17 +693,25 @@ textarea {
 .metric-orb {
   --pct: 0;
   --ring-color: var(--accent);
+  position: relative;
   width: 64px;
   height: 64px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at center, var(--bg3) 72%, transparent 73%),
-    conic-gradient(var(--ring-color) calc(var(--pct) * 1%), var(--border) 0);
+  background: conic-gradient(var(--ring-color) calc(var(--pct) * 1%), var(--border) 0);
+}
+
+.metric-orb::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: var(--bg3);
 }
 
 .metric-orb span {
+  position: relative;
   font-size: 0.82rem;
   font-weight: 700;
   color: var(--text);
