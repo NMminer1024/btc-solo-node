@@ -26,7 +26,7 @@
       meta: "Loading live node data...",
       connections: "--",
       difficulty: "--",
-      chainSize: "--",
+      utxoSize: "--",
       version: "--",
       uptime: "--"
     },
@@ -618,7 +618,7 @@
         meta: joinParts([chainName, bitcoin.best_block_date], mock.bitcoin.meta),
         connections: toText(bitcoin.connections, mock.bitcoin.connections),
         difficulty: toText(bitcoin.difficulty_display, mock.bitcoin.difficulty),
-        chainSize: toText(system.block_disk_value, mock.bitcoin.chainSize),
+        utxoSize: toText(bitcoin.utxo_size, mock.bitcoin.utxoSize),
         version: toText(bitcoin.version, mock.bitcoin.version),
         uptime: toText(system.uptime, mock.bitcoin.uptime)
       },
@@ -1662,7 +1662,7 @@
     setIbdMeta("ibdMeta", data.bitcoin.chainName, data.bitcoin.bestBlockDate, data.bitcoin.ibdStageKey);
     setRollingValue("nodeConn", data.bitcoin.connections);
     setRollingValue("nodeDiff", data.bitcoin.difficulty);
-    setRollingValue("nodeChainSize", data.bitcoin.chainSize);
+    setRollingValue("nodeUtxoSize", data.bitcoin.utxoSize);
     setRollingValue("nodeUptime", data.bitcoin.uptime);
 
     var orb = document.getElementById("ibdOrb");

@@ -498,6 +498,13 @@ collect_bitcoin_chain() {
     [ -n "${difficulty}" ] || difficulty="-"
     [ -n "${pruned}" ] || pruned=$(pruned_from_conf)
 
+    chainstate_mb=$(du -sm "${DATADIR}/chainstate" 2>/dev/null | awk '{print $1}')
+    if [ -n "${chainstate_mb}" ]; then
+        utxo_size=$(awk -v mb="${chainstate_mb}" 'BEGIN{printf "%.3fG", mb/1024}')
+    else
+        utxo_size="-"
+    fi
+
     mempool_info=$(btc_cli getmempoolinfo 2>/dev/null) || mempool_info=""
     mempool_txs=$(echo "${mempool_info}" | grep -o '"size": *[0-9]*' | cut -d: -f2 | xargs)
     [ -n "${mempool_txs}" ] || mempool_txs="-"
@@ -515,6 +522,7 @@ collect_bitcoin_chain() {
         state_str difficulty "${difficulty}"
         state_str pruned "${pruned}"
         state_str block_disk_value "${block_disk_value}"
+        state_str utxo_size "${utxo_size}"
         state_str mempool_txs "${mempool_txs}"
         state_str version "${version}"
     } | write_state_file "${BITCOIN_CHAIN_STATE}"
@@ -661,6 +669,7 @@ render_status_json() {
     difficulty="-"
     pruned=""
     block_disk_value="-"
+    utxo_size="-"
     mempool_txs="-"
     version="-"
     connections="-"
@@ -1019,6 +1028,7 @@ render_status_json() {
     printf '    "difficulty_display": %s,\n' "$(json_str "${difficulty_display}")"
     printf '    "mempool_txs": %s,\n' "$(json_str "${mempool_txs}")"
     printf '    "version": %s,\n' "$(json_str "${version}")"
+    printf '    "utxo_size": %s,\n' "$(json_str "${utxo_size}")"
     printf '    "rss": %s\n' "$(json_str "${rss}")"
     printf '  },\n'
 
