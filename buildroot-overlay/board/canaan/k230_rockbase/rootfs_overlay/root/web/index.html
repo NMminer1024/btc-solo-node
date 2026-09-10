@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NM Bitcoin Node Monitor</title>
-<link rel="stylesheet" href="/style.css?v=20260730-miners-thin">
+<link rel="stylesheet" href="/style.css?v=20260910-redesign">
 </head>
 <body>
 <div class="site-shell">
@@ -43,6 +43,58 @@
     </header>
 
     <section class="panel-view is-visible" data-view-panel="dashboard">
+      <section class="hero-strip" aria-label="Core status">
+        <div class="hero-item">
+          <span class="hero-label">Bitcoind</span>
+          <span class="status-badge status-soft" id="heroBitcoindBadge">--</span>
+        </div>
+        <div class="hero-item">
+          <span class="hero-label">Stratum</span>
+          <span class="status-badge status-soft" id="heroStratumBadge">--</span>
+        </div>
+        <div class="hero-item">
+          <span class="hero-label">Miners</span>
+          <span class="status-badge status-soft" id="heroMinersBadge">--</span>
+        </div>
+      </section>
+
+      <section class="kpi-grid" aria-label="Key metrics">
+        <div class="stat-card">
+          <span class="stat-label">Block Height</span>
+          <strong class="stat-value accent">
+            <span class="ibd-blocks-current" id="ibdBlocksCurrent">--</span><span class="ibd-blocks-divider" id="ibdBlocksDivider"> / </span><span class="ibd-blocks-total" id="ibdBlocksTotal">--</span>
+          </strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Connections</span>
+          <strong class="stat-value" id="nodeConn">--</strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Difficulty</span>
+          <strong class="stat-value" id="nodeDiff">--</strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Uptime</span>
+          <strong class="stat-value" id="nodeUptime">--</strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Pool Hashrate 5m</span>
+          <strong class="stat-value green" id="minerHash5m">--</strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Best Share</span>
+          <strong class="stat-value yellow" id="minerBestShare">--</strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Workers</span>
+          <strong class="stat-value" id="minerWorkers">--</strong>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">Temperature</span>
+          <strong class="stat-value" id="sysTemp">--</strong>
+        </div>
+      </section>
+
       <section class="dashboard-grid">
         <article class="surface-card surface-card-primary">
           <div class="surface-head">
@@ -67,21 +119,9 @@
               </div>
             </div>
             <div class="sync-copy">
-              <strong class="ibd-blocks">
-                <span class="ibd-blocks-current" id="ibdBlocksCurrent">--</span>
-                <span class="ibd-blocks-divider" id="ibdBlocksDivider"> / </span>
-                <span class="ibd-blocks-total" id="ibdBlocksTotal">--</span>
-              </strong>
               <p class="sync-stage" id="ibdStage">Loading live node data...</p>
               <p id="ibdMeta">Loading live node data...</p>
             </div>
-          </div>
-
-          <div class="info-grid">
-            <div class="info-item"><span>Connections</span><strong id="nodeConn">14</strong></div>
-            <div class="info-item"><span>Difficulty</span><strong id="nodeDiff">126.7T</strong></div>
-            <div class="info-item"><span>RSS</span><strong id="nodeRss">2.3G</strong></div>
-            <div class="info-item"><span>Uptime</span><strong id="nodeUptime">5d 13h</strong></div>
           </div>
         </article>
 
@@ -116,7 +156,7 @@
         </article>
       </section>
 
-      <section class="secondary-grid secondary-grid-top">
+      <section class="dashboard-stack">
         <article class="surface-card">
           <div class="surface-head">
             <div>
@@ -170,8 +210,8 @@
               <strong id="sysCpu">Canaan K230 RISC-V</strong>
             </div>
             <div class="stack-row">
-              <span>Temperature</span>
-              <strong id="sysTemp">58.4C</strong>
+              <span>Bitcoind RSS</span>
+              <strong id="nodeRss">--</strong>
             </div>
             <div class="stack-row">
               <span>Root FS</span>
@@ -233,11 +273,8 @@
             </div>
             <span class="status-badge status-soft" id="minersCacheBadge">Loading</span>
           </div>
-          <div class="miners-kpi-grid miners-kpi-grid-compact">
+          <div class="miners-kpi-grid">
             <div class="miners-kpi"><span>Miners</span><strong id="minerUsers">--</strong></div>
-            <div class="miners-kpi"><span>Workers</span><strong id="minerWorkers">--</strong></div>
-            <div class="miners-kpi"><span>Hashrate 5m</span><strong id="minerHash5m">--</strong></div>
-            <div class="miners-kpi"><span>Best Share</span><strong id="minerBestShare">--</strong></div>
           </div>
           <p class="miners-cache-note" id="minersUpdated">Waiting for ckpool cache...</p>
         </article>
@@ -293,50 +330,6 @@
         <p>Service and network configuration pages are grouped here. The first frontend build keeps this read-only until the API write path is ready.</p>
       </section>
       <section class="section-heading">
-        <h3>Bitcoind</h3>
-      </section>
-      <section class="subpage-grid">
-        <article class="surface-card">
-          <h3>Runtime</h3>
-          <div class="stack-list">
-            <div class="stack-row"><span>Status</span><strong>Running</strong></div>
-            <div class="stack-row"><span>Mode</span><strong>Pruned Validating Node</strong></div>
-            <div class="stack-row"><span>Connections</span><strong>14</strong></div>
-            <div class="stack-row"><span>RSS</span><strong>2.3G</strong></div>
-          </div>
-        </article>
-        <article class="surface-card">
-          <h3>Chain</h3>
-          <div class="stack-list">
-            <div class="stack-row"><span>Blocks</span><strong>902,120</strong></div>
-            <div class="stack-row"><span>Headers</span><strong>903,744</strong></div>
-            <div class="stack-row"><span>Best Block</span><strong>2026-07-21</strong></div>
-            <div class="stack-row"><span>Difficulty</span><strong>126.7T</strong></div>
-          </div>
-        </article>
-      </section>
-      <section class="section-heading">
-        <h3>Stratum</h3>
-      </section>
-      <section class="subpage-grid">
-        <article class="surface-card">
-          <h3>Connection Details</h3>
-          <div class="stack-list">
-            <div class="stack-row"><span>Status</span><strong>Running</strong></div>
-            <div class="stack-row"><span>URL</span><strong class="mono">stratum+tcp://192.168.124.15:3333</strong></div>
-            <div class="stack-row"><span>Username</span><strong class="mono">Use your own value, typically wallet.workername</strong></div>
-            <div class="stack-row"><span>Password</span><strong class="mono">Leave blank</strong></div>
-          </div>
-        </article>
-        <article class="surface-card">
-          <h3>Service Notes</h3>
-          <div class="stack-list">
-            <div class="stack-row"><span>Recommended</span><strong>LAN miners -> local Stratum</strong></div>
-            <div class="stack-row"><span>Role</span><strong>Accepts miner connections and relays work from the node service</strong></div>
-          </div>
-        </article>
-      </section>
-      <section class="section-heading">
         <h3>Network</h3>
       </section>
       <section class="subpage-grid">
@@ -384,7 +377,7 @@
         <article class="surface-card">
           <h3>Preferences</h3>
           <div class="stack-list">
-            <div class="stack-row"><span>Theme</span><strong>Calm Tech Light</strong></div>
+            <div class="stack-row"><span>Theme</span><strong>GitHub Dark (default) / GitHub Light</strong></div>
             <div class="stack-row"><span>Language</span><strong>English / Chinese</strong></div>
           </div>
         </article>
@@ -417,6 +410,6 @@
   </main>
 </div>
 
-<script src="/app.js?v=20260730-miners-thin"></script>
+<script src="/app.js?v=20260910-redesign"></script>
 </body>
 </html>

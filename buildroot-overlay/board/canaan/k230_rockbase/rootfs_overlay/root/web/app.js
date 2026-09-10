@@ -879,13 +879,13 @@
     var points = history && Array.isArray(history.points) ? history.points : [];
 
     var series = [
-      { key: "h1m", label: "1m", color: "#d08d44" },
-      { key: "h5m", label: "5m", color: "var(--brand)" },
-      { key: "h15m", label: "15m", color: "#4f8fb8" },
-      { key: "h1h", label: "1h", color: "var(--brand-2)" },
-      { key: "h6h", label: "6h", color: "#7fa16c" },
-      { key: "h1d", label: "1d", color: "#c66f4f" },
-      { key: "h7d", label: "7d", color: "#8b6fb6" }
+      { key: "h1m", label: "1m", color: "rgba(139,148,158,0.6)" },
+      { key: "h5m", label: "5m", color: "#58a6ff" },
+      { key: "h15m", label: "15m", color: "#3fb950" },
+      { key: "h1h", label: "1h", color: "#2dd4bf" },
+      { key: "h6h", label: "6h", color: "#fbbf24" },
+      { key: "h1d", label: "1d", color: "#d29922" },
+      { key: "h7d", label: "7d", color: "#f85149" }
     ];
     var visibleSeries = series.filter(function (item) {
       return nodeHashrateVisible[item.key] !== false;
@@ -981,6 +981,12 @@
     setText("minersUpdated", formatApiAge(payload.generated_at) + " · next cache refresh " + toText(payload.next_refresh_seconds, "60") + "s");
     setText("minersSource", toText(payload.source && payload.source.users_dir, "/root/ckpool/logs/users"));
     setBadgeState("minersCacheBadge", stale ? "Stale Cache" : "Live Cache", stale ? "status-warm" : "status-ok");
+
+    /* redesign: hero miners badge — render-only, reuses the cached miners.cgi payload above */
+    var onlineMiners = miners.filter(function (miner) { return miner.online; }).length;
+    setBadgeState("heroMinersBadge",
+      miners.length ? onlineMiners + " / " + miners.length + " online" : "No miners",
+      onlineMiners > 0 ? "status-ok" : "status-soft");
     renderNodeHashrateHistory(pool, history);
 
     var list = document.getElementById("minersList");
@@ -1376,11 +1382,11 @@
   }
 
   function getRssiColor(rssi) {
-    if (!rssi && rssi !== 0) return "#444";
-    if (rssi >= -50) return "#4CAF50";
-    if (rssi >= -60) return "#8BC34A";
-    if (rssi >= -70) return "#FF9800";
-    return "#f44336";
+    if (!rssi && rssi !== 0) return "#555";
+    if (rssi >= -50) return "#3fb950";
+    if (rssi >= -60) return "#3fb950";
+    if (rssi >= -70) return "#d29922";
+    return "#f85149";
   }
 
   function getStoredTheme() {
@@ -1454,6 +1460,10 @@
     setText("stratumPass", data.stratum.pass);
     setText("stratumMode", data.stratum.mode);
 
+    /* redesign: hero status strip — render-only, reuses the normalized status.cgi data above */
+    setBadgeState("heroBitcoindBadge", data.bitcoin.syncBadge, data.bitcoin.syncClass);
+    setBadgeState("heroStratumBadge", data.stratum.badge, data.stratum.badgeClass);
+
     setText("sysCpu", data.system.cpuModel);
     setText("sysTemp", data.system.temperature);
     setText("sysBlock", data.system.rootfsUsage);
@@ -1469,7 +1479,7 @@
     var rssiLevel = toNumber(data.network.signalLevel, getRssiLevel(data.network.rssi));
     var rssiColor = getRssiColor(parseRssiDbm(data.network.rssi));
     rssiBars.forEach(function (bar, index) {
-      bar.style.backgroundColor = index < rssiLevel ? rssiColor : "#444";
+      bar.style.backgroundColor = index < rssiLevel ? rssiColor : "#555";
     });
 
     setText("aboutFirmware", data.about.firmware);
