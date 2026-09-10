@@ -80,9 +80,18 @@ write_state_file() {
 }
 
 json_str() {
-    printf '"'
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n'
-    printf '"'
+    # escape without spawning sed/tr: backslash -> \\, quote -> \",
+    # newlines stripped (values are single-line by construction; the tr
+    # fallback below keeps the old semantics if one ever slips through)
+    v=$1
+    v=${v//\\/\\\\}
+    v=${v//\"/\\\"}
+    case "$v" in
+        *"
+"*)
+            v=$(printf '%s' "$v" | tr -d '\n') ;;
+    esac
+    printf '"%s"' "$v"
 }
 
 json_str_ml() {

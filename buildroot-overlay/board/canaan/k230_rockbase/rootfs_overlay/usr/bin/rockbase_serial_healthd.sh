@@ -135,72 +135,73 @@ vm_line() {
 }
 
 tasks_line() {
-    r=0
-    s=0
-    d=0
-    z=0
-    dlist=""
-    for f in /proc/[0-9]*/stat; do
-        [ -r "${f}" ] || continue
-        pid="${f#/proc/}"
-        pid="${pid%/stat}"
-        line="$(cat "${f}" 2>/dev/null)" || continue
-        rest="${line#*) }"
-        state="${rest%% *}"
-        case "${state}" in
-            R) r=$((r + 1)) ;;
-            S) s=$((s + 1)) ;;
-            D)
-                d=$((d + 1))
-                if [ -z "${dlist}" ]; then
-                    comm="$(cat "/proc/${pid}/comm" 2>/dev/null)"
-                    dlist="${pid}:${comm:-?}"
-                fi
-                ;;
-            Z) z=$((z + 1)) ;;
-        esac
-    done
-    printf 'tasks=R%s/S%s/D%s/Z%s d_first=%s' "${r}" "${s}" "${d}" "${z}" "${dlist:--}"
+    # single awk pass over all /proc/<pid>/stat (no per-pid fork);
+    # output format identical to the old per-pid loop:
+    #   tasks=R<n>/S<n>/D<n>/Z<n> d_first=<pid:comm|->
+    awk '
+        FNR == 1 {
+            pid = FILENAME; sub("/proc/", "", pid); sub("/stat", "", pid)
+            rest = $0
+            sub(/^[^)]*\) /, "", rest)
+            state = substr(rest, 1, 1)
+            if (state == "R") r++
+            else if (state == "S") s++
+            else if (state == "D") {
+                d++
+                if (dlist == "") {
+                    comm = "?"
+                    f = "/proc/" pid "/comm"
+                    if ((getline cline < f) > 0) comm = cline
+                    close(f)
+                    dlist = pid ":" comm
+                }
+            }
+            else if (state == "Z") z++
+        }
+        END {
+            printf "tasks=R%d/S%d/D%d/Z%d d_first=%s", r+0, s+0, d+0, z+0, (dlist == "" ? "-" : dlist)
+        }' /proc/[0-9]*/stat 2>/dev/null
 }
 
 tasks_d_count() {
-    printf '%s\n' "$1" | sed -n 's/.*tasks=R[0-9][0-9]*\/S[0-9][0-9]*\/D\([0-9][0-9]*\)\/Z[0-9][0-9]*.*/\1/p'
+    # pure-shell extract of the D count from a tasks_line string
+    local t=$1
+    t=${t#*tasks=R}
+    t=${t#*/S}
+    t=${t#*/D}
+    t=${t%%/*}
+    case "$t" in ''|*[!0-9]*) t=0 ;; esac
+    printf '%s' "$t"
 }
 
 watched_threads_line() {
-    out=""
-    count=0
-    for f in /proc/[0-9]*/stat; do
-        [ -r "${f}" ] || continue
-        pid="${f#/proc/}"
-        pid="${pid%/stat}"
-        comm="$(cat "/proc/${pid}/comm" 2>/dev/null)" || continue
-        case "${comm}" in
-            bitcoind|ckpool|rockbase-lcdui|RTW_*|jbd2/*|kworker*|flush-*)
-                ;;
-            *)
-                continue
-                ;;
-        esac
-
-        line="$(cat "${f}" 2>/dev/null)" || continue
-        rest="${line#*) }"
-        state="${rest%% *}"
-        wchan="$(cat "/proc/${pid}/wchan" 2>/dev/null)"
-        [ -n "${wchan}" ] || wchan="-"
-
-        if [ "${state}" = "D" ] || [ "${comm}" = "RTW_XMIT_THREAD" ] || [ "${comm}" = "bitcoind" ] || [ "${comm}" = "rockbase-lcdui" ]; then
-            item="${pid}:${comm}:${state}:${wchan}"
-            if [ -z "${out}" ]; then
-                out="${item}"
-            else
-                out="${out},${item}"
-            fi
-            count=$((count + 1))
-            [ "${count}" -ge 8 ] && break
-        fi
-    done
-    printf 'watch=%s' "${out:--}"
+    # single awk pass (no per-pid fork); same selection and output as the old
+    # per-pid loop: watch=<pid:comm:state:wchan[,...]> (max 8, "-" when empty)
+    awk '
+        FNR == 1 {
+            pid = FILENAME; sub("/proc/", "", pid); sub("/stat", "", pid)
+            f = "/proc/" pid "/comm"
+            if ((getline comm < f) <= 0) { close(f); next }
+            close(f)
+            if (comm !~ /^(bitcoind|ckpool|rockbase-lcdui)$/ &&
+                comm !~ /^RTW_/ && comm !~ /^jbd2\// &&
+                comm !~ /^kworker/ && comm !~ /^flush-/) next
+            rest = $0
+            sub(/^[^)]*\) /, "", rest)
+            state = substr(rest, 1, 1)
+            wchan = "-"
+            wf = "/proc/" pid "/wchan"
+            if ((getline wl < wf) > 0 && wl != "") wchan = wl
+            close(wf)
+            if (state == "D" || comm == "RTW_XMIT_THREAD" ||
+                comm == "bitcoind" || comm == "rockbase-lcdui") {
+                item = pid ":" comm ":" state ":" wchan
+                out = (out == "" ? item : out "," item)
+                count++
+                if (count >= 8) exit
+            }
+        }
+        END { printf "watch=%s", (out == "" ? "-" : out) }' /proc/[0-9]*/stat 2>/dev/null
 }
 
 procs_line() {
@@ -490,8 +491,10 @@ while :; do
     prev_block_io="${3:-${prev_block_io}}"
     prev_block_wio="${4:-${prev_block_wio}}"
 
-    load="$(cut -d' ' -f1-3 /proc/loadavg)"
-    up="$(cut -d' ' -f1 /proc/uptime | cut -d. -f1)"
+    read -r la1 la2 la3 _ < /proc/loadavg
+    load="${la1} ${la2} ${la3}"
+    read -r up_raw _ < /proc/uptime
+    up="${up_raw%.*}"
     task_stats="$(tasks_line)"
     d_count="$(num_or_zero "$(tasks_d_count "${task_stats}")")"
 
