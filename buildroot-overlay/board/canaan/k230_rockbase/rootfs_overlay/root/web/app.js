@@ -865,6 +865,27 @@
       .replace(/'/g, "&#39;");
   }
 
+  /* Catmull-Rom -> cubic bezier, k tuned to match Chart.js tension 0.3 */
+  function smoothLinePath(coords) {
+    if (coords.length < 2) return "";
+    var k = 0.15;
+    var d = "M" + coords[0][0].toFixed(1) + " " + coords[0][1].toFixed(1);
+    for (var i = 0; i < coords.length - 1; i += 1) {
+      var p0 = coords[i - 1] || coords[i];
+      var p1 = coords[i];
+      var p2 = coords[i + 1];
+      var p3 = coords[i + 2] || p2;
+      var c1x = p1[0] + (p2[0] - p0[0]) * k;
+      var c1y = p1[1] + (p2[1] - p0[1]) * k;
+      var c2x = p2[0] - (p3[0] - p1[0]) * k;
+      var c2y = p2[1] - (p3[1] - p1[1]) * k;
+      d += "C" + c1x.toFixed(1) + " " + c1y.toFixed(1) + " " +
+        c2x.toFixed(1) + " " + c2y.toFixed(1) + " " +
+        p2[0].toFixed(1) + " " + p2[1].toFixed(1);
+    }
+    return d;
+  }
+
   function renderNodeHashrateHistory(pool, history) {
     var liveSample = {
       ts: Number(pool.lastupdate) || Math.floor(Date.now() / 1000),
@@ -880,7 +901,7 @@
 
     var series = [
       { key: "h1m", label: "1m", color: "rgba(139,148,158,0.6)" },
-      { key: "h5m", label: "5m", color: "#58a6ff" },
+      { key: "h5m", label: "5m", color: "#58a6ff", fill: "rgba(88,166,255,0.07)" },
       { key: "h15m", label: "15m", color: "#3fb950" },
       { key: "h1h", label: "1h", color: "#2dd4bf" },
       { key: "h6h", label: "6h", color: "#fbbf24" },
@@ -897,9 +918,7 @@
     }, 0);
     var chart = document.getElementById("minerHistoryChart");
     var legend = document.getElementById("minerHistoryLegend");
-    var badge = document.getElementById("minerHistoryBadge");
 
-    if (badge) setBadgeState("minerHistoryBadge", points.length > 1 ? "Cached History" : "Collecting", points.length > 1 ? "status-ok" : "status-soft");
     if (legend) {
       legend.innerHTML = series.map(function (item) {
         var active = nodeHashrateVisible[item.key] !== false;
@@ -941,14 +960,21 @@
       return '<text x="' + x.toFixed(1) + '" y="' + (height - 9) + '" text-anchor="middle">' + escapeHtml(text) + '</text>';
     }).join("");
     var lines = visibleSeries.map(function (item) {
-      var linePoints = points.map(function (row, index) {
+      var coords = points.map(function (row, index) {
         var x = left + (width - left - right) * index / span;
         var value = hashrateToGhs(row[item.key]);
         var y = height - bottom - (value / max) * (height - top - bottom);
-        return x.toFixed(1) + "," + y.toFixed(1);
-      }).filter(Boolean).join(" ");
-      if (!linePoints) return "";
-      return '<polyline class="miners-history-line" style="stroke:' + item.color + '" points="' + linePoints + '"></polyline>';
+        return [x, y];
+      });
+      if (!coords.length) return "";
+      var d = smoothLinePath(coords);
+      var area = "";
+      if (item.fill) {
+        area = '<path class="miners-history-area" style="fill:' + item.fill + '" d="' + d +
+          "L" + coords[coords.length - 1][0].toFixed(1) + " " + (height - bottom).toFixed(1) +
+          "L" + coords[0][0].toFixed(1) + " " + (height - bottom).toFixed(1) + 'Z"></path>';
+      }
+      return area + '<path class="miners-history-line" style="stroke:' + item.color + '" d="' + d + '"></path>';
     }).join("");
 
     chart.innerHTML = '<svg class="miners-history-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Node hashrate windows">' +
@@ -972,7 +998,6 @@
     var miners = Array.isArray(payload.miners) ? payload.miners : [];
     var users = Number(pool.users);
     var workers = Number(pool.workers);
-    var stale = pool.stale === true || payload.ok === false;
 
     setText("minerUsers", Number.isFinite(users) ? formatCount(users) : formatCount(miners.length));
     setText("minerWorkers", Number.isFinite(workers) ? formatCount(workers) : "--");
@@ -984,7 +1009,6 @@
     setText("summaryBestShare", formatShare(pool.bestshare));
     setText("minersUpdated", formatApiAge(payload.generated_at) + " · next cache refresh " + toText(payload.next_refresh_seconds, "60") + "s");
     setText("minersSource", toText(payload.source && payload.source.users_dir, "/root/ckpool/logs/users"));
-    setBadgeState("minersCacheBadge", stale ? "Stale Cache" : "Live Cache", stale ? "status-warm" : "status-ok");
 
     /* redesign: hero miners badge — render-only, reuses the cached miners.cgi payload above */
     var onlineMiners = miners.filter(function (miner) { return miner.online; }).length;
@@ -1046,8 +1070,8 @@
         '<summary class="miner-card-summary">' +
           '<div class="miner-card-head">' +
             '<div>' +
-            '<span class="summary-label">' + (miner.online ? "Online" : "Offline") + '</span>' +
-            '<strong class="mono miner-address">' + escapeHtml(miner.address) + '</strong>' +
+            '<span class="summary-label ' + (miner.online ? "is-online" : "is-offline") + '">' + (miner.online ? "Online" : "Offline") + '</span>' +
+            '<strong class="mono miner-address ' + (miner.online ? "is-online" : "is-offline") + '">' + escapeHtml(miner.address) + '</strong>' +
             '</div>' +
             '<span class="status-badge ' + (miner.online ? "status-ok" : "status-soft") + '">' + (miner.online ? "Active" : "Idle") + '</span>' +
           '</div>' +
