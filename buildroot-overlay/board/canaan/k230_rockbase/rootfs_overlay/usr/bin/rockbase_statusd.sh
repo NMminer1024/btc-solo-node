@@ -304,6 +304,7 @@ collect_system() {
     if [ "${swap_total}" -gt 0 ]; then swap_pct=$((swap_used * 100 / swap_total)); else swap_pct=0; fi
 
     mem_used_display=$(compact_size_mb "${mem_used}")
+    mem_free_display=$(compact_size_mb "${mem_free}")
     mem_total_display=$(compact_size_mb "${mem_total}")
     swap_used_display=$(compact_size_mb "${swap_used}")
     swap_total_display=$(compact_size_mb "${swap_total}")
@@ -371,6 +372,7 @@ collect_system() {
         state_str load_avg_display "${load_avg_display}"
         state_num mem_pct "${mem_pct}"
         state_str mem_used_display "${mem_used_display}"
+        state_str mem_free_display "${mem_free_display}"
         state_str mem_total_display "${mem_total_display}"
         state_num swap_pct "${swap_pct}"
         state_str swap_used_display "${swap_used_display}"
@@ -639,6 +641,7 @@ render_status_json() {
     load_avg_display="1m - · 5m -"
     mem_pct=0
     mem_used_display="-"
+    mem_free_display="-"
     mem_total_display="-"
     disk_pct=0
     disk_size_info="-"
@@ -980,6 +983,7 @@ render_status_json() {
     printf '    "load_avg_display": %s,\n' "$(json_str "${load_avg_display}")"
     printf '    "mem_pct": %s,\n' "$(json_num "${mem_pct}")"
     printf '    "mem_used_display": %s,\n' "$(json_str "${mem_used_display}")"
+    printf '    "mem_free_display": %s,\n' "$(json_str "${mem_free_display}")"
     printf '    "mem_total_display": %s,\n' "$(json_str "${mem_total_display}")"
     printf '    "disk_pct": %s,\n' "$(json_num "${disk_pct}")"
     printf '    "disk_size_info": %s,\n' "$(json_str "${disk_size_info}")"
