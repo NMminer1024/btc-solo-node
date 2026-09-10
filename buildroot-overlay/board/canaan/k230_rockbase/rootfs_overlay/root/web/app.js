@@ -27,6 +27,8 @@
       connections: "--",
       difficulty: "--",
       rss: "--",
+      mempoolTxs: "--",
+      version: "--",
       uptime: "--"
     },
     stratum: {
@@ -625,6 +627,8 @@
         connections: toText(bitcoin.connections, mock.bitcoin.connections),
         difficulty: toText(bitcoin.difficulty_display, mock.bitcoin.difficulty),
         rss: toText(bitcoin.rss, mock.bitcoin.rss),
+        mempoolTxs: toText(bitcoin.mempool_txs, mock.bitcoin.mempoolTxs),
+        version: toText(bitcoin.version, mock.bitcoin.version),
         uptime: toText(system.uptime, mock.bitcoin.uptime)
       },
       stratum: {
@@ -1671,6 +1675,8 @@
     setRollingValue("nodeConn", data.bitcoin.connections);
     setRollingValue("nodeDiff", data.bitcoin.difficulty);
     setRollingValue("nodeRss", data.bitcoin.rss);
+    setRollingValue("nodeMempool", data.bitcoin.mempoolTxs);
+    setRollingValue("nodeVersion", data.bitcoin.version);
     setRollingValue("nodeUptime", data.bitcoin.uptime);
 
     var orb = document.getElementById("ibdOrb");

@@ -496,6 +496,13 @@ collect_bitcoin_chain() {
     [ -n "${difficulty}" ] || difficulty="-"
     [ -n "${pruned}" ] || pruned=$(pruned_from_conf)
 
+    mempool_info=$(btc_cli getmempoolinfo 2>/dev/null) || mempool_info=""
+    mempool_txs=$(echo "${mempool_info}" | grep -o '"size": *[0-9]*' | cut -d: -f2 | xargs)
+    [ -n "${mempool_txs}" ] || mempool_txs="-"
+    net_info=$(btc_cli getnetworkinfo 2>/dev/null) || net_info=""
+    version=$(echo "${net_info}" | grep -o '"subversion": *"[^"]*"' | cut -d'"' -f4 | sed 's:^/::; s:/$::')
+    [ -n "${version}" ] || version="-"
+
     {
         state_num updated_at "$(now_epoch)"
         state_str chain "${chain}"
@@ -506,6 +513,8 @@ collect_bitcoin_chain() {
         state_str difficulty "${difficulty}"
         state_str pruned "${pruned}"
         state_str block_disk_value "${block_disk_value}"
+        state_str mempool_txs "${mempool_txs}"
+        state_str version "${version}"
     } | write_state_file "${BITCOIN_CHAIN_STATE}"
 }
 
@@ -649,6 +658,8 @@ render_status_json() {
     difficulty="-"
     pruned=""
     block_disk_value="-"
+    mempool_txs="-"
+    version="-"
     connections="-"
     best_block_date="-"
     log_blocks=""
@@ -1002,6 +1013,8 @@ render_status_json() {
     printf '    "btc_context": %s,\n' "$(json_str "${btc_context}")"
     printf '    "connections": %s,\n' "$(json_str "${connections}")"
     printf '    "difficulty_display": %s,\n' "$(json_str "${difficulty_display}")"
+    printf '    "mempool_txs": %s,\n' "$(json_str "${mempool_txs}")"
+    printf '    "version": %s,\n' "$(json_str "${version}")"
     printf '    "rss": %s\n' "$(json_str "${rss}")"
     printf '  },\n'
 

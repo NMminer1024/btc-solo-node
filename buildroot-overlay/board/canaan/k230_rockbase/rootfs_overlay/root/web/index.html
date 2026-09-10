@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NM Bitcoin Node Monitor</title>
-<link rel="stylesheet" href="/style.css?v=20260910-fix8">
+<link rel="stylesheet" href="/style.css?v=20260910-fix9">
 </head>
 <body>
 <div class="site-shell">
@@ -124,6 +124,21 @@
               <p id="ibdMeta">Loading live node data...</p>
             </div>
           </div>
+
+          <div class="stack-list">
+            <div class="stack-row">
+              <span>Bitcoind RSS</span>
+              <strong id="nodeRss">--</strong>
+            </div>
+            <div class="stack-row">
+              <span>Mempool Txs</span>
+              <strong id="nodeMempool">--</strong>
+            </div>
+            <div class="stack-row">
+              <span>Version</span>
+              <strong class="mono" id="nodeVersion">--</strong>
+            </div>
+          </div>
         </article>
 
         <article class="surface-card surface-card-primary">
@@ -161,8 +176,9 @@
         <article class="surface-card">
           <div class="surface-head">
             <div>
-              <h3>System</h3>
+              <h3>System &amp; Network</h3>
             </div>
+            <span class="status-badge status-ok" id="ntpBadge">NTP Ready</span>
           </div>
 
           <div class="metric-orb-grid">
@@ -205,60 +221,48 @@
             </div>
           </div>
 
-          <div class="stack-list">
-            <div class="stack-row">
-              <span>CPU</span>
-              <strong id="sysCpu">Canaan K230 RISC-V</strong>
+          <div class="stack-cols">
+            <div class="stack-list">
+              <div class="stack-row">
+                <span>CPU</span>
+                <strong id="sysCpu">Canaan K230 RISC-V</strong>
+              </div>
+              <div class="stack-row">
+                <span>Root FS</span>
+                <strong id="sysBlock">2.1G / 5.8G</strong>
+              </div>
+              <div class="stack-row">
+                <span>Uptime</span>
+                <strong id="sysRun">5d 13h 27m</strong>
+              </div>
             </div>
-            <div class="stack-row">
-              <span>Bitcoind RSS</span>
-              <strong id="nodeRss">--</strong>
-            </div>
-            <div class="stack-row">
-              <span>Root FS</span>
-              <strong id="sysBlock">2.1G / 5.8G</strong>
-            </div>
-            <div class="stack-row">
-              <span>Uptime</span>
-              <strong id="sysRun">5d 13h 27m</strong>
-            </div>
-          </div>
-        </article>
-
-        <article class="surface-card">
-          <div class="surface-head">
-            <div>
-              <h3>Network</h3>
-            </div>
-            <span class="status-badge status-ok" id="ntpBadge">NTP Ready</span>
-          </div>
-
-          <div class="stack-list">
-            <div class="stack-row">
-              <span>IP</span>
-              <strong id="netIp">192.168.124.15</strong>
-            </div>
-            <div class="stack-row">
-              <span>WiFi</span>
-              <strong id="netSsid">Rockbase-Lab</strong>
-            </div>
-            <div class="stack-row">
-              <span>MAC</span>
-              <strong class="mono" id="netMac">00:11:22:33:44:55</strong>
-            </div>
-            <div class="stack-row">
-              <span>RSSI</span>
-              <strong class="rssi-value">
-                <span class="rssi-signal" title="WiFi RSSI">
-                  <span class="rssi-bars-wrap">
-                    <span class="rssi-bar" data-rssi-bar="0"></span>
-                    <span class="rssi-bar" data-rssi-bar="1"></span>
-                    <span class="rssi-bar" data-rssi-bar="2"></span>
-                    <span class="rssi-bar" data-rssi-bar="3"></span>
+            <div class="stack-list">
+              <div class="stack-row">
+                <span>IP</span>
+                <strong id="netIp">192.168.124.15</strong>
+              </div>
+              <div class="stack-row">
+                <span>WiFi</span>
+                <strong id="netSsid">Rockbase-Lab</strong>
+              </div>
+              <div class="stack-row">
+                <span>RSSI</span>
+                <strong class="rssi-value">
+                  <span class="rssi-signal" title="WiFi RSSI">
+                    <span class="rssi-bars-wrap">
+                      <span class="rssi-bar" data-rssi-bar="0"></span>
+                      <span class="rssi-bar" data-rssi-bar="1"></span>
+                      <span class="rssi-bar" data-rssi-bar="2"></span>
+                      <span class="rssi-bar" data-rssi-bar="3"></span>
+                    </span>
+                    <span id="netRssi">-58 dBm</span>
                   </span>
-                  <span id="netRssi">-58 dBm</span>
-                </span>
-              </strong>
+                </strong>
+              </div>
+              <div class="stack-row">
+                <span>MAC</span>
+                <strong class="mono" id="netMac">00:11:22:33:44:55</strong>
+              </div>
             </div>
           </div>
         </article>
@@ -484,6 +488,6 @@
   </main>
 </div>
 
-<script src="/app.js?v=20260910-fix8"></script>
+<script src="/app.js?v=20260910-fix9"></script>
 </body>
 </html>

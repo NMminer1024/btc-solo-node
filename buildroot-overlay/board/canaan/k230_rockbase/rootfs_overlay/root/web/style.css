@@ -768,6 +768,12 @@ textarea {
   flex-direction: column;
 }
 
+.stack-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 28px;
+}
+
 .stack-row {
   display: flex;
   justify-content: space-between;
@@ -1521,6 +1527,10 @@ html[data-theme="light"] .miners-history-grid {
 
   .metric-orb-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stack-cols {
+    grid-template-columns: 1fr;
   }
 
   .sync-hero {
