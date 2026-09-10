@@ -8,7 +8,11 @@
 #   check-async [url]      Same fetch, backgrounded; writes result to
 #                          $CHECK_STATE_FILE for lcdui/web to poll (used by the
 #                          LCD "Firmware / Check Update" card)
-#   apply <manifest_url>   Download -> verify sig+sha256 -> dd to inactive slot -> switch
+#   apply <manifest_url> [--force] [--no-reboot]
+#                          Download -> verify sig+sha256 -> dd to inactive slot -> switch
+#                          --no-reboot: end in phase reboot_pending and leave the
+#                          final reboot to an explicit `reboot` call (web flow)
+#   reboot                 Finish a reboot_pending apply: sync + reboot into new slot
 #   confirm                Mark current slot good (clear bootcount/upgrade_available)
 #   rollback               Manually switch back to the previous slot and reboot
 #
@@ -470,12 +474,13 @@ cmd_check_async() {
     fi
 }
 
-# apply <manifest_url> [--force]
+# apply <manifest_url> [--force] [--no-reboot]
 cmd_apply() {
-    local url="" force=0
+    local url="" force=0 no_reboot=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --force) force=1 ;;
+            --no-reboot) no_reboot=1 ;;
             -*) die "unknown flag: $1" ;;
             *) url=$1 ;;
         esac
@@ -614,16 +619,39 @@ cmd_apply() {
     fi
 
     # 5) switch slot + arm rollback counter
-    set_state switching -1 "Switching to new system, rebooting"
     log "switching boot slot -> $tgt_slot (upgrade_available=1, bootcount=0)"
     fw_setenv "$ENV_SLOT" "$tgt_slot" \
               "$ENV_UPGRADE" "1" \
               bootcount "0" || die "fw_setenv failed"
 
+    # caller-controlled reboot (web flow): park in reboot_pending with services
+    # still quiesced; the final `reboot` subcommand finishes the upgrade
+    if [ "$no_reboot" = "1" ]; then
+        set_state reboot_pending 100 "Write complete - waiting for reboot confirmation"
+        log "apply complete; waiting for explicit reboot (--no-reboot)"
+        return 0
+    fi
+
+    set_state switching -1 "Switching to new system, rebooting"
     log "rebooting into new slot..."
     sync
+    # give lcdui/web pollers a few seconds to observe the switching state
+    # before the network stack goes down
+    sleep 3
     # unmount blockdata before the forced reboot so the new slot does not
     # inherit a dirty p4 (resize2fs refuses a dirty fs on first boot)
+    umount /root/block 2>/dev/null || true
+    reboot -f
+}
+
+# reboot: finish a reboot_pending apply (web flow issues this after the user
+# confirms). Safe to call standalone; performs the same final steps as the
+# auto-reboot path above.
+cmd_reboot() {
+    log "explicit reboot requested"
+    STATE_ENABLED=1
+    set_state switching -1 "Rebooting into new system"
+    sync
     umount /root/block 2>/dev/null || true
     reboot -f
 }
@@ -657,6 +685,7 @@ case "$cmd" in
     check)    cmd_check "$@" ;;
     check-async) cmd_check_async "$@" ;;
     apply)    cmd_apply "$@" ;;
+    reboot)   cmd_reboot "$@" ;;
     confirm)  cmd_confirm "$@" ;;
     rollback) cmd_rollback "$@" ;;
     -h|--help|help)

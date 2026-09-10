@@ -1870,6 +1870,8 @@
   var otaApplyStartTs = 0;
   var otaLastStateTs = 0;
   var otaStallSince = 0;
+  var otaStateFailCount = 0;
+  var OTA_STATE_FAIL_REBOOT_THRESHOLD = 3;
   var OTA_STALL_SECONDS = 90;
   var currentProductVersion = "--";
 
@@ -1878,6 +1880,7 @@
     downloading: "Downloading firmware",
     verifying: "Verifying signature & checksum",
     flashing: "Writing system image",
+    reboot_pending: "Write complete",
     switching: "Switching to new system, rebooting",
     failed: "Update failed"
   };
@@ -2007,7 +2010,18 @@
     otaSetProgress(-1);
     var errActions = document.getElementById("otaErrorActions");
     if (errActions) errActions.hidden = true;
+    var rebootActions = document.getElementById("otaRebootActions");
+    if (rebootActions) rebootActions.hidden = true;
     otaShowView("progress");
+  }
+
+  function otaShowRebootPending() {
+    setText("otaPhaseLabel", OTA_PHASE_LABELS.reboot_pending);
+    setText("otaProgressSpeed", "");
+    setText("otaProgressMsg", "The new system is written and verified. Click Reboot Now to switch over and restart the node.");
+    otaSetProgress(100);
+    var rebootActions = document.getElementById("otaRebootActions");
+    if (rebootActions) rebootActions.hidden = false;
   }
 
   function otaShowFailed(message) {
@@ -2032,6 +2046,11 @@
       otaShowFailed(msg);
       return;
     }
+    if (phase === "reboot_pending") {
+      stopOtaProgressPolling();
+      otaShowRebootPending();
+      return;
+    }
     if (phase === "switching") {
       stopOtaProgressPolling();
       otaStartRebootWatch();
@@ -2041,9 +2060,11 @@
   function pollOtaState() {
     return window.fetch("/api/ota.cgi?action=state&_ts=" + Date.now(), { cache: "no-store" })
       .then(function (response) {
-        return response.ok ? response.json() : null;
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        return response.json();
       })
       .then(function (res) {
+        otaStateFailCount = 0;
         if (!res || !res.ok) return null;
         var state = res.state;
         if (!state) return res;
@@ -2056,7 +2077,7 @@
           otaStallSince = 0;
         } else if (!otaStallSince) {
           otaStallSince = now;
-        } else if (now - otaStallSince > OTA_STALL_SECONDS && state.phase !== "switching") {
+        } else if (now - otaStallSince > OTA_STALL_SECONDS && state.phase !== "switching" && state.phase !== "reboot_pending") {
           otaShowFailed("No progress from the node for over 90s - the update may have stalled. Check /root/block/ota/ota.log.");
           return res;
         }
@@ -2064,6 +2085,15 @@
         return res;
       })
       .catch(function () {
+        /* httpd is kept alive during the whole apply; if it stops answering
+           mid-apply the node is almost certainly rebooting into the new slot
+           (the switching state window is short and easy to miss between polls) */
+        if (!otaApplying) return null;
+        otaStateFailCount += 1;
+        if (otaStateFailCount >= OTA_STATE_FAIL_REBOOT_THRESHOLD) {
+          stopOtaProgressPolling();
+          otaStartRebootWatch();
+        }
         return null;
       });
   }
@@ -2076,6 +2106,7 @@
 
   function otaStartRebootWatch() {
     stopOtaRebootWatch();
+    otaStateFailCount = 0;
     otaSetProgress(100);
     setText("otaPhaseLabel", OTA_PHASE_LABELS.switching);
     setText("otaProgressSpeed", "");
@@ -2116,6 +2147,7 @@
           otaApplyStartTs = Math.floor(Date.now() / 1000);
           otaLastStateTs = 0;
           otaStallSince = 0;
+          otaStateFailCount = 0;
           otaShowProgress();
           startOtaProgressPolling();
           return res;
@@ -2135,6 +2167,25 @@
         otaShowFailed("failed to reach the node");
         return null;
       });
+  }
+
+  function otaConfirmReboot() {
+    var btn = document.getElementById("otaRebootBtn");
+    if (btn) btn.disabled = true;
+    setText("otaPhaseLabel", OTA_PHASE_LABELS.switching);
+    setText("otaProgressMsg", "Reboot command sent. The node is restarting, this page reloads when it is back.");
+    window.fetch("/api/ota.cgi?action=reboot&_ts=" + Date.now(), {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "",
+      cache: "no-store"
+    }).catch(function () {
+      return null;
+    }).then(function () {
+      /* whether or not the response made it out before the network went down,
+         the node is on its way down - just watch for it to come back */
+      otaStartRebootWatch();
+    });
   }
 
   function resumeOtaIfApplying() {
@@ -2157,6 +2208,7 @@
     var later = document.getElementById("otaLaterBtn");
     var update = document.getElementById("otaUpdateBtn");
     var close = document.getElementById("otaCloseBtn");
+    var reboot = document.getElementById("otaRebootBtn");
     if (later) {
       later.addEventListener("click", function () {
         if (otaOfferedVersion) otaDismiss(otaOfferedVersion);
@@ -2171,6 +2223,11 @@
     if (close) {
       close.addEventListener("click", function () {
         otaShowView(null);
+      });
+    }
+    if (reboot) {
+      reboot.addEventListener("click", function () {
+        otaConfirmReboot();
       });
     }
   }

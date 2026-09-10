@@ -113,9 +113,24 @@ start_apply() {
     rm -rf "$APPLY_LOCKDIR" 2>/dev/null || true
   fi
   mkdir -p "$APPLY_LOG_DIR" 2>/dev/null
-  nohup rockbase-ota.sh apply "$(manifest_url)" --force \
+  nohup rockbase-ota.sh apply "$(manifest_url)" --force --no-reboot \
     > "$APPLY_LOG_DIR/apply-web-$(date +%Y%m%d-%H%M%S).log" 2>&1 &
   printf '{"ok":true,"started":true,"pid":%s}' "$!"
+}
+
+# reboot: only honored when a --no-reboot apply has parked in reboot_pending;
+# delayed 1s so this HTTP response reaches the client before the network dies
+start_reboot() {
+  if [ "$REQUEST_METHOD" != "POST" ]; then
+    printf '{"ok":false,"error":"POST required"}'
+    return 1
+  fi
+  if [ ! -f "$STATE_FILE" ] || ! grep -q '"phase":"reboot_pending"' "$STATE_FILE" 2>/dev/null; then
+    printf '{"ok":false,"error":"no apply waiting for reboot"}'
+    return 1
+  fi
+  nohup sh -c 'sleep 1; /usr/sbin/rockbase-ota.sh reboot' >/dev/null 2>&1 &
+  printf '{"ok":true,"rebooting":true}'
 }
 
 get_params
@@ -129,5 +144,6 @@ case "$action" in
   manifest) emit_manifest ;;
   state)    emit_state ;;
   apply)    start_apply ;;
+  reboot)   start_reboot ;;
   *)        printf '{"ok":false,"error":"unknown action"}' ;;
 esac
