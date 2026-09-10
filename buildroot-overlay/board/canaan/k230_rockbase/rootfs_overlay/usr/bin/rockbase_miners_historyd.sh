@@ -93,6 +93,10 @@ cleanup_old_files() {
 # Drop per-wallet history once the wallet disappeared from ckpool or has
 # been offline longer than USER_OFFLINE_DROP_SECONDS (default 7 days).
 cleanup_offline_users() {
+  # If ckpool has not started yet (e.g. right after boot while bitcoind is
+  # still syncing), the users dir is absent and we cannot tell a deleted
+  # wallet from a not-yet-started pool. Skip cleanup to avoid wiping history.
+  [ -d "$USERS_DIR" ] || return 0
   now=$(date +%s)
   for hist in "$DATA_DIR"/user-*.jsonl; do
     [ -f "$hist" ] || continue
