@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NM Bitcoin Node Monitor</title>
-<link rel="stylesheet" href="/style.css?v=20260910-dash6">
+<link rel="stylesheet" href="/style.css?v=20260910-dash9">
 </head>
 <body>
 <div class="site-shell">
@@ -246,6 +246,11 @@
           </div>
         </article>
       </section>
+
+      <footer class="dashboard-footer">
+        <span class="footer-copyright">&copy; 2026 NMMiner &middot; Solo BTC Node on Rockbase</span>
+        <span class="footer-version mono" id="dashVersion">--</span>
+      </footer>
     </section>
 
     <section class="panel-view" data-view-panel="miners">
@@ -467,6 +472,40 @@
   </main>
 </div>
 
-<script src="/app.js?v=20260910-dash6"></script>
+<div class="ota-overlay" id="otaOverlay" hidden>
+  <div class="ota-modal" role="dialog" aria-modal="true" aria-label="Firmware update">
+    <div class="ota-view" id="otaOfferView">
+      <h3>Firmware Update Available</h3>
+      <p class="ota-ver-line">
+        <span class="mono" id="otaCurrentVer">--</span>
+        <span class="ota-arrow">&rarr;</span>
+        <span class="mono ota-ver-new" id="otaLatestVer">--</span>
+      </p>
+      <p class="ota-sub" id="otaReleaseDate"></p>
+      <p class="ota-note">The update is downloaded, verified and written to the standby system slot, then the node reboots. Syncing and mining pause during the upgrade. Do not power off.</p>
+      <div class="ota-actions">
+        <button class="action-button" id="otaLaterBtn" type="button">Later</button>
+        <button class="action-button action-button-primary" id="otaUpdateBtn" type="button">Update Now</button>
+      </div>
+    </div>
+    <div class="ota-view" id="otaProgressView" hidden>
+      <h3>Updating Firmware</h3>
+      <p class="ota-phase" id="otaPhaseLabel">Preparing...</p>
+      <div class="ota-progress">
+        <div class="ota-progress-fill" id="otaProgressFill"></div>
+      </div>
+      <div class="ota-progress-meta">
+        <span id="otaProgressPct">--</span>
+        <span id="otaProgressSpeed"></span>
+      </div>
+      <p class="ota-note" id="otaProgressMsg">Do not power off the node.</p>
+      <div class="ota-actions" id="otaErrorActions" hidden>
+        <button class="action-button" id="otaCloseBtn" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js?v=20260910-dash9"></script>
 </body>
 </html>

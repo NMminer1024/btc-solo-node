@@ -13,7 +13,8 @@
       cpuModel: "--",
       temperature: "--",
       rootfsUsage: "--",
-      uptime: "--"
+      uptime: "--",
+      productVersion: "--"
     },
     bitcoin: {
       syncBadge: "...",
@@ -601,7 +602,8 @@
         cpuModel: toText(system.cpu_model, mock.system.cpuModel),
         temperature: toText(system.temp, mock.system.temperature),
         rootfsUsage: toText(system.rootfs_size_info, mock.system.rootfsUsage),
-        uptime: toText(system.uptime, mock.system.uptime)
+        uptime: toText(system.uptime, mock.system.uptime),
+        productVersion: toText(system.product_version, mock.system.productVersion)
       },
       bitcoin: {
         syncBadge: syncLabel,
@@ -1701,6 +1703,8 @@
 
     setText("aboutFirmware", data.about.firmware);
     setText("aboutUpdated", data.about.updated);
+    setText("dashVersion", data.system.productVersion);
+    currentProductVersion = data.system.productVersion;
   }
 
   function fetchDashboardData() {
@@ -1849,6 +1853,328 @@
     }
   }
 
+  /* ── OTA update check + progress overlay ─────────────────
+   * The browser polls the board-cached manifest every 60s (the board proxies
+   * the OTA repo because the release host chain sends no CORS headers).
+   * Apply progress comes from /run/rockbase/ota-state.json, the same state
+   * file the LCD full-screen overlay consumes. */
+
+  var OTA_CHECK_SECONDS = 60;
+  var OTA_PROGRESS_SECONDS = 2;
+  var OTA_REBOOT_WATCH_SECONDS = 5;
+  var otaCheckTimer = null;
+  var otaProgressTimer = null;
+  var otaRebootTimer = null;
+  var otaApplying = false;
+  var otaOfferedVersion = "";
+  var otaApplyStartTs = 0;
+  var otaLastStateTs = 0;
+  var otaStallSince = 0;
+  var OTA_STALL_SECONDS = 90;
+  var currentProductVersion = "--";
+
+  var OTA_PHASE_LABELS = {
+    preparing: "Preparing...",
+    downloading: "Downloading firmware",
+    verifying: "Verifying signature & checksum",
+    flashing: "Writing system image",
+    switching: "Switching to new system, rebooting",
+    failed: "Update failed"
+  };
+
+  function otaVersionGt(a, b) {
+    var pa = String(a || "").replace(/^v/, "").split("-")[0].split(".");
+    var pb = String(b || "").replace(/^v/, "").split("-")[0].split(".");
+    for (var i = 0; i < 3; i += 1) {
+      var na = Number(pa[i]) || 0;
+      var nb = Number(pb[i]) || 0;
+      if (na > nb) return true;
+      if (na < nb) return false;
+    }
+    return false;
+  }
+
+  function otaDismissedVersion() {
+    try {
+      return window.localStorage.getItem("nmOtaDismissed") || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function otaDismiss(version) {
+    try {
+      window.localStorage.setItem("nmOtaDismissed", version);
+    } catch (e) {}
+  }
+
+  function otaClearDismiss() {
+    try {
+      window.localStorage.removeItem("nmOtaDismissed");
+    } catch (e) {}
+  }
+
+  function otaShowView(view) {
+    var overlay = document.getElementById("otaOverlay");
+    var offer = document.getElementById("otaOfferView");
+    var progress = document.getElementById("otaProgressView");
+    if (!overlay || !offer || !progress) return;
+    overlay.hidden = view === null;
+    offer.hidden = view !== "offer";
+    progress.hidden = view !== "progress";
+  }
+
+  function otaFormatSpeed(bps) {
+    var num = Number(bps);
+    if (!Number.isFinite(num) || num < 0) return "";
+    if (num >= 1048576) return (num / 1048576).toFixed(1) + " MB/s";
+    if (num >= 1024) return Math.round(num / 1024) + " KB/s";
+    return Math.round(num) + " B/s";
+  }
+
+  function otaSetProgress(pct) {
+    var fill = document.getElementById("otaProgressFill");
+    var label = document.getElementById("otaProgressPct");
+    if (!fill || !label) return;
+    var num = Number(pct);
+    if (!Number.isFinite(num) || num < 0) {
+      fill.classList.add("is-indeterminate");
+      fill.style.width = "";
+      label.textContent = "";
+      return;
+    }
+    fill.classList.remove("is-indeterminate");
+    fill.style.width = Math.min(100, Math.max(0, num)) + "%";
+    label.textContent = Math.round(num) + "%";
+  }
+
+  function otaShowOffer(latest, released) {
+    if (otaApplying) return;
+    otaOfferedVersion = latest;
+    setText("otaCurrentVer", currentProductVersion);
+    setText("otaLatestVer", latest);
+    setText("otaReleaseDate", released ? "Released " + released : "");
+    otaShowView("offer");
+  }
+
+  function checkOtaUpdate() {
+    if (otaApplying) return Promise.resolve(null);
+    var overlay = document.getElementById("otaOverlay");
+    if (overlay && !overlay.hidden) return Promise.resolve(null);
+    return window.fetch("/api/ota.cgi?action=manifest&_ts=" + Date.now(), { cache: "no-store" })
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(function (manifest) {
+        if (!manifest || typeof manifest.version !== "string") return null;
+        var latest = manifest.version.split("-")[0];
+        if (!/^v\d+\.\d+\.\d+$/.test(latest)) return null;
+        if (!/^v\d+\.\d+\.\d+$/.test(currentProductVersion)) return null;
+        if (!otaVersionGt(latest, currentProductVersion)) return null;
+        if (otaDismissedVersion() === latest) return null;
+        otaShowOffer(latest, manifest.released);
+        return manifest;
+      })
+      .catch(function () {
+        return null;
+      });
+  }
+
+  function startOtaChecking() {
+    if (otaCheckTimer) window.clearInterval(otaCheckTimer);
+    otaCheckTimer = window.setInterval(checkOtaUpdate, OTA_CHECK_SECONDS * 1000);
+    window.setTimeout(checkOtaUpdate, 8000);
+  }
+
+  function stopOtaProgressPolling() {
+    if (otaProgressTimer) {
+      window.clearInterval(otaProgressTimer);
+      otaProgressTimer = null;
+    }
+  }
+
+  function stopOtaRebootWatch() {
+    if (otaRebootTimer) {
+      window.clearInterval(otaRebootTimer);
+      otaRebootTimer = null;
+    }
+  }
+
+  function otaShowProgress() {
+    setText("otaPhaseLabel", OTA_PHASE_LABELS.preparing);
+    setText("otaProgressSpeed", "");
+    setText("otaProgressMsg", "Do not power off the node.");
+    otaSetProgress(-1);
+    var errActions = document.getElementById("otaErrorActions");
+    if (errActions) errActions.hidden = true;
+    otaShowView("progress");
+  }
+
+  function otaShowFailed(message) {
+    otaApplying = false;
+    stopOtaProgressPolling();
+    setText("otaPhaseLabel", OTA_PHASE_LABELS.failed);
+    setText("otaProgressMsg", message || "See /root/block/ota/ota.log on the node for details.");
+    otaSetProgress(0);
+    var errActions = document.getElementById("otaErrorActions");
+    if (errActions) errActions.hidden = false;
+  }
+
+  function otaRenderState(state) {
+    var phase = toText(state && state.phase, "preparing");
+    setText("otaPhaseLabel", OTA_PHASE_LABELS[phase] || phase);
+    setText("otaProgressSpeed", otaFormatSpeed(state && state.speed_bps));
+    var msg = toText(state && state.message, "");
+    if (msg && phase !== "failed") setText("otaProgressMsg", msg);
+    otaSetProgress(state ? state.progress : -1);
+
+    if (phase === "failed") {
+      otaShowFailed(msg);
+      return;
+    }
+    if (phase === "switching") {
+      stopOtaProgressPolling();
+      otaStartRebootWatch();
+    }
+  }
+
+  function pollOtaState() {
+    return window.fetch("/api/ota.cgi?action=state&_ts=" + Date.now(), { cache: "no-store" })
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(function (res) {
+        if (!res || !res.ok) return null;
+        var state = res.state;
+        if (!state) return res;
+        var stateTs = Number(state.ts) || 0;
+        /* state file survives a finished run; ignore entries older than this apply */
+        if (otaApplyStartTs && stateTs && stateTs < otaApplyStartTs) return res;
+        var now = Math.floor(Date.now() / 1000);
+        if (stateTs !== otaLastStateTs) {
+          otaLastStateTs = stateTs;
+          otaStallSince = 0;
+        } else if (!otaStallSince) {
+          otaStallSince = now;
+        } else if (now - otaStallSince > OTA_STALL_SECONDS && state.phase !== "switching") {
+          otaShowFailed("No progress from the node for over 90s - the update may have stalled. Check /root/block/ota/ota.log.");
+          return res;
+        }
+        otaRenderState(state);
+        return res;
+      })
+      .catch(function () {
+        return null;
+      });
+  }
+
+  function startOtaProgressPolling() {
+    stopOtaProgressPolling();
+    otaProgressTimer = window.setInterval(pollOtaState, OTA_PROGRESS_SECONDS * 1000);
+    pollOtaState();
+  }
+
+  function otaStartRebootWatch() {
+    stopOtaRebootWatch();
+    otaSetProgress(100);
+    setText("otaPhaseLabel", OTA_PHASE_LABELS.switching);
+    setText("otaProgressSpeed", "");
+    setText("otaProgressMsg", "The node is rebooting. This page reloads when it is back.");
+    otaRebootTimer = window.setInterval(function () {
+      window.fetch("/api/status.cgi?_ts=" + Date.now(), { cache: "no-store" })
+        .then(function (response) {
+          if (!response.ok) throw new Error("not back yet");
+          return response.json();
+        })
+        .then(function () {
+          stopOtaRebootWatch();
+          otaApplying = false;
+          otaClearDismiss();
+          setText("otaPhaseLabel", "Update complete");
+          setText("otaProgressMsg", "Reloading...");
+          window.setTimeout(function () {
+            window.location.reload();
+          }, 1500);
+        })
+        .catch(function () {});
+    }, OTA_REBOOT_WATCH_SECONDS * 1000);
+  }
+
+  function startOtaApply() {
+    return window.fetch("/api/ota.cgi?action=apply&_ts=" + Date.now(), {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "",
+      cache: "no-store"
+    })
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(function (res) {
+        if (res && res.ok) {
+          otaApplying = true;
+          otaApplyStartTs = Math.floor(Date.now() / 1000);
+          otaLastStateTs = 0;
+          otaStallSince = 0;
+          otaShowProgress();
+          startOtaProgressPolling();
+          return res;
+        }
+        if (res && res.applying) {
+          otaApplying = true;
+          otaShowProgress();
+          startOtaProgressPolling();
+          return res;
+        }
+        otaShowView("progress");
+        otaShowFailed(res && res.error ? res.error : "failed to start update");
+        return null;
+      })
+      .catch(function () {
+        otaShowView("progress");
+        otaShowFailed("failed to reach the node");
+        return null;
+      });
+  }
+
+  function resumeOtaIfApplying() {
+    window.fetch("/api/ota.cgi?action=state&_ts=" + Date.now(), { cache: "no-store" })
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(function (res) {
+        if (!res || !res.ok) return;
+        if (res.applying || (res.state && res.state.phase && res.state.phase !== "failed")) {
+          otaApplying = true;
+          otaShowProgress();
+          startOtaProgressPolling();
+        }
+      })
+      .catch(function () {});
+  }
+
+  function bindOtaControls() {
+    var later = document.getElementById("otaLaterBtn");
+    var update = document.getElementById("otaUpdateBtn");
+    var close = document.getElementById("otaCloseBtn");
+    if (later) {
+      later.addEventListener("click", function () {
+        if (otaOfferedVersion) otaDismiss(otaOfferedVersion);
+        otaShowView(null);
+      });
+    }
+    if (update) {
+      update.addEventListener("click", function () {
+        startOtaApply();
+      });
+    }
+    if (close) {
+      close.addEventListener("click", function () {
+        otaShowView(null);
+      });
+    }
+  }
+
   function init() {
     renderDashboard(mock);
     setRefreshCountdown(DASHBOARD_REFRESH_SECONDS);
@@ -1856,12 +2182,15 @@
     bindLogTabs();
     bindStratumCopy();
     bindWifiControls();
+    bindOtaControls();
     bindThemeToggle();
     setTheme(getStoredTheme());
     fetchDashboardData();
     /* prefetch miners cache so the Stratum card pool stats and hero Miners badge fill on first load */
     fetchMinersData();
     startRefreshCountdown();
+    startOtaChecking();
+    resumeOtaIfApplying();
 
     var initial = window.location.hash ? window.location.hash.slice(1) : "dashboard";
     if (initial.indexOf("miner/") === 0) {

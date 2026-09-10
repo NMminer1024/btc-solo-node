@@ -1559,6 +1559,139 @@ html[data-theme="light"] .miners-history-grid {
   background: var(--bg2);
 }
 
+[hidden] {
+  display: none !important;
+}
+
+/* ── OTA update overlay ──────────────────────────────────── */
+
+.ota-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+  padding: 20px;
+}
+
+.ota-overlay[hidden] {
+  display: none;
+}
+
+.ota-modal {
+  width: 420px;
+  max-width: 100%;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.ota-modal h3 {
+  margin: 0 0 14px;
+  font-size: 17px;
+}
+
+.ota-ver-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ota-arrow {
+  color: var(--muted);
+}
+
+.ota-ver-new {
+  color: var(--green);
+}
+
+.ota-sub {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ota-note {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.ota-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.ota-phase {
+  margin: 0 0 10px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ota-progress {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.ota-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.ota-progress-fill.is-indeterminate {
+  width: 35%;
+  animation: ota-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes ota-slide {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(310%); }
+}
+
+.ota-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Dashboard footer (copyright + product version) ──────── */
+
+.dashboard-footer {
+  position: relative;
+  margin-top: 20px;
+  padding: 10px 0 2px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.footer-version {
+  position: absolute;
+  right: 0;
+  top: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Responsive ──────────────────────────────────────────── */
 
 @media (max-width: 1180px) {
