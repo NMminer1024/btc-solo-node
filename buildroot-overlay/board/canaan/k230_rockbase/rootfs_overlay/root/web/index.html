@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NM Bitcoin Node Monitor</title>
-<link rel="stylesheet" href="/style.css?v=20260910-fix5">
+<link rel="stylesheet" href="/style.css?v=20260910-fix8">
 </head>
 <body>
 <div class="site-shell">
@@ -310,6 +310,78 @@
       </section>
     </section>
 
+    <section class="panel-view" data-view-panel="miner">
+      <button class="miner-back" id="minerDetailBack" type="button">&larr; Back to Miners</button>
+
+      <article class="surface-card miner-hero">
+        <div class="miner-hero-title">
+          <h2 class="mono" id="minerDetailAddress">--</h2>
+          <span class="status-badge status-soft" id="minerDetailBadge">--</span>
+        </div>
+        <div class="miner-hero-meta">
+          <span class="meta-chip" id="minerDetailAuthorised">--</span>
+          <span class="meta-chip" id="minerDetailLastShare">--</span>
+          <span class="meta-chip" id="minerDetailWorkersChip">--</span>
+        </div>
+        <div class="miner-detail-kpis">
+          <div class="stat-card"><span class="stat-label">Hashrate (5m)</span><strong class="stat-value accent" id="minerDetailHash5m">--</strong></div>
+          <div class="stat-card"><span class="stat-label">Total Shares</span><strong class="stat-value" id="minerDetailShares">--</strong></div>
+          <div class="stat-card"><span class="stat-label">Best Share</span><strong class="stat-value yellow" id="minerDetailBestShare">--</strong></div>
+          <div class="stat-card"><span class="stat-label">Best Ever</span><strong class="stat-value yellow" id="minerDetailBestEver">--</strong></div>
+          <div class="stat-card"><span class="stat-label">Workers</span><strong class="stat-value" id="minerDetailWorkers">--</strong></div>
+        </div>
+      </article>
+
+      <article class="surface-card">
+        <div class="surface-head">
+          <div>
+            <h3>Odds of Finding a Block</h3>
+          </div>
+        </div>
+        <div class="odds-grid">
+          <div class="odds-card"><span>1 Day</span><strong id="minerDetailOdds1d">--</strong></div>
+          <div class="odds-card"><span>1 Week</span><strong id="minerDetailOdds7d">--</strong></div>
+          <div class="odds-card"><span>1 Month</span><strong id="minerDetailOdds30d">--</strong></div>
+          <div class="odds-card"><span>1 Year</span><strong id="minerDetailOdds365d">--</strong></div>
+        </div>
+        <p class="miners-cache-note">Calculated from 1d average hashrate vs current network difficulty.</p>
+      </article>
+
+      <article class="surface-card">
+        <div class="surface-head">
+          <div>
+            <h3>Hashrate History</h3>
+          </div>
+        </div>
+        <div class="miners-history-plot" id="minerDetailHashChart">
+          <div class="miners-empty">Loading wallet history...</div>
+        </div>
+        <div class="miners-history-legend miners-history-legend-static" id="minerDetailHashLegend"></div>
+      </article>
+
+      <article class="surface-card">
+        <div class="surface-head">
+          <div>
+            <h3>Worker Count History</h3>
+          </div>
+        </div>
+        <div class="miners-history-plot" id="minerDetailWorkerChart">
+          <div class="miners-empty">Loading worker history...</div>
+        </div>
+      </article>
+
+      <article class="surface-card surface-card-large">
+        <div class="surface-head">
+          <div>
+            <h3>Workers</h3>
+          </div>
+        </div>
+        <div id="minerDetailWorkersTable">
+          <div class="miners-empty">Loading workers...</div>
+        </div>
+      </article>
+    </section>
+
     <section class="panel-view" data-view-panel="logs">
       <article class="surface-card surface-card-large log-shell">
         <div class="log-header">
@@ -412,6 +484,6 @@
   </main>
 </div>
 
-<script src="/app.js?v=20260910-fix5"></script>
+<script src="/app.js?v=20260910-fix8"></script>
 </body>
 </html>

@@ -1077,8 +1077,7 @@ textarea {
   min-width: 0;
 }
 
-.miners-kpi span,
-.miner-card-metrics span {
+.miners-kpi span {
   display: block;
   color: var(--muted);
   font-size: 11px;
@@ -1264,30 +1263,6 @@ html[data-theme="light"] .miners-history-grid {
   color: var(--text);
 }
 
-/* Per-wallet history chart inside miner cards (pi5 user page alignment) */
-.miner-wallet-history {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.miner-wallet-history-head span {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.miner-wallet-plot {
-  min-height: 220px;
-  margin-top: 10px;
-}
-
-.miner-wallet-plot .miners-history-svg {
-  height: 220px;
-}
-
 .miners-history-legend-static {
   margin-top: 8px;
 }
@@ -1308,177 +1283,181 @@ html[data-theme="light"] .miners-history-grid {
   flex: 0 0 auto;
 }
 
-/* Miner cards + worker table (ck-monitor table style) */
+/* Miners table + wallet detail (pi5 ck-monitor style) */
 
-.miners-list {
-  display: grid;
-  gap: 12px;
-}
-
-.miner-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  padding: 0;
-  overflow: hidden;
-}
-
-.miner-card-summary {
-  display: block;
-  padding: 14px 16px;
-  cursor: pointer;
-  list-style: none;
-  transition: background-color 0.15s ease;
-}
-
-.miner-card-summary:hover {
-  background: var(--bg3);
-}
-
-.miner-card-summary::-webkit-details-marker {
-  display: none;
-}
-
-.miner-card-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  align-items: flex-start;
-}
-
-.miner-address {
-  display: block;
-  margin-top: 4px;
-  color: var(--text);
-  font-size: 0.94rem;
-  word-break: break-all;
-}
-
-.miner-address.is-online {
-  color: var(--green);
-}
-
-.miner-address.is-offline {
-  color: var(--muted);
-}
-
-.miner-card-head .summary-label.is-online {
-  color: var(--green);
-}
-
-.miner-card-head .summary-label.is-offline {
-  color: var(--muted);
-}
-
-.miner-card-metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(140px, 1fr));
-  gap: 10px;
-  margin-top: 12px;
+.table-wrap {
   overflow-x: auto;
 }
 
-.miner-card-metrics > div {
-  padding: 10px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg3);
-}
-
-.miner-card-metrics strong {
-  display: block;
-  margin-top: 4px;
-  color: var(--text);
-  font-size: 0.92rem;
-  line-height: 1.35;
-  font-variant-numeric: tabular-nums;
-}
-
-.miner-workers {
-  display: block;
-  overflow-x: auto;
-  border-top: 1px solid var(--border);
-}
-
-.miner-worker-head,
-.miner-worker-row {
-  display: grid;
-  grid-template-columns: minmax(170px, 1.35fr) repeat(4, minmax(78px, 0.6fr)) repeat(2, minmax(102px, 0.8fr)) minmax(102px, 0.8fr);
-  align-items: center;
-  gap: 10px;
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
   min-width: 940px;
 }
 
-.miner-worker-head {
+.data-table th {
   padding: 8px 12px;
   background: var(--bg3);
   border-bottom: 1px solid var(--border);
-}
-
-.miner-worker-sort {
-  appearance: none;
-  border: 0;
-  background: transparent;
   color: var(--muted);
-  padding: 0;
-  text-align: left;
-  font: inherit;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  cursor: pointer;
+  text-align: left;
   white-space: nowrap;
+}
+
+.data-table th.sortable {
+  cursor: pointer;
+  user-select: none;
   transition: color 0.15s ease;
 }
 
-.miner-worker-sort:hover,
-.miner-worker-sort.is-active {
+.data-table th.sortable:hover {
   color: var(--accent);
 }
 
-.miner-worker-row {
-  padding: 9px 12px;
+.data-table td {
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 13px;
-  transition: background-color 0.15s ease;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.miner-worker-row:last-child {
+.data-table tbody tr:last-child td {
   border-bottom: 0;
 }
 
-.miner-worker-row:hover {
+.data-table tbody tr:hover {
   background: var(--bg3);
 }
 
-.miner-worker-row strong {
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
+.data-table .row-offline td {
+  color: var(--muted);
 }
 
-.miner-worker-name {
-  display: grid;
-  grid-template-columns: 12px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
+.data-table td.cell-accent {
+  color: var(--accent);
 }
 
-.miner-worker-row span {
-  white-space: nowrap;
+.data-table td.cell-yellow {
+  color: var(--yellow);
+}
+
+.data-table td.cell-muted {
+  color: var(--muted);
+}
+
+.miner-row {
+  cursor: pointer;
+}
+
+.addr-link {
+  color: var(--accent);
+}
+
+.miner-row:hover .addr-link {
+  text-decoration: underline;
+}
+
+.delete-countdown {
+  color: var(--yellow);
+  font-size: 11px;
+}
+
+/* Wallet detail page */
+
+.miner-back {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 7px 14px;
   font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 14px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.miner-back:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.miner-hero-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.miner-hero-title h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  word-break: break-all;
+}
+
+.miner-hero-meta {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.meta-chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  background: var(--bg3);
+}
+
+.miner-detail-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.odds-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.odds-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg3);
+  padding: 16px;
+  text-align: center;
+}
+
+.odds-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.odds-card strong {
+  color: var(--yellow);
+  font-size: 1.35rem;
   font-variant-numeric: tabular-nums;
 }
 
-.miner-worker-row-empty {
-  display: block;
-  min-width: 0;
-}
-
 .miner-status-dot {
+  display: inline-block;
   width: 9px;
   height: 9px;
   border-radius: 50%;
@@ -1610,15 +1589,7 @@ html[data-theme="light"] .miners-history-grid {
     padding: 2px 9px;
   }
 
-  .miner-card-head {
-    flex-direction: column;
-  }
-
-  .miner-worker-row span {
+  .data-table {
     font-size: 12px;
-  }
-
-  .miner-worker-row {
-    grid-template-columns: 12px minmax(170px, 1fr) repeat(4, minmax(90px, 0.7fr));
   }
 }

@@ -94,6 +94,7 @@
   var validViews = {
     dashboard: "Dashboard",
     miners: "Miners",
+    miner: "Miner",
     logs: "Logs",
     settings: "Settings",
     about: "About"
@@ -131,7 +132,6 @@
   var minersLoading = false;
   var minersLoaded = false;
   var minerWorkerSort = {};
-  var minerCardOpen = {};
   var nodeHashrateVisible = {
     h1h: true,
     h1d: true,
@@ -735,6 +735,7 @@
     if (key === "h5m") return hashrateToGhs(worker.hashrate5m);
     if (key === "h1h") return hashrateToGhs(worker.hashrate1hr);
     if (key === "h1d") return hashrateToGhs(worker.hashrate1d);
+    if (key === "h7d") return hashrateToGhs(worker.hashrate7d);
     if (key === "bestshare") return Number(worker.bestshare) || 0;
     if (key === "bestever") return Number(worker.bestever) || 0;
     if (key === "lastseen") return Number(worker.lastshare) || 0;
@@ -752,32 +753,6 @@
       }
       if (av === bv) return toText(a.name || a.full_name, "").localeCompare(toText(b.name || b.full_name, ""));
       return (av - bv) * dir;
-    });
-  }
-
-  function renderWorkerSortButton(label, key, state) {
-    var active = state && state.key === key;
-    var arrow = !active ? "" : (state.dir === "asc" ? " ↑" : " ↓");
-    return '<button class="miner-worker-sort ' + (active ? "is-active" : "") + '" type="button" data-worker-sort="' + key + '">' +
-      escapeHtml(label + arrow) +
-      '</button>';
-  }
-
-  function captureMinerCardOpenState(list) {
-    if (!list) return;
-    Array.prototype.forEach.call(list.querySelectorAll("details[data-miner-address]"), function (card) {
-      var address = card.getAttribute("data-miner-address") || "default";
-      minerCardOpen[address] = card.open;
-    });
-  }
-
-  function bindMinerCardOpenState(list) {
-    Array.prototype.forEach.call(list.querySelectorAll("details[data-miner-address]"), function (card) {
-      card.addEventListener("toggle", function () {
-        var address = card.getAttribute("data-miner-address") || "default";
-        minerCardOpen[address] = card.open;
-        if (card.open) renderWalletCharts(card);
-      });
     });
   }
 
@@ -880,16 +855,28 @@
     return d;
   }
 
+  /* 'before'-style stepped path (worker count charts) */
+  function steppedPath(coords) {
+    if (!coords.length) return "";
+    var d = "M" + coords[0][0].toFixed(1) + " " + coords[0][1].toFixed(1);
+    for (var i = 1; i < coords.length; i += 1) {
+      d += "H" + coords[i][0].toFixed(1) + "V" + coords[i][1].toFixed(1);
+    }
+    return d;
+  }
+
   /* Shared SVG chart renderer: smoothed lines, optional area fill, tooltip */
   function buildHistoryChart(chart, points, series, opts) {
     opts = opts || {};
     if (!chart) return;
     var height = opts.height || 330;
+    var formatAxis = opts.formatAxis || formatHashrateAxis;
     var max = points.reduce(function (acc, row) {
       return series.reduce(function (inner, item) {
         return Math.max(inner, hashrateToGhs(row[item.key]));
       }, acc);
     }, 0);
+    chart.style.minHeight = height + "px";
     if (max <= 0 || points.length < 2 || !series.length) {
       chart.innerHTML = opts.emptyHtml || "";
       return;
@@ -905,7 +892,7 @@
       var y = height - bottom - ratio * (height - top - bottom);
       var value = max * ratio;
       return '<path class="miners-history-grid" d="M' + left + ' ' + y.toFixed(1) + 'H' + (width - right) + '"></path>' +
-        '<text class="miners-history-y-label" x="' + (left - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' + escapeHtml(formatHashrateAxis(value)) + '</text>';
+        '<text class="miners-history-y-label" x="' + (left - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' + escapeHtml(formatAxis(value)) + '</text>';
     }).join("");
     var labels = points.map(function (row, index) {
       if (index !== 0 && index !== points.length - 1 && index % Math.max(1, Math.floor(points.length / 3)) !== 0) return "";
@@ -921,7 +908,7 @@
         return [x, y];
       });
       if (!coords.length) return "";
-      var d = smoothLinePath(coords);
+      var d = opts.stepped ? steppedPath(coords) : smoothLinePath(coords);
       var area = "";
       if (item.fill) {
         area = '<path class="miners-history-area" style="fill:' + item.fill + '" d="' + d +
@@ -931,7 +918,7 @@
       return area + '<path class="miners-history-line" style="stroke:' + item.color + '" d="' + d + '"></path>';
     }).join("");
 
-    chart.innerHTML = '<svg class="miners-history-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' + escapeHtml(opts.ariaLabel || "Hashrate history") + '">' +
+    chart.innerHTML = '<svg class="miners-history-svg" style="height:' + height + 'px" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' + escapeHtml(opts.ariaLabel || "Hashrate history") + '">' +
       yTicks +
       lines +
       '<line class="miners-history-hover-line" x1="' + left + '" x2="' + left + '" y1="' + top + '" y2="' + (height - bottom) + '"></line>' +
@@ -956,13 +943,18 @@
     { key: "h7d", label: "7d", color: "#f85149" }
   ];
 
+  function formatCountAxis(value) {
+    var num = Math.round(Number(value) || 0);
+    return String(num);
+  }
+
   function drawWalletHistory(address, payload) {
-    var plot = document.querySelector('[data-wallet-chart="' + address + '"]');
-    if (!plot) return;
-    var legend = document.querySelector('[data-wallet-legend="' + address + '"]');
+    if (address !== activeMinerAddress) return;
+    var plot = document.getElementById("minerDetailHashChart");
+    var legend = document.getElementById("minerDetailHashLegend");
     var points = payload && Array.isArray(payload.points) ? payload.points : [];
     buildHistoryChart(plot, points, walletHistorySeries, {
-      height: 220,
+      height: 300,
       ariaLabel: "Wallet hashrate history",
       emptyHtml: '<div class="miners-empty">Collecting wallet history, check back in a few minutes...</div>'
     });
@@ -971,6 +963,15 @@
         return '<span class="miners-history-key"><i style="background:' + item.color + '"></i>' + escapeHtml(item.label) + '</span>';
       }).join("");
     }
+    buildHistoryChart(document.getElementById("minerDetailWorkerChart"), points, [
+      { key: "workers", label: "Workers", color: "#d29922", fill: "rgba(210,153,34,0.1)" }
+    ], {
+      height: 160,
+      stepped: true,
+      formatAxis: formatCountAxis,
+      ariaLabel: "Worker count history",
+      emptyHtml: '<div class="miners-empty">Collecting worker history, check back in a few minutes...</div>'
+    });
   }
 
   function fetchWalletHistory(address) {
@@ -989,15 +990,6 @@
         drawWalletHistory(address, payload);
       })
       .catch(function () {});
-  }
-
-  function renderWalletCharts(scope) {
-    if (!scope) return;
-    Array.prototype.forEach.call(scope.querySelectorAll("[data-wallet-chart]"), function (plot) {
-      var card = plot.closest("details");
-      if (!card || !card.open) return;
-      fetchWalletHistory(plot.getAttribute("data-wallet-chart"));
-    });
   }
 
   function renderNodeHashrateHistory(pool, history) {
@@ -1035,6 +1027,221 @@
     });
   }
 
+  var minerTableSort = { key: "h5m", dir: "desc" };
+  var lastMinersPayload = null;
+  var lastMinersHistory = null;
+  var activeMinerAddress = "";
+  var activeMinerData = null;
+  var statusApiCache = { fetchedAt: 0, payload: null };
+
+  var MINER_TABLE_COLS = [
+    { key: "status", label: "Status" },
+    { key: "address", label: "Address" },
+    { key: "workers", label: "Workers" },
+    { key: "h5m", label: "5m" },
+    { key: "h1h", label: "1hr" },
+    { key: "h1d", label: "1d" },
+    { key: "h7d", label: "7d" },
+    { key: "bestshare", label: "Best Share" },
+    { key: "bestever", label: "Best Ever" },
+    { key: "lastshare", label: "Last Share" }
+  ];
+
+  function truncAddress(address) {
+    var text = toText(address, "--");
+    if (text.length <= 26) return text;
+    return text.slice(0, 16) + "\u2026" + text.slice(-7);
+  }
+
+  function formatClearCountdown(lastshare) {
+    var remain = 604800 - (Math.floor(Date.now() / 1000) - (Number(lastshare) || 0));
+    if (!Number.isFinite(remain) || remain <= 0) return "";
+    var d = Math.floor(remain / 86400);
+    var h = Math.floor((remain % 86400) / 3600);
+    return '<br><span class="delete-countdown">&#9203; clears in ' + d + "d " + h + "h</span>";
+  }
+
+  function minerSortValue(miner, key) {
+    if (key === "status") return miner.online ? 1 : 0;
+    if (key === "address") return toText(miner.address, "").toLowerCase();
+    if (key === "workers") return Number(miner.workers || miner.worker_detail_count) || 0;
+    if (key === "h5m") return hashrateToGhs(miner.hashrate5m);
+    if (key === "h1h") return hashrateToGhs(miner.hashrate1hr);
+    if (key === "h1d") return hashrateToGhs(miner.hashrate1d);
+    if (key === "h7d") return hashrateToGhs(miner.hashrate7d);
+    if (key === "bestshare") return Number(miner.bestshare) || 0;
+    if (key === "bestever") return Number(miner.bestever) || 0;
+    if (key === "lastshare") return Number(miner.lastshare) || 0;
+    return 0;
+  }
+
+  function renderMinersTable(miners) {
+    var dir = minerTableSort.dir === "asc" ? 1 : -1;
+    var sorted = miners.slice().sort(function (a, b) {
+      var av = minerSortValue(a, minerTableSort.key);
+      var bv = minerSortValue(b, minerTableSort.key);
+      if (typeof av === "string" || typeof bv === "string") {
+        return String(av).localeCompare(String(bv)) * dir;
+      }
+      if (av === bv) return toText(a.address, "").localeCompare(toText(b.address, ""));
+      return (av - bv) * dir;
+    });
+    var head = MINER_TABLE_COLS.map(function (col) {
+      var arrow = minerTableSort.key === col.key ? (minerTableSort.dir === "asc" ? " \u2191" : " \u2193") : "";
+      return '<th class="sortable" data-mkey="' + col.key + '">' + escapeHtml(col.label + arrow) + '</th>';
+    }).join("");
+    var rows = sorted.map(function (miner) {
+      var online = miner.online === true;
+      var clears = online ? "" : formatClearCountdown(miner.lastshare);
+      return '<tr class="miner-row' + (online ? "" : " row-offline") + '" data-miner-open="' + escapeHtml(miner.address) + '">' +
+        '<td><span class="miner-status-dot ' + (online ? "is-online" : "is-offline") + '"></span></td>' +
+        '<td class="mono"><span class="addr-link" title="' + escapeHtml(miner.address) + '">' + escapeHtml(truncAddress(miner.address)) + '</span></td>' +
+        '<td>' + escapeHtml(toText(miner.workers || miner.worker_detail_count, "0")) + '</td>' +
+        '<td>' + escapeHtml(toText(miner.hashrate5m, "--")) + '</td>' +
+        '<td class="cell-accent">' + escapeHtml(toText(miner.hashrate1hr, "--")) + '</td>' +
+        '<td class="cell-accent">' + escapeHtml(toText(miner.hashrate1d, "--")) + '</td>' +
+        '<td>' + escapeHtml(toText(miner.hashrate7d, "--")) + '</td>' +
+        '<td class="cell-yellow">' + escapeHtml(formatShare(miner.bestshare)) + '</td>' +
+        '<td class="cell-yellow">' + escapeHtml(formatShare(miner.bestever)) + '</td>' +
+        '<td class="cell-muted">' + escapeHtml(toText(miner.lastshare_ago, "-")) + clears + '</td>' +
+        '</tr>';
+    }).join("");
+    return '<div class="table-wrap"><table class="data-table"><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  }
+
+  function blockOddsPct(hashrateGhs, periodDays, difficulty) {
+    if (!(hashrateGhs > 0) || !(difficulty > 0)) return null;
+    var lam = (hashrateGhs * 1e9 * periodDays * 86400) / (difficulty * 4294967296);
+    return (1 - Math.exp(-lam)) * 100;
+  }
+
+  function renderMinerOdds(miner, statusApi) {
+    var diffText = statusApi && statusApi.bitcoin ? statusApi.bitcoin.difficulty_display : "";
+    var difficulty = hashrateToGhs(diffText) * 1e9;
+    var hr1d = hashrateToGhs(miner && miner.hashrate1d);
+    [
+      ["minerDetailOdds1d", 1, 4],
+      ["minerDetailOdds7d", 7, 4],
+      ["minerDetailOdds30d", 30, 3],
+      ["minerDetailOdds365d", 365, 3]
+    ].forEach(function (cfg) {
+      var pct = blockOddsPct(hr1d, cfg[1], difficulty);
+      setText(cfg[0], pct === null ? "--" : pct.toFixed(cfg[2]) + "%");
+    });
+  }
+
+  function fetchMinerDetailStatus(miner) {
+    var now = Date.now();
+    if (statusApiCache.payload && now - statusApiCache.fetchedAt < WALLET_HISTORY_TTL_MS) {
+      renderMinerOdds(miner, statusApiCache.payload);
+      return;
+    }
+    window.fetch("/api/status.cgi?_ts=" + now, { cache: "no-store" })
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(function (payload) {
+        if (payload) statusApiCache = { fetchedAt: Date.now(), payload: payload };
+        renderMinerOdds(miner, payload);
+      })
+      .catch(function () {
+        renderMinerOdds(miner, null);
+      });
+  }
+
+  function formatAuthorised(ts) {
+    var d = new Date(ts * 1000);
+    if (Number.isNaN(d.getTime())) return "-";
+    var p = function (n) {
+      return String(n).padStart(2, "0");
+    };
+    return d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate()) +
+      " " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + " UTC";
+  }
+
+  function renderMinerDetailWorkers(miner) {
+    var box = document.getElementById("minerDetailWorkersTable");
+    if (!box) return;
+    var workerRows = Array.isArray(miner.workers_detail) ? miner.workers_detail : [];
+    if (!workerRows.length) {
+      box.innerHTML = '<div class="miners-empty">No active workers.</div>';
+      return;
+    }
+    var sort = getWorkerSortState(miner.address);
+    var sorted = sortWorkers(workerRows, sort);
+    var cols = [
+      ["status", "Status"], ["worker", "Worker Name"], ["h1m", "1m"], ["h5m", "5m"],
+      ["h1h", "1hr"], ["h1d", "1d"], ["h7d", "7d"], ["bestshare", "Best Share"],
+      ["bestever", "Best Ever"], ["lastseen", "Last Share"]
+    ];
+    var head = cols.map(function (col) {
+      var arrow = sort.key === col[0] ? (sort.dir === "asc" ? " \u2191" : " \u2193") : "";
+      return '<th class="sortable" data-wkey="' + col[0] + '">' + escapeHtml(col[1] + arrow) + '</th>';
+    }).join("");
+    var rows = sorted.map(function (worker) {
+      var online = worker.online === true;
+      return '<tr class="' + (online ? "" : "row-offline") + '">' +
+        '<td><span class="miner-status-dot ' + (online ? "is-online" : "is-offline") + '"></span></td>' +
+        '<td class="mono" title="' + escapeHtml(worker.full_name) + '">' + escapeHtml(worker.name || worker.full_name || "worker") + '</td>' +
+        '<td>' + escapeHtml(toText(worker.hashrate1m, "--")) + '</td>' +
+        '<td>' + escapeHtml(toText(worker.hashrate5m, "--")) + '</td>' +
+        '<td class="cell-accent">' + escapeHtml(toText(worker.hashrate1hr, "--")) + '</td>' +
+        '<td class="cell-accent">' + escapeHtml(toText(worker.hashrate1d, "--")) + '</td>' +
+        '<td>' + escapeHtml(toText(worker.hashrate7d, "--")) + '</td>' +
+        '<td class="cell-yellow">' + escapeHtml(formatShare(worker.bestshare)) + '</td>' +
+        '<td class="cell-yellow">' + escapeHtml(formatShare(worker.bestever)) + '</td>' +
+        '<td class="cell-muted">' + escapeHtml(toText(worker.lastshare_ago, "-")) + '</td>' +
+        '</tr>';
+    }).join("");
+    box.innerHTML = '<div class="table-wrap"><table class="data-table"><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+    box.onclick = function (event) {
+      var th = event.target.closest("[data-wkey]");
+      if (!th) return;
+      var key = th.getAttribute("data-wkey");
+      sort.dir = sort.key === key && sort.dir === "desc" ? "asc" : "desc";
+      sort.key = key;
+      renderMinerDetailWorkers(miner);
+    };
+  }
+
+  function openMinerDetail(address) {
+    activeMinerAddress = address;
+    setActiveView("miner");
+    renderMinerDetail();
+  }
+
+  function renderMinerDetail() {
+    var address = activeMinerAddress;
+    if (!address) return;
+    var payload = lastMinersPayload || {};
+    var miners = Array.isArray(payload.miners) ? payload.miners : [];
+    var miner = null;
+    miners.forEach(function (item) {
+      if (item.address === address) miner = item;
+    });
+    if (!miner) {
+      setText("minerDetailAddress", address);
+      setBadgeState("minerDetailBadge", "No Data", "status-soft");
+      return;
+    }
+    activeMinerData = miner;
+    setText("minerDetailAddress", miner.address);
+    setBadgeState("minerDetailBadge", miner.online ? "\u25CF Online" : "\u25CF Offline", miner.online ? "status-ok" : "status-soft");
+    var authorised = Number(miner.authorised) || 0;
+    setText("minerDetailAuthorised", authorised > 0 ? "Authorised " + formatAuthorised(authorised) : "Not authorised");
+    setText("minerDetailLastShare", "Last share " + toText(miner.lastshare_ago, "-"));
+    var wcount = Number(miner.workers || miner.worker_detail_count) || 0;
+    setText("minerDetailWorkersChip", wcount + " worker" + (wcount === 1 ? "" : "s"));
+    setText("minerDetailHash5m", toText(miner.hashrate5m, "--"));
+    setText("minerDetailShares", formatShare(miner.shares));
+    setText("minerDetailBestShare", formatShare(miner.bestshare));
+    setText("minerDetailBestEver", formatShare(miner.bestever));
+    setText("minerDetailWorkers", formatCount(wcount));
+    renderMinerDetailWorkers(miner);
+    fetchWalletHistory(address);
+    fetchMinerDetailStatus(miner);
+  }
+
   function renderMiners(data, history) {
     var payload = data || {};
     var pool = payload.pool || {};
@@ -1060,99 +1267,35 @@
       onlineMiners > 0 ? "status-ok" : "status-soft");
     renderNodeHashrateHistory(pool, history);
 
+    lastMinersPayload = payload;
+    lastMinersHistory = history;
+    if (activeViewName === "miner" && activeMinerAddress) renderMinerDetail();
+
     var list = document.getElementById("minersList");
     if (!list) return;
-
-    captureMinerCardOpenState(list);
 
     if (!miners.length) {
       list.innerHTML = '<div class="miners-empty">' + escapeHtml(payload.error || "No miners found yet. Connect a miner to the local Stratum endpoint.") + '</div>';
       return;
     }
 
-    miners.sort(function (a, b) {
-      var onlineDelta = (b.online ? 1 : 0) - (a.online ? 1 : 0);
-      if (onlineDelta) return onlineDelta;
-      return hashrateToGhs(b.hashrate5m) - hashrateToGhs(a.hashrate5m);
-    });
-
-    list.innerHTML = miners.map(function (miner) {
-      var workerRows = Array.isArray(miner.workers_detail) && miner.workers_detail.length ? miner.workers_detail : [];
-      var workerSort = getWorkerSortState(miner.address);
-      var sortedWorkers = sortWorkers(workerRows, workerSort);
-      var minerAddress = toText(miner.address, "default");
-      var openAttr = minerCardOpen[minerAddress] ? " open" : "";
-      var workerHead = '<div class="miner-worker-head" data-miner-address="' + escapeHtml(minerAddress) + '">' +
-        renderWorkerSortButton("Worker", "worker", workerSort) +
-        renderWorkerSortButton("1m", "h1m", workerSort) +
-        renderWorkerSortButton("5m", "h5m", workerSort) +
-        renderWorkerSortButton("1h", "h1h", workerSort) +
-        renderWorkerSortButton("1d", "h1d", workerSort) +
-        renderWorkerSortButton("Best Share", "bestshare", workerSort) +
-        renderWorkerSortButton("Best Ever", "bestever", workerSort) +
-        renderWorkerSortButton("Last Seen", "lastseen", workerSort) +
-        '</div>';
-      var workerHtml = sortedWorkers.length ? workerHead + sortedWorkers.map(function (worker) {
-        var statusClass = worker.online ? "is-online" : "is-offline";
-        return '<div class="miner-worker-row">' +
-          '<div class="miner-worker-name">' +
-            '<span class="miner-status-dot ' + statusClass + '"></span>' +
-            '<strong class="mono" title="' + escapeHtml(worker.full_name) + '">' + escapeHtml(worker.name || worker.full_name || "worker") + '</strong>' +
-          '</div>' +
-          '<span>' + escapeHtml(toText(worker.hashrate1m, "--")) + '</span>' +
-          '<span>' + escapeHtml(toText(worker.hashrate5m, "--")) + '</span>' +
-          '<span>' + escapeHtml(toText(worker.hashrate1hr, "--")) + '</span>' +
-          '<span>' + escapeHtml(toText(worker.hashrate1d, "--")) + '</span>' +
-          '<span>' + escapeHtml(formatShare(worker.bestshare)) + '</span>' +
-          '<span>' + escapeHtml(formatShare(worker.bestever)) + '</span>' +
-          '<span>' + escapeHtml(toText(worker.lastshare_ago, "-")) + '</span>' +
-          '</div>';
-      }).join("") : '<div class="miner-worker-row miner-worker-row-empty"><span>No worker detail yet</span></div>';
-
-      return '<details class="miner-card" data-miner-address="' + escapeHtml(minerAddress) + '"' + openAttr + '>' +
-        '<summary class="miner-card-summary">' +
-          '<div class="miner-card-head">' +
-            '<div>' +
-            '<span class="summary-label ' + (miner.online ? "is-online" : "is-offline") + '">' + (miner.online ? "Online" : "Offline") + '</span>' +
-            '<strong class="mono miner-address ' + (miner.online ? "is-online" : "is-offline") + '">' + escapeHtml(miner.address) + '</strong>' +
-            '</div>' +
-            '<span class="status-badge ' + (miner.online ? "status-ok" : "status-soft") + '">' + (miner.online ? "Active" : "Idle") + '</span>' +
-          '</div>' +
-          '<div class="miner-card-metrics">' +
-            '<div><span>Workers</span><strong>' + escapeHtml(toText(miner.worker_detail_count || miner.workers, "--")) + '</strong></div>' +
-            '<div><span>Hashrate 5m</span><strong>' + escapeHtml(toText(miner.hashrate5m, "--")) + '</strong></div>' +
-            '<div><span>Best Share</span><strong>' + escapeHtml(formatShare(miner.bestshare)) + '</strong></div>' +
-            '<div><span>Last Share</span><strong>' + escapeHtml(toText(miner.lastshare_ago, "-")) + '</strong></div>' +
-          '</div>' +
-        '</summary>' +
-        '<div class="miner-wallet-history">' +
-          '<div class="miner-wallet-history-head"><span>Wallet Hashrate History</span></div>' +
-          '<div class="miners-history-plot miner-wallet-plot" data-wallet-chart="' + escapeHtml(minerAddress) + '">' +
-            '<div class="miners-empty">Expand to load wallet history...</div>' +
-          '</div>' +
-          '<div class="miners-history-legend miners-history-legend-static" data-wallet-legend="' + escapeHtml(minerAddress) + '"></div>' +
-        '</div>' +
-        '<div class="miner-workers">' + workerHtml + '</div>' +
-        '</details>';
-    }).join("");
+    list.innerHTML = renderMinersTable(miners);
 
     list.onclick = function (event) {
-      var button = event.target.closest("[data-worker-sort]");
-      if (!button) return;
-      event.preventDefault();
-      event.stopPropagation();
-      var head = button.closest("[data-miner-address]");
-      if (!head) return;
-      var address = head.getAttribute("data-miner-address") || "default";
-      var key = button.getAttribute("data-worker-sort");
-      var state = getWorkerSortState(address);
-      state.dir = state.key === key && state.dir === "desc" ? "asc" : "desc";
-      state.key = key;
-      minerCardOpen[address] = true;
-      renderMiners(payload, history);
+      var th = event.target.closest("[data-mkey]");
+      if (th) {
+        var key = th.getAttribute("data-mkey");
+        minerTableSort.dir = minerTableSort.key === key && minerTableSort.dir === "desc" ? "asc" : "desc";
+        minerTableSort.key = key;
+        renderMiners(payload, history);
+        return;
+      }
+      var row = event.target.closest("[data-miner-open]");
+      if (row) {
+        event.preventDefault();
+        openMinerDetail(row.getAttribute("data-miner-open"));
+      }
     };
-    bindMinerCardOpenState(list);
-    renderWalletCharts(list);
   }
 
   function fetchMinersData() {
@@ -1193,7 +1336,7 @@
     stopMinersPolling();
     fetchMinersData();
     minersPollTimer = window.setInterval(function () {
-      if (activeViewName === "miners") fetchMinersData();
+      if (activeViewName === "miners" || activeViewName === "miner") fetchMinersData();
     }, MINERS_REFRESH_SECONDS * 1000);
   }
 
@@ -1596,9 +1739,10 @@
   function setActiveView(view) {
     var buttons = document.querySelectorAll(".nav-item");
     var panels = document.querySelectorAll(".panel-view");
+    var navView = view === "miner" ? "miners" : view;
 
     buttons.forEach(function (button) {
-      button.classList.toggle("is-active", button.getAttribute("data-view") === view);
+      button.classList.toggle("is-active", button.getAttribute("data-view") === navView);
     });
 
     panels.forEach(function (panel) {
@@ -1608,12 +1752,12 @@
     activeViewName = view;
     if (view === "logs") startLogPolling(activeLogService || "bitcoind");
     else stopLogPolling();
-    if (view === "miners") startMinersPolling();
+    if (view === "miners" || view === "miner") startMinersPolling();
     else stopMinersPolling();
     if (view === "settings") loadWifiSettings();
     else if (!wifiState.applying) stopWifiPolling();
 
-    window.location.hash = view;
+    window.location.hash = view === "miner" && activeMinerAddress ? "miner/" + activeMinerAddress : view;
   }
 
   function bindNav() {
@@ -1623,6 +1767,12 @@
         setActiveView(button.getAttribute("data-view"));
       });
     });
+    var back = document.getElementById("minerDetailBack");
+    if (back) {
+      back.addEventListener("click", function () {
+        setActiveView("miners");
+      });
+    }
   }
 
   function bindThemeToggle() {
@@ -1674,9 +1824,14 @@
     startRefreshCountdown();
 
     var initial = window.location.hash ? window.location.hash.slice(1) : "dashboard";
+    if (initial.indexOf("miner/") === 0) {
+      activeMinerAddress = initial.slice(6);
+      initial = "miner";
+    }
     initial = viewAliases[initial] || initial;
     if (!validViews[initial]) initial = "dashboard";
     setActiveView(initial);
+    if (initial === "miner") renderMinerDetail();
   }
 
   init();
