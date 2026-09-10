@@ -1663,7 +1663,6 @@
     setRollingValue("nodeConn", data.bitcoin.connections);
     setRollingValue("nodeDiff", data.bitcoin.difficulty);
     setRollingValue("nodeRss", data.bitcoin.rss);
-    setRollingValue("nodeVersion", data.bitcoin.version);
     setRollingValue("nodeUptime", data.bitcoin.uptime);
 
     var orb = document.getElementById("ibdOrb");
@@ -1677,6 +1676,8 @@
     /* redesign: hero status strip — render-only, reuses the normalized status.cgi data above */
     setBadgeState("heroBitcoindBadge", data.bitcoin.syncBadge, data.bitcoin.syncClass);
     setBadgeState("heroStratumBadge", data.stratum.badge, data.stratum.badgeClass);
+    var heroVer = String(data.bitcoin.version || "").replace(/^Satoshi:/i, "").replace(/\//g, "").trim();
+    setText("heroBitcoindVersion", heroVer && heroVer !== "--" ? "| " + heroVer : "");
 
     setText("sysCpu", data.system.cpuModel);
     setText("sysTemp", data.system.temperature);
@@ -1778,6 +1779,48 @@
     });
   }
 
+  function copyTextToClipboard(text, done) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {
+        copyTextFallback(text);
+        done();
+      });
+      return;
+    }
+    copyTextFallback(text);
+    done();
+  }
+
+  function copyTextFallback(text) {
+    var area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    try {
+      document.execCommand("copy");
+    } catch (e) {}
+    document.body.removeChild(area);
+  }
+
+  function bindStratumCopy() {
+    var btn = document.getElementById("stratumCopyBtn");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var endpoint = document.getElementById("stratumUrl");
+      var text = endpoint ? endpoint.textContent.trim() : "";
+      if (!text) return;
+      copyTextToClipboard(text, function () {
+        btn.classList.add("is-copied");
+        window.setTimeout(function () {
+          btn.classList.remove("is-copied");
+        }, 1200);
+      });
+    });
+  }
+
   function bindWifiControls() {
     var select = document.getElementById("wifiSsidSelect");
     var manual = document.getElementById("wifiSsidManual");
@@ -1811,6 +1854,7 @@
     setRefreshCountdown(DASHBOARD_REFRESH_SECONDS);
     bindNav();
     bindLogTabs();
+    bindStratumCopy();
     bindWifiControls();
     bindThemeToggle();
     setTheme(getStoredTheme());

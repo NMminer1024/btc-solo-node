@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NM Bitcoin Node Monitor</title>
-<link rel="stylesheet" href="/style.css?v=20260910-dash1">
+<link rel="stylesheet" href="/style.css?v=20260910-dash3">
 </head>
 <body>
 <div class="site-shell">
@@ -49,7 +49,10 @@
     <section class="panel-view is-visible" data-view-panel="dashboard">
       <section class="hero-strip" aria-label="Core status">
         <div class="hero-item">
-          <span class="hero-label">Bitcoind</span>
+          <span class="hero-title">
+            <span class="hero-label">Bitcoind</span>
+            <span class="hero-version mono" id="heroBitcoindVersion"></span>
+          </span>
           <span class="status-badge status-soft" id="heroBitcoindBadge">--</span>
         </div>
         <div class="hero-item">
@@ -85,37 +88,27 @@
               </div>
             </div>
             <div class="sync-copy">
+              <p class="sync-height">
+                <span class="ibd-blocks-current" id="ibdBlocksCurrent">--</span>
+                <span class="sync-height-sub"><span class="ibd-blocks-divider" id="ibdBlocksDivider">/ </span><span class="ibd-blocks-total" id="ibdBlocksTotal">--</span></span>
+              </p>
               <p class="sync-stage" id="ibdStage">Loading live node data...</p>
               <p id="ibdMeta">Loading live node data...</p>
             </div>
           </div>
 
-          <div class="card-stat-grid">
-            <div class="stat-card">
-              <span class="stat-label">Block Height</span>
-              <strong class="stat-value accent">
-                <span class="ibd-blocks-current" id="ibdBlocksCurrent">--</span>
-              </strong>
-              <span class="stat-sub"><span class="ibd-blocks-divider" id="ibdBlocksDivider">of </span><span class="ibd-blocks-total" id="ibdBlocksTotal">--</span></span>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">Peers</span>
-              <strong class="stat-value" id="nodeConn">--</strong>
-            </div>
-            <div class="stat-card">
-              <span class="stat-label">Difficulty</span>
-              <strong class="stat-value" id="nodeDiff">--</strong>
-            </div>
-          </div>
-
           <div class="stack-list">
+            <div class="stack-row">
+              <span>Peers</span>
+              <strong id="nodeConn">--</strong>
+            </div>
+            <div class="stack-row">
+              <span>Difficulty</span>
+              <strong id="nodeDiff">--</strong>
+            </div>
             <div class="stack-row">
               <span>Bitcoind RSS</span>
               <strong id="nodeRss">--</strong>
-            </div>
-            <div class="stack-row">
-              <span>Version</span>
-              <strong class="mono" id="nodeVersion">--</strong>
             </div>
           </div>
         </article>
@@ -130,20 +123,26 @@
           <div class="stratum-connect">
             <div class="connect-panel">
               <span class="summary-label">Endpoint</span>
+              <button class="copy-btn" id="stratumCopyBtn" type="button" title="Copy endpoint" aria-label="Copy endpoint">
+                <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="5.5" y="5.5" width="9" height="9" rx="1.5"></rect>
+                  <path d="M10.5 3.5v-1A1.5 1.5 0 0 0 9 1H3.5A1.5 1.5 0 0 0 2 2.5V9a1.5 1.5 0 0 0 1.5 1.5h1"></path>
+                </svg>
+              </button>
               <strong class="mono stratum-endpoint" id="stratumUrl">stratum+tcp://192.168.124.15:3333</strong>
             </div>
-            <div class="card-stat-grid">
-              <div class="stat-card">
-                <span class="stat-label">Pool Hashrate 5m</span>
-                <strong class="stat-value green" id="minerHash5m">--</strong>
+            <div class="stack-list">
+              <div class="stack-row">
+                <span>Pool Hashrate 5m</span>
+                <strong class="stack-green" id="minerHash5m">--</strong>
               </div>
-              <div class="stat-card">
-                <span class="stat-label">Best Share</span>
-                <strong class="stat-value yellow" id="minerBestShare">--</strong>
+              <div class="stack-row">
+                <span>Best Share</span>
+                <strong class="stack-yellow" id="minerBestShare">--</strong>
               </div>
-              <div class="stat-card">
-                <span class="stat-label">Workers</span>
-                <strong class="stat-value" id="minerWorkers">--</strong>
+              <div class="stack-row">
+                <span>Workers</span>
+                <strong id="minerWorkers">--</strong>
               </div>
             </div>
             <div class="connect-hints">
@@ -229,12 +228,9 @@
                 <strong class="mono"><span id="netIp">192.168.124.15</span> &middot; <span id="netMac">00:11:22:33:44:55</span></strong>
               </div>
               <div class="stack-row">
-                <span>WiFi</span>
-                <strong id="netSsid">Rockbase-Lab</strong>
-              </div>
-              <div class="stack-row">
-                <span>RSSI</span>
-                <strong class="rssi-value">
+                <span>WiFi &amp; RSSI</span>
+                <strong>
+                  <span id="netSsid">Rockbase-Lab</span>
                   <span class="rssi-signal" title="WiFi RSSI">
                     <span class="rssi-bars-wrap">
                       <span class="rssi-bar" data-rssi-bar="0"></span>
@@ -471,6 +467,6 @@
   </main>
 </div>
 
-<script src="/app.js?v=20260910-dash1"></script>
+<script src="/app.js?v=20260910-dash3"></script>
 </body>
 </html>

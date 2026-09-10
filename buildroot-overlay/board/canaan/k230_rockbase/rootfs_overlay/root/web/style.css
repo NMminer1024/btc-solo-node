@@ -437,6 +437,20 @@ textarea {
   background: var(--bg2);
 }
 
+.hero-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.hero-version {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .hero-label {
   color: var(--muted);
   font-size: 11px;
@@ -445,26 +459,10 @@ textarea {
   letter-spacing: 0.08em;
 }
 
-/* ── Inline stat rows (inside Bitcoind / Stratum cards) ──── */
+/* ── Inline stat rows (inside Stratum card) ──────────────── */
 
-.card-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin: 16px 0;
-}
-
-.card-stat-grid .stat-card {
-  background: var(--bg3);
-}
-
-.card-stat-grid .stat-value {
-  font-size: 19px;
-}
-
-.stratum-connect .card-stat-grid {
-  margin: 0;
-}
+.stack-row > strong.stack-green { color: var(--green); }
+.stack-row > strong.stack-yellow { color: var(--yellow); }
 
 .stat-card {
   background: var(--bg2);
@@ -505,18 +503,6 @@ textarea {
 .stat-value.green  { color: var(--green); }
 .stat-value.yellow { color: var(--yellow); }
 .stat-value.red    { color: var(--red); }
-
-.stat-sub {
-  display: block;
-  margin-top: 4px;
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
 /* ── Conic rings (kept, visually downgraded: thin track) ─── */
 
@@ -561,6 +547,7 @@ textarea {
   grid-template-columns: 112px minmax(0, 1fr);
   gap: 16px;
   align-items: center;
+  margin-bottom: 14px;
 }
 
 .progress-orb {
@@ -607,6 +594,26 @@ textarea {
   font-size: 0.9rem;
 }
 
+.sync-copy p.sync-height {
+  margin-top: 0;
+}
+
+.sync-height .ibd-blocks-current {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.sync-height-sub {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
 .sync-stage {
   color: var(--yellow);
   font-weight: 600;
@@ -626,7 +633,7 @@ textarea {
   color: var(--muted);
 }
 
-/* Block-height fragments inside the KPI stat card */
+/* Block-height fragments inside the sync hero */
 .ibd-blocks-current,
 .ibd-blocks-total {
   display: inline-flex;
@@ -857,10 +864,39 @@ textarea {
 }
 
 .connect-panel {
-  padding: 14px 16px;
+  position: relative;
+  padding: 14px 48px 14px 16px;
   border-radius: var(--radius);
   background: var(--bg3);
   border: 1px solid var(--border);
+}
+
+.copy-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.copy-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.copy-btn.is-copied {
+  border-color: var(--green);
+  color: var(--green);
 }
 
 .stratum-endpoint {
@@ -901,14 +937,11 @@ textarea {
 
 /* ── RSSI signal bars ────────────────────────────────────── */
 
-.rssi-value {
-  display: inline-flex;
-}
-
 .rssi-signal {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  margin-left: 10px;
   white-space: nowrap;
 }
 
