@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NM Bitcoin Node Monitor</title>
-<link rel="stylesheet" href="/style.css?v=20260910-fix9">
+<link rel="stylesheet" href="/style.css?v=20260910-dash1">
 </head>
 <body>
 <div class="site-shell">
@@ -27,6 +27,10 @@
 
   <main class="main-panel">
     <header class="topbar">
+      <div class="topbar-uptime" title="System uptime">
+        <span class="topbar-uptime-label">Uptime</span>
+        <strong id="nodeUptime">--</strong>
+      </div>
       <div class="topbar-meta">
         <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch theme">
           <span class="theme-toggle-icon" id="themeToggleIcon">◐</span>
@@ -58,44 +62,6 @@
         </div>
       </section>
 
-      <section class="kpi-grid" aria-label="Key metrics">
-        <div class="stat-card">
-          <span class="stat-label">Block Height</span>
-          <strong class="stat-value accent">
-            <span class="ibd-blocks-current" id="ibdBlocksCurrent">--</span>
-          </strong>
-          <span class="stat-sub"><span class="ibd-blocks-divider" id="ibdBlocksDivider">of </span><span class="ibd-blocks-total" id="ibdBlocksTotal">--</span></span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">Peers</span>
-          <strong class="stat-value" id="nodeConn">--</strong>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">Difficulty</span>
-          <strong class="stat-value" id="nodeDiff">--</strong>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">Uptime</span>
-          <strong class="stat-value" id="nodeUptime">--</strong>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">Pool Hashrate 5m</span>
-          <strong class="stat-value green" id="minerHash5m">--</strong>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">Best Share</span>
-          <strong class="stat-value yellow" id="minerBestShare">--</strong>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">Workers</span>
-          <strong class="stat-value" id="minerWorkers">--</strong>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">Temperature</span>
-          <strong class="stat-value" id="sysTemp">--</strong>
-        </div>
-      </section>
-
       <section class="dashboard-grid">
         <article class="surface-card surface-card-primary">
           <div class="surface-head">
@@ -108,7 +74,6 @@
                   <span id="bitcoinRefreshCountdown">10s</span>
                 </div>
               </div>
-              <span class="status-badge status-ok" id="syncBadge">IBD Syncing</span>
               <span class="status-badge status-soft" id="pruneBadge">Pruned Node</span>
             </div>
           </div>
@@ -125,14 +90,28 @@
             </div>
           </div>
 
+          <div class="card-stat-grid">
+            <div class="stat-card">
+              <span class="stat-label">Block Height</span>
+              <strong class="stat-value accent">
+                <span class="ibd-blocks-current" id="ibdBlocksCurrent">--</span>
+              </strong>
+              <span class="stat-sub"><span class="ibd-blocks-divider" id="ibdBlocksDivider">of </span><span class="ibd-blocks-total" id="ibdBlocksTotal">--</span></span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Peers</span>
+              <strong class="stat-value" id="nodeConn">--</strong>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Difficulty</span>
+              <strong class="stat-value" id="nodeDiff">--</strong>
+            </div>
+          </div>
+
           <div class="stack-list">
             <div class="stack-row">
               <span>Bitcoind RSS</span>
               <strong id="nodeRss">--</strong>
-            </div>
-            <div class="stack-row">
-              <span>Mempool Txs</span>
-              <strong id="nodeMempool">--</strong>
             </div>
             <div class="stack-row">
               <span>Version</span>
@@ -146,7 +125,6 @@
             <div>
               <h3>Stratum</h3>
             </div>
-            <span class="status-badge status-ok" id="stratumBadge">Running</span>
           </div>
 
           <div class="stratum-connect">
@@ -154,19 +132,24 @@
               <span class="summary-label">Endpoint</span>
               <strong class="mono stratum-endpoint" id="stratumUrl">stratum+tcp://192.168.124.15:3333</strong>
             </div>
-            <div class="connect-grid">
-              <div class="connect-item">
-                <span>Username</span>
-                <strong class="mono" id="stratumUser">wallet.workername</strong>
+            <div class="card-stat-grid">
+              <div class="stat-card">
+                <span class="stat-label">Pool Hashrate 5m</span>
+                <strong class="stat-value green" id="minerHash5m">--</strong>
               </div>
-              <div class="connect-item">
-                <span>Password</span>
-                <strong class="mono" id="stratumPass">(leave blank)</strong>
+              <div class="stat-card">
+                <span class="stat-label">Best Share</span>
+                <strong class="stat-value yellow" id="minerBestShare">--</strong>
               </div>
-              <div class="connect-item">
-                <span>Recommended</span>
-                <strong id="stratumMode">LAN miners -> local Stratum</strong>
+              <div class="stat-card">
+                <span class="stat-label">Workers</span>
+                <strong class="stat-value" id="minerWorkers">--</strong>
               </div>
+            </div>
+            <div class="connect-hints">
+              <span class="connect-hint"><em>User</em><strong class="mono" id="stratumUser">wallet.workername</strong></span>
+              <span class="connect-hint"><em>Pass</em><strong class="mono" id="stratumPass">(leave blank)</strong></span>
+              <span class="connect-hint"><em>Tip</em><strong id="stratumMode">LAN miners -&gt; local Stratum</strong></span>
             </div>
           </div>
         </article>
@@ -178,7 +161,6 @@
             <div>
               <h3>System &amp; Network</h3>
             </div>
-            <span class="status-badge status-ok" id="ntpBadge">NTP Ready</span>
           </div>
 
           <div class="metric-orb-grid">
@@ -219,6 +201,15 @@
                 <strong id="swapValue">--</strong>
               </div>
             </div>
+            <div class="metric-orb-card">
+              <div class="metric-orb metric-orb-temp" id="tempOrb">
+                <span id="tempPct">--</span>
+              </div>
+              <div class="metric-orb-copy">
+                <span>Temperature</span>
+                <strong id="sysTemp">--</strong>
+              </div>
+            </div>
           </div>
 
           <div class="stack-cols">
@@ -231,15 +222,11 @@
                 <span>Root FS</span>
                 <strong id="sysBlock">2.1G / 5.8G</strong>
               </div>
-              <div class="stack-row">
-                <span>Uptime</span>
-                <strong id="sysRun">5d 13h 27m</strong>
-              </div>
             </div>
             <div class="stack-list">
               <div class="stack-row">
-                <span>IP</span>
-                <strong id="netIp">192.168.124.15</strong>
+                <span>IP &amp; MAC</span>
+                <strong class="mono"><span id="netIp">192.168.124.15</span> &middot; <span id="netMac">00:11:22:33:44:55</span></strong>
               </div>
               <div class="stack-row">
                 <span>WiFi</span>
@@ -258,10 +245,6 @@
                     <span id="netRssi">-58 dBm</span>
                   </span>
                 </strong>
-              </div>
-              <div class="stack-row">
-                <span>MAC</span>
-                <strong class="mono" id="netMac">00:11:22:33:44:55</strong>
               </div>
             </div>
           </div>
@@ -488,6 +471,6 @@
   </main>
 </div>
 
-<script src="/app.js?v=20260910-fix9"></script>
+<script src="/app.js?v=20260910-dash1"></script>
 </body>
 </html>

@@ -27,7 +27,6 @@
       connections: "--",
       difficulty: "--",
       rss: "--",
-      mempoolTxs: "--",
       version: "--",
       uptime: "--"
     },
@@ -40,8 +39,6 @@
       mode: "LAN miners -> local Stratum"
     },
     network: {
-      ntpBadge: "...",
-      ntpClass: "status-soft",
       ip: "--",
       ssid: "--",
       mac: "--",
@@ -82,10 +79,6 @@
     prune: {
       pruned_mode: "Pruned Node",
       full_mode: "Full Node"
-    },
-    ntp: {
-      running: "NTP Ready",
-      not_synced: "NTP Unsynced"
     },
     stratum: {
       running: "Running",
@@ -587,7 +580,6 @@
     var progressPct = toNumber(bitcoin.progress_ring, toNumber(bitcoin.progress_pct, mock.bitcoin.progressPct));
     var syncLabel = labels.sync[toText(bitcoin.sync_key, "")] || mock.bitcoin.syncBadge;
     var pruneLabel = labels.prune[toText(bitcoin.prune_key, "")] || mock.bitcoin.pruneBadge;
-    var ntpLabel = labels.ntp[toText(network.ntp_key, "")] || mock.network.ntpBadge;
     var stratumLabel = labels.stratum[toText(mining.ckpool_state, "")] || mock.stratum.badge;
     var chainName = toText(bitcoin.btc_context, "").replace(/^main\b/, "Mainnet");
     var loadAverageFallback = joinParts([
@@ -627,7 +619,6 @@
         connections: toText(bitcoin.connections, mock.bitcoin.connections),
         difficulty: toText(bitcoin.difficulty_display, mock.bitcoin.difficulty),
         rss: toText(bitcoin.rss, mock.bitcoin.rss),
-        mempoolTxs: toText(bitcoin.mempool_txs, mock.bitcoin.mempoolTxs),
         version: toText(bitcoin.version, mock.bitcoin.version),
         uptime: toText(system.uptime, mock.bitcoin.uptime)
       },
@@ -640,8 +631,6 @@
         mode: toText(mining.recommended_mode, mock.stratum.mode)
       },
       network: {
-        ntpBadge: ntpLabel,
-        ntpClass: mapStatusClass(toText(network.ntp_class, ""), "status-ok"),
         ip: toText(network.ip_addr, mock.network.ip),
         ssid: toText(network.wifi_ssid, mock.network.ssid),
         mac: toText(network.mac_addr, mock.network.mac),
@@ -1656,7 +1645,6 @@
     setProgress("memOrb", data.system.memPct);
     setProgress("swapOrb", data.system.swapPct);
 
-    setBadgeState("syncBadge", data.bitcoin.syncBadge, data.bitcoin.syncClass);
     setBadgeState("pruneBadge", data.bitcoin.pruneBadge, data.bitcoin.pruneClass);
     setIbdStage("ibdStage", data.bitcoin.ibdStageKey, data.bitcoin.syncDetail, data.bitcoin.bestBlockDate);
     setRollingValue("ibdPct", formatIbdPercent(data.bitcoin.progressPct));
@@ -1675,14 +1663,12 @@
     setRollingValue("nodeConn", data.bitcoin.connections);
     setRollingValue("nodeDiff", data.bitcoin.difficulty);
     setRollingValue("nodeRss", data.bitcoin.rss);
-    setRollingValue("nodeMempool", data.bitcoin.mempoolTxs);
     setRollingValue("nodeVersion", data.bitcoin.version);
     setRollingValue("nodeUptime", data.bitcoin.uptime);
 
     var orb = document.getElementById("ibdOrb");
     if (orb) orb.style.setProperty("--pct", data.bitcoin.progressPct);
 
-    setBadgeState("stratumBadge", data.stratum.badge, data.stratum.badgeClass);
     setText("stratumUrl", data.stratum.url);
     setText("stratumUser", data.stratum.user);
     setText("stratumPass", data.stratum.pass);
@@ -1694,10 +1680,12 @@
 
     setText("sysCpu", data.system.cpuModel);
     setText("sysTemp", data.system.temperature);
+    var tempNum = parseFloat(data.system.temperature);
+    var tempValid = Number.isFinite(tempNum);
+    setText("tempPct", tempValid ? Math.round(tempNum) + "°" : "--");
+    setProgress("tempOrb", tempValid ? Math.max(0, Math.min(100, tempNum)) : 0);
     setText("sysBlock", data.system.rootfsUsage);
-    setText("sysRun", data.system.uptime);
 
-    setBadgeState("ntpBadge", data.network.ntpBadge, data.network.ntpClass);
     setText("netIp", data.network.ip);
     setText("netSsid", data.network.ssid);
     setText("netMac", data.network.mac);
@@ -1827,6 +1815,8 @@
     bindThemeToggle();
     setTheme(getStoredTheme());
     fetchDashboardData();
+    /* prefetch miners cache so the Stratum card pool stats and hero Miners badge fill on first load */
+    fetchMinersData();
     startRefreshCountdown();
 
     var initial = window.location.hash ? window.location.hash.slice(1) : "dashboard";

@@ -171,10 +171,36 @@ textarea {
 
 .topbar {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
   gap: 16px;
   margin-bottom: 16px;
+}
+
+.topbar-uptime {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.topbar-uptime-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+}
+
+.topbar-uptime strong {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .topbar-meta {
@@ -419,13 +445,25 @@ textarea {
   letter-spacing: 0.08em;
 }
 
-/* ── KPI stat wall ───────────────────────────────────────── */
+/* ── Inline stat rows (inside Bitcoind / Stratum cards) ──── */
 
-.kpi-grid {
+.card-stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin-bottom: 16px;
+  margin: 16px 0;
+}
+
+.card-stat-grid .stat-card {
+  background: var(--bg3);
+}
+
+.card-stat-grid .stat-value {
+  font-size: 19px;
+}
+
+.stratum-connect .card-stat-grid {
+  margin: 0;
 }
 
 .stat-card {
@@ -674,7 +712,7 @@ textarea {
 
 .metric-orb-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -732,6 +770,10 @@ textarea {
 
 .metric-orb-danger {
   --ring-color: var(--yellow);
+}
+
+.metric-orb-temp {
+  --ring-color: var(--red);
 }
 
 .metric-orb-copy span {
@@ -830,34 +872,31 @@ textarea {
   word-break: break-all;
 }
 
-.connect-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.connect-item {
-  padding: 12px 14px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--bg3);
-}
-
-.connect-item span {
-  display: block;
+.connect-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
   color: var(--muted);
+  font-size: 12px;
+}
+
+.connect-hint {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.connect-hint em {
+  font-style: normal;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
-.connect-item strong {
-  display: block;
-  margin-top: 6px;
-  line-height: 1.5;
+.connect-hint strong {
   color: var(--text);
-  font-size: 0.92rem;
+  font-weight: 600;
 }
 
 /* ── RSSI signal bars ────────────────────────────────────── */
@@ -1536,10 +1575,6 @@ html[data-theme="light"] .miners-history-grid {
   .sync-hero {
     grid-template-columns: 1fr;
   }
-
-  .connect-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 720px) {
@@ -1575,10 +1610,6 @@ html[data-theme="light"] .miners-history-grid {
 
   .progress-orb-ring span {
     font-size: 16px;
-  }
-
-  .kpi-grid {
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   }
 
   .topbar {
