@@ -133,11 +133,7 @@
   var minerWorkerSort = {};
   var minerCardOpen = {};
   var nodeHashrateVisible = {
-    h1m: true,
-    h5m: true,
-    h15m: true,
     h1h: true,
-    h6h: true,
     h1d: true,
     h7d: true
   };
@@ -780,6 +776,7 @@
       card.addEventListener("toggle", function () {
         var address = card.getAttribute("data-miner-address") || "default";
         minerCardOpen[address] = card.open;
+        if (card.open) renderWalletCharts(card);
       });
     });
   }
@@ -834,10 +831,7 @@
       var index = Math.max(0, Math.min(points.length - 1, Math.round(ratio * span)));
       var point = points[index];
       var x = rectLeft + plotWidth * index / span;
-      var activeSeries = series.filter(function (item) {
-        return nodeHashrateVisible[item.key] !== false;
-      });
-      var rows = activeSeries.map(function (item) {
+      var rows = series.map(function (item) {
         return '<div><span><i style="background:' + item.color + '"></i>' + escapeHtml(item.label) + '</span><strong>' +
           escapeHtml(toText(point[item.key], "--")) + '</strong></div>';
       }).join("");
@@ -886,36 +880,137 @@
     return d;
   }
 
+  /* Shared SVG chart renderer: smoothed lines, optional area fill, tooltip */
+  function buildHistoryChart(chart, points, series, opts) {
+    opts = opts || {};
+    if (!chart) return;
+    var height = opts.height || 330;
+    var max = points.reduce(function (acc, row) {
+      return series.reduce(function (inner, item) {
+        return Math.max(inner, hashrateToGhs(row[item.key]));
+      }, acc);
+    }, 0);
+    if (max <= 0 || points.length < 2 || !series.length) {
+      chart.innerHTML = opts.emptyHtml || "";
+      return;
+    }
+
+    var width = Math.max(520, Math.round(chart.clientWidth || 0));
+    var left = 70;
+    var right = 18;
+    var top = 24;
+    var bottom = 46;
+    var span = Math.max(1, points.length - 1);
+    var yTicks = [0, 0.25, 0.5, 0.75, 1].map(function (ratio) {
+      var y = height - bottom - ratio * (height - top - bottom);
+      var value = max * ratio;
+      return '<path class="miners-history-grid" d="M' + left + ' ' + y.toFixed(1) + 'H' + (width - right) + '"></path>' +
+        '<text class="miners-history-y-label" x="' + (left - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' + escapeHtml(formatHashrateAxis(value)) + '</text>';
+    }).join("");
+    var labels = points.map(function (row, index) {
+      if (index !== 0 && index !== points.length - 1 && index % Math.max(1, Math.floor(points.length / 3)) !== 0) return "";
+      var x = left + (width - left - right) * index / span;
+      var text = formatChartTime(row.ts);
+      return '<text x="' + x.toFixed(1) + '" y="' + (height - 9) + '" text-anchor="middle">' + escapeHtml(text) + '</text>';
+    }).join("");
+    var lines = series.map(function (item) {
+      var coords = points.map(function (row, index) {
+        var x = left + (width - left - right) * index / span;
+        var value = hashrateToGhs(row[item.key]);
+        var y = height - bottom - (value / max) * (height - top - bottom);
+        return [x, y];
+      });
+      if (!coords.length) return "";
+      var d = smoothLinePath(coords);
+      var area = "";
+      if (item.fill) {
+        area = '<path class="miners-history-area" style="fill:' + item.fill + '" d="' + d +
+          "L" + coords[coords.length - 1][0].toFixed(1) + " " + (height - bottom).toFixed(1) +
+          "L" + coords[0][0].toFixed(1) + " " + (height - bottom).toFixed(1) + 'Z"></path>';
+      }
+      return area + '<path class="miners-history-line" style="stroke:' + item.color + '" d="' + d + '"></path>';
+    }).join("");
+
+    chart.innerHTML = '<svg class="miners-history-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' + escapeHtml(opts.ariaLabel || "Hashrate history") + '">' +
+      yTicks +
+      lines +
+      '<line class="miners-history-hover-line" x1="' + left + '" x2="' + left + '" y1="' + top + '" y2="' + (height - bottom) + '"></line>' +
+      '<rect class="miners-history-hitbox" x="' + left + '" y="' + top + '" width="' + (width - left - right) + '" height="' + (height - top - bottom) + '"></rect>' +
+      labels +
+      '</svg>' +
+      '<div class="miners-history-tooltip" aria-hidden="true"></div>';
+    bindMinersHistoryTooltip(chart, points, series, {
+      width: width,
+      left: left,
+      right: right
+    });
+  }
+
+  /* Wallet-level history (pi5 user page alignment): 5m/1h/1d/7d, 5m filled */
+  var WALLET_HISTORY_TTL_MS = 60000;
+  var walletHistoryCache = {};
+  var walletHistorySeries = [
+    { key: "h5m", label: "5m", color: "#58a6ff", fill: "rgba(88,166,255,0.07)" },
+    { key: "h1h", label: "1h", color: "#3fb950" },
+    { key: "h1d", label: "1d", color: "#d29922" },
+    { key: "h7d", label: "7d", color: "#f85149" }
+  ];
+
+  function drawWalletHistory(address, payload) {
+    var plot = document.querySelector('[data-wallet-chart="' + address + '"]');
+    if (!plot) return;
+    var legend = document.querySelector('[data-wallet-legend="' + address + '"]');
+    var points = payload && Array.isArray(payload.points) ? payload.points : [];
+    buildHistoryChart(plot, points, walletHistorySeries, {
+      height: 220,
+      ariaLabel: "Wallet hashrate history",
+      emptyHtml: '<div class="miners-empty">Collecting wallet history, check back in a few minutes...</div>'
+    });
+    if (legend) {
+      legend.innerHTML = walletHistorySeries.map(function (item) {
+        return '<span class="miners-history-key"><i style="background:' + item.color + '"></i>' + escapeHtml(item.label) + '</span>';
+      }).join("");
+    }
+  }
+
+  function fetchWalletHistory(address) {
+    var cached = walletHistoryCache[address];
+    if (cached && Date.now() - cached.fetchedAt < WALLET_HISTORY_TTL_MS) {
+      drawWalletHistory(address, cached.payload);
+      return;
+    }
+    window.fetch("/api/miners-history.cgi?address=" + encodeURIComponent(address) + "&_ts=" + Date.now(), { cache: "no-store" })
+      .then(function (response) {
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        return response.json();
+      })
+      .then(function (payload) {
+        walletHistoryCache[address] = { fetchedAt: Date.now(), payload: payload };
+        drawWalletHistory(address, payload);
+      })
+      .catch(function () {});
+  }
+
+  function renderWalletCharts(scope) {
+    if (!scope) return;
+    Array.prototype.forEach.call(scope.querySelectorAll("[data-wallet-chart]"), function (plot) {
+      var card = plot.closest("details");
+      if (!card || !card.open) return;
+      fetchWalletHistory(plot.getAttribute("data-wallet-chart"));
+    });
+  }
+
   function renderNodeHashrateHistory(pool, history) {
-    var liveSample = {
-      ts: Number(pool.lastupdate) || Math.floor(Date.now() / 1000),
-      h1m: toText(pool.hashrate1m, "--"),
-      h5m: toText(pool.hashrate5m, "--"),
-      h15m: toText(pool.hashrate15m, "--"),
-      h1h: toText(pool.hashrate1hr, "--"),
-      h6h: toText(pool.hashrate6hr, "--"),
-      h1d: toText(pool.hashrate1d, "--"),
-      h7d: toText(pool.hashrate7d, "--")
-    };
     var points = history && Array.isArray(history.points) ? history.points : [];
 
     var series = [
-      { key: "h1m", label: "1m", color: "rgba(139,148,158,0.6)" },
-      { key: "h5m", label: "5m", color: "#58a6ff", fill: "rgba(88,166,255,0.07)" },
-      { key: "h15m", label: "15m", color: "#3fb950" },
-      { key: "h1h", label: "1h", color: "#2dd4bf" },
-      { key: "h6h", label: "6h", color: "#fbbf24" },
+      { key: "h1h", label: "1h", color: "#2dd4bf", fill: "rgba(45,212,191,0.07)" },
       { key: "h1d", label: "1d", color: "#d29922" },
       { key: "h7d", label: "7d", color: "#f85149" }
     ];
     var visibleSeries = series.filter(function (item) {
       return nodeHashrateVisible[item.key] !== false;
     });
-    var max = points.reduce(function (acc, row) {
-      return visibleSeries.reduce(function (inner, item) {
-        return Math.max(inner, hashrateToGhs(row[item.key]));
-      }, acc);
-    }, 0);
     var chart = document.getElementById("minerHistoryChart");
     var legend = document.getElementById("minerHistoryLegend");
 
@@ -934,61 +1029,9 @@
         renderNodeHashrateHistory(pool, history);
       };
     }
-    if (!chart) return;
-    if (max <= 0 || points.length < 2 || !visibleSeries.length) {
-      chart.innerHTML = "";
-      return;
-    }
-
-    var width = Math.max(520, Math.round(chart.clientWidth || 0));
-    var height = 330;
-    var left = 70;
-    var right = 18;
-    var top = 24;
-    var bottom = 46;
-    var span = Math.max(1, points.length - 1);
-    var yTicks = [0, 0.25, 0.5, 0.75, 1].map(function (ratio) {
-      var y = height - bottom - ratio * (height - top - bottom);
-      var value = max * ratio;
-      return '<path class="miners-history-grid" d="M' + left + ' ' + y.toFixed(1) + 'H' + (width - right) + '"></path>' +
-        '<text class="miners-history-y-label" x="' + (left - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' + escapeHtml(formatHashrateAxis(value)) + '</text>';
-    }).join("");
-    var labels = points.map(function (row, index) {
-      if (index !== 0 && index !== points.length - 1 && index % Math.max(1, Math.floor(points.length / 3)) !== 0) return "";
-      var x = left + (width - left - right) * index / span;
-      var text = formatChartTime(row.ts);
-      return '<text x="' + x.toFixed(1) + '" y="' + (height - 9) + '" text-anchor="middle">' + escapeHtml(text) + '</text>';
-    }).join("");
-    var lines = visibleSeries.map(function (item) {
-      var coords = points.map(function (row, index) {
-        var x = left + (width - left - right) * index / span;
-        var value = hashrateToGhs(row[item.key]);
-        var y = height - bottom - (value / max) * (height - top - bottom);
-        return [x, y];
-      });
-      if (!coords.length) return "";
-      var d = smoothLinePath(coords);
-      var area = "";
-      if (item.fill) {
-        area = '<path class="miners-history-area" style="fill:' + item.fill + '" d="' + d +
-          "L" + coords[coords.length - 1][0].toFixed(1) + " " + (height - bottom).toFixed(1) +
-          "L" + coords[0][0].toFixed(1) + " " + (height - bottom).toFixed(1) + 'Z"></path>';
-      }
-      return area + '<path class="miners-history-line" style="stroke:' + item.color + '" d="' + d + '"></path>';
-    }).join("");
-
-    chart.innerHTML = '<svg class="miners-history-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Node hashrate windows">' +
-      yTicks +
-      lines +
-      '<line class="miners-history-hover-line" x1="' + left + '" x2="' + left + '" y1="' + top + '" y2="' + (height - bottom) + '"></line>' +
-      '<rect class="miners-history-hitbox" x="' + left + '" y="' + top + '" width="' + (width - left - right) + '" height="' + (height - top - bottom) + '"></rect>' +
-      labels +
-      '</svg>' +
-      '<div class="miners-history-tooltip" aria-hidden="true"></div>';
-    bindMinersHistoryTooltip(chart, points, series, {
-      width: width,
-      left: left,
-      right: right
+    buildHistoryChart(chart, points, visibleSeries, {
+      height: 330,
+      ariaLabel: "Node hashrate windows"
     });
   }
 
@@ -1082,6 +1125,13 @@
             '<div><span>Last Share</span><strong>' + escapeHtml(toText(miner.lastshare_ago, "-")) + '</strong></div>' +
           '</div>' +
         '</summary>' +
+        '<div class="miner-wallet-history">' +
+          '<div class="miner-wallet-history-head"><span>Wallet Hashrate History</span></div>' +
+          '<div class="miners-history-plot miner-wallet-plot" data-wallet-chart="' + escapeHtml(minerAddress) + '">' +
+            '<div class="miners-empty">Expand to load wallet history...</div>' +
+          '</div>' +
+          '<div class="miners-history-legend miners-history-legend-static" data-wallet-legend="' + escapeHtml(minerAddress) + '"></div>' +
+        '</div>' +
         '<div class="miner-workers">' + workerHtml + '</div>' +
         '</details>';
     }).join("");
@@ -1102,6 +1152,7 @@
       renderMiners(payload, history);
     };
     bindMinerCardOpenState(list);
+    renderWalletCharts(list);
   }
 
   function fetchMinersData() {

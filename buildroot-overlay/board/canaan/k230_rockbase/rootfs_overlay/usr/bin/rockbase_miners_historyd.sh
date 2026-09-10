@@ -4,6 +4,7 @@
 
 MINERS_CACHE=${MINERS_CACHE:-/run/rockbase/miners.json}
 DATA_DIR=${MINERS_HISTORY_DIR:-/root/block/rockbase-history/miners}
+USERS_DIR=${CKPOOL_USERS_DIR:-/root/ckpool/logs/users}
 CACHE_DIR=${MINERS_HISTORY_CACHE_DIR:-/run/rockbase}
 CACHE_FILE=${MINERS_HISTORY_CACHE:-${CACHE_DIR}/miners-history-node.json}
 PID_FILE=${PID_FILE:-/var/run/rockbase-miners-history.pid}
@@ -11,6 +12,8 @@ MIN_SLEEP=${MINERS_HISTORY_MIN_SLEEP:-110}
 MAX_SLEEP=${MINERS_HISTORY_MAX_SLEEP:-150}
 RETENTION_DAYS=${MINERS_HISTORY_RETENTION_DAYS:-7}
 MAX_POINTS=${MINERS_HISTORY_MAX_POINTS:-720}
+OFFLINE_SECONDS=${MINERS_OFFLINE_SECONDS:-1800}
+USER_OFFLINE_DROP_SECONDS=${MINERS_USER_OFFLINE_DROP_SECONDS:-604800}
 
 json_str() {
   printf '"'
@@ -39,6 +42,25 @@ json_cache_num() {
   sed -n 's/.*"'"${key}"'"[[:space:]]*:[[:space:]]*\([-0-9.][0-9.]*\).*/\1/p' "$MINERS_CACHE" 2>/dev/null | head -n1
 }
 
+json_file_str() {
+  key=$1
+  file=$2
+  sed -n 's/.*"'"${key}"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$file" 2>/dev/null | head -n1
+}
+
+json_file_num() {
+  key=$1
+  file=$2
+  sed -n 's/.*"'"${key}"'"[[:space:]]*:[[:space:]]*\([-0-9.][0-9.]*\).*/\1/p' "$file" 2>/dev/null | head -n1
+}
+
+valid_address() {
+  case "$1" in
+    ''|*[!A-Za-z0-9]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
 rand_sleep() {
   span=$((MAX_SLEEP - MIN_SLEEP + 1))
   [ "$span" -lt 1 ] && span=1
@@ -64,6 +86,31 @@ raw_file_today() {
 cleanup_old_files() {
   [ -d "$DATA_DIR" ] || return 0
   find "$DATA_DIR" -type f -name 'node-*.jsonl' -mtime +"$RETENTION_DAYS" -delete 2>/dev/null || true
+  find "$DATA_DIR" -type f -name 'user-*.jsonl' -mtime +"$RETENTION_DAYS" -delete 2>/dev/null || true
+  cleanup_offline_users
+}
+
+# Drop per-wallet history once the wallet disappeared from ckpool or has
+# been offline longer than USER_OFFLINE_DROP_SECONDS (default 7 days).
+cleanup_offline_users() {
+  now=$(date +%s)
+  for hist in "$DATA_DIR"/user-*.jsonl; do
+    [ -f "$hist" ] || continue
+    base=$(basename "$hist" .jsonl)
+    address=${base#user-}
+    address=${address%-2[0-9][0-9][0-9][0-1][0-9][0-3][0-9]}
+    valid_address "$address" || continue
+    user_file="$USERS_DIR/$address"
+    if [ ! -f "$user_file" ]; then
+      rm -f "$DATA_DIR"/user-"$address"-*.jsonl
+      continue
+    fi
+    lastshare=$(json_file_num lastshare "$user_file")
+    case "$lastshare" in ''|*[!0-9]*) lastshare=0 ;; esac
+    if [ "$lastshare" -gt 0 ] && [ $((now - lastshare)) -gt "$USER_OFFLINE_DROP_SECONDS" ]; then
+      rm -f "$DATA_DIR"/user-"$address"-*.jsonl
+    fi
+  done
 }
 
 write_sample() {
@@ -116,6 +163,54 @@ write_sample() {
   } >> "$raw_file"
 }
 
+# Per-wallet samples, mirroring the pi5 ck-monitor user_history table:
+# online wallets record live window hashrates; offline wallets record zeros
+# so the chart drops to 0 instead of a flat stale line.
+write_user_samples() {
+  [ -d "$USERS_DIR" ] || return 0
+  now=$(date +%s)
+  for user_file in "$USERS_DIR"/*; do
+    [ -f "$user_file" ] || continue
+    address=$(basename "$user_file")
+    valid_address "$address" || continue
+
+    lastshare=$(json_file_num lastshare "$user_file")
+    case "$lastshare" in ''|*[!0-9]*) lastshare=0 ;; esac
+    online=0
+    [ "$lastshare" -gt 0 ] && [ $((now - lastshare)) -le "$OFFLINE_SECONDS" ] && online=1
+
+    if [ "$online" = "1" ]; then
+      h1m=$(json_file_str hashrate1m "$user_file")
+      h5m=$(json_file_str hashrate5m "$user_file")
+      h1h=$(json_file_str hashrate1hr "$user_file")
+      h1d=$(json_file_str hashrate1d "$user_file")
+      h7d=$(json_file_str hashrate7d "$user_file")
+      workers=$(json_file_num workers "$user_file")
+    else
+      h1m=0; h5m=0; h1h=0; h1d=0; h7d=0; workers=0
+    fi
+    bestshare=$(json_file_num bestshare "$user_file")
+    bestever=$(json_file_num bestever "$user_file")
+
+    raw_file="$DATA_DIR/user-${address}-$(date -u +%Y%m%d).jsonl"
+    last_ts=$(tail -n 1 "$raw_file" 2>/dev/null | sed -n 's/.*"ts":[[:space:]]*\([0-9][0-9]*\).*/\1/p')
+    [ "$last_ts" = "$now" ] && continue
+
+    {
+      printf '{"ts":%s' "$now"
+      printf ',"h1m":%s' "$(json_str "$h1m")"
+      printf ',"h5m":%s' "$(json_str "$h5m")"
+      printf ',"h1h":%s' "$(json_str "$h1h")"
+      printf ',"h1d":%s' "$(json_str "$h1d")"
+      printf ',"h7d":%s' "$(json_str "$h7d")"
+      printf ',"workers":%s' "$(json_num "$workers" 0)"
+      printf ',"bestshare":%s' "$(json_num "$bestshare" 0)"
+      printf ',"bestever":%s' "$(json_num "$bestever" 0)"
+      printf '}\n'
+    } >> "$raw_file"
+  done
+}
+
 render_cache() {
   mkdir -p "$CACHE_DIR" || return 1
   tmp_all="${CACHE_FILE}.all.$$"
@@ -163,6 +258,7 @@ render_cache() {
 collect_once() {
   cleanup_old_files
   write_sample || true
+  write_user_samples || true
   render_cache
 }
 

@@ -1264,6 +1264,50 @@ html[data-theme="light"] .miners-history-grid {
   color: var(--text);
 }
 
+/* Per-wallet history chart inside miner cards (pi5 user page alignment) */
+.miner-wallet-history {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.miner-wallet-history-head span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.miner-wallet-plot {
+  min-height: 220px;
+  margin-top: 10px;
+}
+
+.miner-wallet-plot .miners-history-svg {
+  height: 220px;
+}
+
+.miners-history-legend-static {
+  margin-top: 8px;
+}
+
+.miners-history-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.miners-history-key i {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
 /* Miner cards + worker table (ck-monitor table style) */
 
 .miners-list {
