@@ -3,8 +3,8 @@
 # Reads /run/rockbase/miners.json and keeps a low-write JSONL history on /root/block.
 
 MINERS_CACHE=${MINERS_CACHE:-/run/rockbase/miners.json}
-DATA_DIR=${MINERS_HISTORY_DIR:-/root/block/rockbase-history/miners}
-USERS_DIR=${CKPOOL_USERS_DIR:-/root/block/ckpool/logs/users}
+DATA_DIR=${MINERS_HISTORY_DIR:-/root/config/rockbase-history/miners}
+USERS_DIR=${CKPOOL_USERS_DIR:-/root/config/ckpool/logs/users}
 CACHE_DIR=${MINERS_HISTORY_CACHE_DIR:-/run/rockbase}
 CACHE_FILE=${MINERS_HISTORY_CACHE:-${CACHE_DIR}/miners-history-node.json}
 PID_FILE=${PID_FILE:-/var/run/rockbase-miners-history.pid}

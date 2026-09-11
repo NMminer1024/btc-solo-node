@@ -21,7 +21,7 @@
 #   running system. Slot switch happens via uboot env `ota_part`.
 # - A/B root= switching relies on board_fdt_chosen_bootargs() honoring env
 #   `bootargs`; the blinux bootcmd sets root=/dev/mmcblkXp$ota_part.
-# - All downloaded artifacts live under the blockdata partition (large, persistent).
+# - All downloaded artifacts live under the config partition (persistent, survives OTA).
 # - Default is SAFE: apply requires --force to actually dd+reboot; otherwise dry-run.
 #
 # This is the A3-stage skeleton: download + verify path is real; the dd/switch
@@ -32,7 +32,7 @@ set -u
 
 PROG=$(basename "$0")
 PUBKEY=${OTA_PUBKEY:-/etc/rockbase-ota-pub.pem}
-WORKDIR=${OTA_WORKDIR:-/root/block/ota}
+WORKDIR=${OTA_WORKDIR:-/root/config/ota}
 MANIFEST_NAME=manifest.json
 LOGFILE=${OTA_LOG:-$WORKDIR/ota.log}
 
@@ -638,8 +638,9 @@ cmd_apply() {
     # give lcdui/web pollers a few seconds to observe the switching state
     # before the network stack goes down
     sleep 3
-    # unmount blockdata before the forced reboot so the new slot does not
-    # inherit a dirty p4 (resize2fs refuses a dirty fs on first boot)
+    # unmount config + blockdata before the forced reboot so the new slot does
+    # not inherit a dirty fs (resize2fs refuses a dirty fs on first boot)
+    umount /root/config 2>/dev/null || true
     umount /root/block 2>/dev/null || true
     reboot -f
 }
@@ -652,6 +653,7 @@ cmd_reboot() {
     STATE_ENABLED=1
     set_state switching -1 "Rebooting into new system"
     sync
+    umount /root/config 2>/dev/null || true
     umount /root/block 2>/dev/null || true
     reboot -f
 }

@@ -4,7 +4,7 @@
 #
 
 CONF=/root/config/ckpool.conf
-LOGDIR=/root/block/ckpool/logs
+LOGDIR=/root/config/ckpool/logs
 LOGFILE=${LOGDIR}/ckpool.log
 WAIT_PID_FILE=/var/run/ckpool-autostart.pid
 BTC_CONF=/root/config/bitcoin.conf

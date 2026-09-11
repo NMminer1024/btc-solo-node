@@ -31,7 +31,7 @@ printf '  "next_refresh_seconds": 60,\n'
 printf '  "offline_threshold_seconds": 1800,\n'
 printf '  "stale_threshold_seconds": %s,\n' "$STALE_SECONDS"
 printf '  "error": %s,\n' "$(json_str "miners cache is warming up")"
-printf '  "source": {"pool_status": "/root/block/ckpool/logs/pool/pool.status", "users_dir": "/root/block/ckpool/logs/users"},\n'
+printf '  "source": {"pool_status": "/root/config/ckpool/logs/pool/pool.status", "users_dir": "/root/config/ckpool/logs/users"},\n'
 printf '  "pool": {"available": false, "stale": true, "users": 0, "workers": 0, "accepted": 0, "rejected": 0, "bestshare": 0},\n'
 printf '  "miners": []\n'
 printf '}\n'

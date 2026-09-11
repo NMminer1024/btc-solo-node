@@ -12,7 +12,7 @@ description: 'Rockbase A/B OTA 升级真机流程。Use when: ota升级, OTA 升
 
 ## 前置认知（不要重新踩坑）
 
-- 布局：`p1=slot_a / p2=slot_b / p3=config(rockcfg) / p4=blockdata`，每槽 `/boot/` 自包含。
+- 布局：`p1=slot_a / p2=slot_b / p3=config(1G,LABEL=config) / p4=blockdata`，每槽 `/boot/` 自包含。
 - 板端 agent：`/usr/sbin/rockbase-ota.sh`（`status/check/apply/confirm/rollback`）。
   真 apply 已内置 **direct quiesce**：不依赖容易卡住的 init `stop`，而是直接按
   cmdline/killall 清理 `bitcoind`/`ckpool`/`statusd`/miners/supervisord/serialhealth/

@@ -43,7 +43,7 @@
 | env（冗余拷贝） | 0x380000 | 128K | 静态写入，uboot 不读 |
 | p1 boot | 30M | 80M ext4 | `Image` / `k.dtb` / `fw_jump_add_uboot_head.bin` |
 | p2 rootfs | 128M | 2G ext4 | 完整系统（实际仅用 ~170MB） |
-| p3 config | 紧随 p2 | 256M ext4 `LABEL=rockcfg` | A1 v2 新增：用户配置分区，挂载 `/root/config` |
+| p3 config | 紧随 p2 | 1G ext4 `LABEL=config` | A1 v2 新增：用户配置分区，挂载 `/root/config` |
 | p4 blockdata | 紧随 p3 | 构建时 256M/20G | 首启被 S00resizemmc 扩到卡尾，挂载 `/root/block` = bitcoind datadir |
 
 > 注：A1 v2 之前的老镜像为「p1 boot / p2 rootfs / p3 blockdata（扩到卡尾）」，
@@ -81,7 +81,7 @@ SPL → uboot → run blinux
 raw 区不变：SPL / env@0x1e0000 / uboot / env@0x380000
 p1 = slot_a  2G ext4   完整系统，内含 /boot/{Image, k.dtb, fw_jump_add_uboot_head.bin}
 p2 = slot_b  2G ext4   出厂时为 slot_a 的拷贝
-p3 = config  256M ext4  用户配置分区（LABEL=rockcfg，挂载 /root/config）
+p3 = config  1G ext4  用户配置分区（LABEL=config，挂载 /root/config）
 p4 = blockdata          剩余全部（LABEL=blockdata，挂载 /root/block）
 ```
 
@@ -96,7 +96,7 @@ p4 = blockdata          剩余全部（LABEL=blockdata，挂载 /root/block）
 - blockdata 为 p4（config 占据 p3）：S00resizemmc 的扩容对象改为 p4，
   S59blockdata 挂载改为按 LABEL 识别；OTA 永远只写 p1/p2，
   p3/p4 上的用户配置与区块数据物理上不可能被碰。
-- 卡容量要求：A/B 双 2G 槽 + config + blockdata，建议 **≥ 8G SD 卡**（当前客户基线已满足）。
+- 卡容量要求：A/B 双 2G 槽 + config(1G) + blockdata，建议 **≥ 32G SD 卡**。
 
 ### 2.2 启动与回滚（uboot 层：纯 env 脚本 + 1 个 defconfig 开关）
 
@@ -122,12 +122,14 @@ altbootcmd=if test "${ota_part}" = 1; then ota_part=2; else ota_part=1; fi; \
 
 ### 2.3 用户配置独立分区（"保参数"的核心，A1 v2 定稿）
 
-- **独立配置分区 p3**（256M，ext4，`LABEL=rockcfg`，挂载 `/root/config`），
+- **独立配置分区 p3**（1G，ext4，`LABEL=config`，挂载 `/root/config`），
   与 blockdata（p4，`LABEL=blockdata`）并列。OTA 刷 rootfs 槽不碰它，
   **重灌区块 seed（mkfs blockdata）也不碰它**——用户参数与区块数据彻底解耦。
-  256M 的余量也为后续自定义图片/动画等 web 资产预留空间。
-- 集中存放：`rockbase-wifi.conf`、`bitcoin.conf`、`ckpool.conf`，
-  以及未来 web 新增的所有用户设置/自定义资产。
+  1G 的余量为 ckpool 运行时数据、历史曲线、自定义图片/动画等预留空间。
+- 集中存放：`rockbase-wifi.conf`、`bitcoin.conf`、`ckpool.conf`、
+  `ckpool/logs/`（矿工身份/池状态/日志）、`rockbase-history/`（历史曲线）、
+  `ota/`（OTA 下载工作区），以及未来 web 新增的所有用户设置/自定义资产。
+- blockdata（p4）只放 bitcoind datadir（blocks、chainstate、mempool 等可再生数据）。
 - **不用符号链接**（开发初期无向后兼容包袱）：所有消费方直接引用 `/root/config/…`。
   涉及 `S61bitcoind`、`S62ckpool`、`bitcoind/start.sh|stop.sh`、`ckpool/start.sh`、
   `rockbase_statusd.sh`、`rockbase_bitcoind_ready.sh`、`rockbase_wifi.sh`（`WIFI_CONFIG_FILE` 默认值）。
@@ -138,8 +140,8 @@ altbootcmd=if test "${ota_part}" = 1; then ota_part=2; else ota_part=1; fi; \
 - 分区布局（当前与阶段 D 一致）：
 
   ```
-  现网过渡:  p1=boot  p2=rootfs    p3=config(256M)  p4=blockdata(扩到卡尾)
-  阶段D:     p1=rootfsA(2G) p2=rootfsB(2G)  p3=config(256M)  p4=blockdata(扩到卡尾)
+  现网过渡:  p1=boot  p2=rootfs    p3=config(1G)  p4=blockdata(扩到卡尾)
+  阶段D:     p1=rootfsA(2G) p2=rootfsB(2G)  p3=config(1G)  p4=blockdata(扩到卡尾)
   ```
 
   S00resizemmc 的扩容对象相应从 p3 改为 p4。
@@ -353,14 +355,14 @@ P1 采用「整槽 ext2 + gzip」，43MB 已足够快，不折腾裁剪与增量
 
 | # | 文件 | 改动 |
 |---|---|---|
-| 1 | buildroot-overlay/board/canaan/k230_rockbase/genimage.cfg | 删 boot 分区；p1/p2 两个 2G 槽；p3 config（256M `rockcfg.ext4`）；blockdata 跟随为 p4 |
+| 1 | buildroot-overlay/board/canaan/k230_rockbase/genimage.cfg | 删 boot 分区；p1/p2 两个 2G 槽；p3 config（1G `config.ext4`）；blockdata 跟随为 p4 |
 | 2 | buildroot-overlay/configs/k230_rockbase_{1g,2g}_defconfig | EXT2_SIZE 维持 2G 不变；新增 `BR2_PACKAGE_LIBUBOOTENV`、`BR2_PACKAGE_LIBCURL(+_CURL/_OPENSSL)`、`BR2_PACKAGE_CA_CERTIFICATES`、`BR2_PACKAGE_OPENSSL_BIN`（dgst 验签） |
 | 3 | buildroot-overlay/board/canaan/k230_rockbase/default.env | A/B bootcmd / altbootcmd / ota_part / bootlimit |
 | 4 | buildroot-overlay/boot/uboot/u-boot-2022.10-overlay/configs/k230_rockbase_defconfig | `CONFIG_BOOTCOUNT_LIMIT=y` |
 | 5 | post-build.sh | 生成 `fw_jump_add_uboot_head.bin` 并把 Image/k.dtb 装入 `${TARGET_DIR}/boot/`；安装 factory-defaults |
-| 6 | post-image.sh | slot_b 由 slot_a 复制；导出逻辑保留；新增 OTA 包产物输出；新增 `gen_rockcfg_ext4`（空 256M，`LABEL=rockcfg`） |
+| 6 | post-image.sh | slot_b 由 slot_a 复制；导出逻辑保留；新增 OTA 包产物输出；新增 `gen_rockcfg_ext4`（空 1G，`LABEL=config`） |
 | 7 | rootfs_overlay/etc/init.d/S00resizemmc | `fw_env.config` 生成移到 done 检查之前（当前在 `/resize_done` 后直接退出，dd 出来的新槽会缺此文件导致 `fw_setenv` 失败）；blockdata 扩容对象 p3→p4 |
-| 8 | rootfs_overlay/etc/init.d/S59blockdata + 新增 S05config | S59 改按 LABEL=blockdata 挂载（回退 p4）；新 `S05config` 早期挂载 LABEL=rockcfg 到 `/root/config` 并播种出厂默认 |
+| 8 | rootfs_overlay/etc/init.d/S59blockdata + 新增 S05config | S59 改按 LABEL=blockdata 挂载（回退 p4）；新 `S05config` 早期挂载 LABEL=config 到 `/root/config` 并播种出厂默认 |
 | 9 | overlay 新增 | `/usr/sbin/rockbase-ota.sh`、`/etc/init.d/S98otaconfirm`、`/root/web/api/ota.cgi`、`/etc/rockbase-factory-defaults/`、`/etc/rockbase-ota-pub.pem`（验签公钥）；消费方路径直改 `/root/config/…`（不用符号链接） |
 | 10 | tools/ 新增 | `mk-ota-package.sh`（构建 OTA 包 + manifest + dgst 签名） |
 | 11 | 仓库根 `.gitignore` | 增加 `*-private.pem`，防私钥误提交 |
@@ -428,11 +430,11 @@ P1 采用「整槽 ext2 + gzip」，43MB 已足够快，不折腾裁剪与增量
 
 #### A1 · 用户配置独立分区（config 分区）
 
-- 改：新 `S05config`（按 LABEL=rockcfg 早期挂载 `/root/config`，不等 resize_done）、
+- 改：新 `S05config`（按 LABEL=config 早期挂载 `/root/config`，不等 resize_done）、
   消费方路径直改 `/root/config/…`（无符号链接）、首启播种逻辑、
   `/etc/rockbase-factory-defaults/`、`S59blockdata` 改 LABEL 挂载、`S00resizemmc` 扩容对象 p3→p4。
 - 热部署验证（124.30，USB 有线）：
-  1. 板端重分区：p3=config(256M) / p4=blockdata，mkfs 打 LABEL。
+  1. 板端重分区：p3=config(1G) / p4=blockdata，mkfs 打 LABEL。
   2. 改 WiFi（web）→ 确认落到 `/root/config/rockbase-wifi.conf`（p3）。
   3. 改 ckpool 配置 → 重启服务仍生效。
   4. 重启 → S05config/S59 按 LABEL 挂载、配置播种、bitcoind 以 `-conf=/root/config/bitcoin.conf` 启动。

@@ -1,11 +1,11 @@
 #!/bin/sh
 #
-# S05config - Early mount of the user-config partition (LABEL=rockcfg).
+# S05config - Early mount of the user-config partition (LABEL=config).
 #
 # The config partition holds everything that must survive BOTH an OTA rootfs
 # swap AND a blockdata re-seed (WiFi profile, bitcoin.conf, ckpool.conf,
-# future web assets like custom images/animations). It is a small dedicated
-# partition (256M), separate from blockdata, mounted at /root/config well
+# ckpool runtime data, history curves, future web assets). It is a dedicated
+# partition (1G), separate from blockdata, mounted at /root/config well
 # before S38wifi / S61bitcoind / S62ckpool need it, WITHOUT waiting for
 # /resize_done.
 #
@@ -18,7 +18,7 @@
 
 MOUNT_POINT=/root/config
 FACTORY_DIR=/etc/rockbase-factory-defaults
-LABEL=rockcfg
+LABEL=config
 
 log() {
     echo "[S05config] $*"

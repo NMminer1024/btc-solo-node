@@ -481,7 +481,7 @@ make CONF=k230_rockbase_defconfig buildroot -j$(nproc)
 | 构建中间文件 | `output/<CONF>/images/blockdata.ext4`、`sysimage-sdcard.img` |
 | Windows 导出 | `/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-{min\|full}-{net}-<timestamp>/sysimage-sdcard.img` |
 
-非 seed 镜像预期大小：`~2.4G ~ 2.6G`（rootfs 2G + blockdata 256M + 分区开销）。
+非 seed 镜像预期大小：`~5.2G ~ 5.4G`（slot_a 2G + slot_b 2G + config 1G + blockdata 256M + 分区开销）。
 
 如果镜像约 32G，说明走到了 seed 路径或默认 20G blockdata，需要加 `K230_BLOCKDATA_SIZE=256M` 重新构建。
 

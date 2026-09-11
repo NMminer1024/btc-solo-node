@@ -11,7 +11,7 @@ K230_IMAGE_GZIP=${K230_IMAGE_GZIP:-0}
 BLOCK_SEED_DIR_DEFAULT="${K230_SDK_ROOT}/seed/root-block"
 BLOCK_SEED_DIR="${BLOCK_SEED_DIR:-${ROCKBASE_BLOCK_SEED_DIR:-${BLOCK_SEED_DIR_DEFAULT}}}"
 K230_BLOCKDATA_SIZE=${K230_BLOCKDATA_SIZE:-20G}
-K230_ROCKCFG_SIZE=${K230_ROCKCFG_SIZE:-256M}
+K230_ROCKCFG_SIZE=${K230_ROCKCFG_SIZE:-1G}
 
 
 
@@ -124,16 +124,16 @@ gen_blockdata_ext4()
 	chmod a+rw "${image}"
 }
 
-# User-config partition (A1 v2): empty 256M ext4, LABEL=rockcfg.
+# User-config partition (A1 v2): empty 1G ext4, LABEL=config.
 # Contents are seeded on first boot by S05config from
 # /etc/rockbase-factory-defaults/ (single seeding path, no duplication here).
 gen_rockcfg_ext4()
 {
-	local image="${BINARIES_DIR}/rockcfg.ext4"
+	local image="${BINARIES_DIR}/config.ext4"
 
 	rm -f "${image}"
-	echo "rockcfg: generating empty ${image} (${K230_ROCKCFG_SIZE})"
-	fakeroot mkfs.ext4 -F -L rockcfg -m 0 -O "^64bit" "${image}" "${K230_ROCKCFG_SIZE}"
+	echo "config: generating empty ${image} (${K230_ROCKCFG_SIZE})"
+	fakeroot mkfs.ext4 -F -L config -m 0 -O "^64bit" "${image}" "${K230_ROCKCFG_SIZE}"
 	chmod a+rw "${image}"
 }
 
@@ -340,7 +340,7 @@ sync_image_outputs()
 		rm -f "${BINARIES_DIR}/sysimage-sdcard.img" "${BINARIES_DIR}/sysimage-sdcard.img.gz"
 		rm -f "${BINARIES_DIR}/rootfs.tar" "${BINARIES_DIR}"/rootfs.tar.*
 		if [ "${K230_KEEP_WSL_BLOCKDATA_IMAGE:-0}" != "1" ]; then
-			rm -f "${BINARIES_DIR}/blockdata.ext4" "${BINARIES_DIR}/rockcfg.ext4"
+			rm -f "${BINARIES_DIR}/blockdata.ext4" "${BINARIES_DIR}/config.ext4"
 		fi
 		echo "removed WSL-side flash image from ${BINARIES_DIR}"
 	fi

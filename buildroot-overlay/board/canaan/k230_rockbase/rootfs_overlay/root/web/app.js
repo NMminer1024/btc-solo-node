@@ -166,7 +166,7 @@
       text: "",
       loaded: false,
       loading: false,
-      path: "/root/block/ckpool/logs/ckpool.log",
+      path: "/root/config/ckpool/logs/ckpool.log",
       label: "Stratum log",
       summary: "Tail 300 lines · live cursor"
     }
@@ -1253,7 +1253,7 @@
     setText("summaryHash5m", toText(pool.hashrate5m, "--"));
     setText("summaryBestShare", formatShare(pool.bestshare));
     setText("minersUpdated", formatApiAge(payload.generated_at) + " · next cache refresh " + toText(payload.next_refresh_seconds, "60") + "s");
-    setText("minersSource", toText(payload.source && payload.source.users_dir, "/root/block/ckpool/logs/users"));
+    setText("minersSource", toText(payload.source && payload.source.users_dir, "/root/config/ckpool/logs/users"));
 
     /* redesign: hero miners badge — render-only, reuses the cached miners.cgi payload above */
     var onlineMiners = miners.filter(function (miner) { return miner.online; }).length;
@@ -2028,7 +2028,7 @@
     otaApplying = false;
     stopOtaProgressPolling();
     setText("otaPhaseLabel", OTA_PHASE_LABELS.failed);
-    setText("otaProgressMsg", message || "See /root/block/ota/ota.log on the node for details.");
+    setText("otaProgressMsg", message || "See /root/config/ota/ota.log on the node for details.");
     otaSetProgress(0);
     var errActions = document.getElementById("otaErrorActions");
     if (errActions) errActions.hidden = false;
@@ -2078,7 +2078,7 @@
         } else if (!otaStallSince) {
           otaStallSince = now;
         } else if (now - otaStallSince > OTA_STALL_SECONDS && state.phase !== "switching" && state.phase !== "reboot_pending") {
-          otaShowFailed("No progress from the node for over 90s - the update may have stalled. Check /root/block/ota/ota.log.");
+          otaShowFailed("No progress from the node for over 90s - the update may have stalled. Check /root/config/ota/ota.log.");
           return res;
         }
         otaRenderState(state);

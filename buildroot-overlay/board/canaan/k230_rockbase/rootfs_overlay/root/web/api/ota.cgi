@@ -13,7 +13,7 @@ MANIFEST_CACHE=/run/rockbase/ota-manifest-cache.json
 MANIFEST_CACHE_TTL=60
 STATE_FILE=/run/rockbase/ota-state.json
 APPLY_LOCKDIR=/run/rockbase/ota-apply.lock
-APPLY_LOG_DIR=/root/block/ota
+APPLY_LOG_DIR=/root/config/ota
 
 get_params() {
   params="$QUERY_STRING"

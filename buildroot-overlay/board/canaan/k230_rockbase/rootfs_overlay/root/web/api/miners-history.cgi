@@ -4,7 +4,7 @@
 # With ?address=<wallet>: render that wallet's per-user history on demand.
 
 CACHE_FILE=${MINERS_HISTORY_CACHE:-/run/rockbase/miners-history-node.json}
-DATA_DIR=${MINERS_HISTORY_DIR:-/root/block/rockbase-history/miners}
+DATA_DIR=${MINERS_HISTORY_DIR:-/root/config/rockbase-history/miners}
 RETENTION_DAYS=${MINERS_HISTORY_RETENTION_DAYS:-7}
 MAX_POINTS=${MINERS_HISTORY_MAX_POINTS:-720}
 

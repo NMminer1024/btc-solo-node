@@ -76,10 +76,11 @@ tail_sectors=$((maxrootsize - rootsize))
 
 log "root=${rootdev} bootdev=${bootdev} start=${rootstart} sectors root_size=${rootsize} disk_size=${disksize} tail=${tail_sectors}"
 
-# New Rockbase images keep Bitcoin data on partition 4 (p3 is the small
-# user-config partition). In this layout rootfs must never be expanded to the
-# card end, otherwise the trailing partitions are destroyed. Instead, grow
-# partition 4 to the card end and then resize both filesystems on the next boot.
+# New Rockbase images keep Bitcoin data on partition 4 (p3 is the 1G
+# user-config partition, LABEL=config). In this layout rootfs must never be
+# expanded to the card end, otherwise the trailing partitions are destroyed.
+# Instead, grow partition 4 to the card end and then resize both filesystems
+# on the next boot.
 blockdev="${bootdev}p4"
 blockbase="${bootbase}p4"
 if [ -b "${blockdev}" ] && [ -r "/sys/class/block/${blockbase}/start" ] && [ -r "/sys/class/block/${blockbase}/size" ]; then
