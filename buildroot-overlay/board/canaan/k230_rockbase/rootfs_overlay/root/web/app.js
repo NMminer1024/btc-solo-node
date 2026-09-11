@@ -1681,7 +1681,7 @@
     var heroVer = String(data.bitcoin.version || "").replace(/^Satoshi:/i, "").replace(/\//g, "").trim();
     setText("heroBitcoindVersion", heroVer && heroVer !== "--" ? "| " + heroVer : "");
 
-    setText("sysCpu", data.system.cpuModel);
+    setText("sysCpu", "Canaan K230 \u00b7 RISC-V");
     setText("sysTemp", data.system.temperature);
     var tempNum = parseFloat(data.system.temperature);
     var tempValid = Number.isFinite(tempNum);
