@@ -166,7 +166,7 @@
       text: "",
       loaded: false,
       loading: false,
-      path: "/root/ckpool/logs/ckpool.log",
+      path: "/root/block/ckpool/logs/ckpool.log",
       label: "Stratum log",
       summary: "Tail 300 lines · live cursor"
     }
@@ -950,8 +950,8 @@
     var points = payload && Array.isArray(payload.points) ? payload.points : [];
     buildHistoryChart(plot, points, walletHistorySeries, {
       height: 300,
-      ariaLabel: "Wallet hashrate history",
-      emptyHtml: '<div class="miners-empty">Collecting wallet history, check back in a few minutes...</div>'
+      ariaLabel: "Hashrate history",
+      emptyHtml: '<div class="miners-empty">No data yet</div>'
     });
     if (legend) {
       legend.innerHTML = walletHistorySeries.map(function (item) {
@@ -964,8 +964,8 @@
       height: 160,
       stepped: true,
       formatAxis: formatCountAxis,
-      ariaLabel: "Worker count history",
-      emptyHtml: '<div class="miners-empty">Collecting worker history, check back in a few minutes...</div>'
+      ariaLabel: "Worker history",
+      emptyHtml: '<div class="miners-empty">No data yet</div>'
     });
   }
 
@@ -1159,7 +1159,7 @@
     if (!box) return;
     var workerRows = Array.isArray(miner.workers_detail) ? miner.workers_detail : [];
     if (!workerRows.length) {
-      box.innerHTML = '<div class="miners-empty">No active workers.</div>';
+      box.innerHTML = '<div class="miners-empty">No workers.</div>';
       return;
     }
     var sort = getWorkerSortState(miner.address);
@@ -1253,7 +1253,7 @@
     setText("summaryHash5m", toText(pool.hashrate5m, "--"));
     setText("summaryBestShare", formatShare(pool.bestshare));
     setText("minersUpdated", formatApiAge(payload.generated_at) + " · next cache refresh " + toText(payload.next_refresh_seconds, "60") + "s");
-    setText("minersSource", toText(payload.source && payload.source.users_dir, "/root/ckpool/logs/users"));
+    setText("minersSource", toText(payload.source && payload.source.users_dir, "/root/block/ckpool/logs/users"));
 
     /* redesign: hero miners badge — render-only, reuses the cached miners.cgi payload above */
     var onlineMiners = miners.filter(function (miner) { return miner.online; }).length;

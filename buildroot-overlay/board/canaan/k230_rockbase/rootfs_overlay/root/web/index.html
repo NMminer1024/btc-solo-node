@@ -258,7 +258,7 @@
         <article class="surface-card surface-card-primary miners-node-summary">
           <div class="surface-head">
             <div>
-              <h3>Node Summary</h3>
+              <h3>Summary</h3>
             </div>
           </div>
           <div class="miners-kpi-grid">
@@ -273,11 +273,11 @@
         <article class="surface-card miners-history-card">
           <div class="surface-head">
             <div>
-              <h3>Node Hashrate History</h3>
+              <h3>Hashrate History</h3>
             </div>
           </div>
           <div class="miners-history-plot" id="minerHistoryChart">
-            <div class="miners-empty">Waiting for hashrate data...</div>
+            <div class="miners-empty">Loading...</div>
           </div>
           <div class="miners-history-legend" id="minerHistoryLegend"></div>
         </article>
@@ -287,12 +287,12 @@
         <article class="surface-card surface-card-large">
           <div class="surface-head">
             <div>
-              <h3>Connected Miners</h3>
+              <h3>Miners</h3>
             </div>
-            <span class="summary-label" id="minersSource">/root/ckpool/logs/users</span>
+            <span class="summary-label" id="minersSource">/root/block/ckpool/logs/users</span>
           </div>
           <div class="miners-list" id="minersList">
-            <div class="miners-empty">Loading miners...</div>
+            <div class="miners-empty">Loading...</div>
           </div>
         </article>
       </section>
@@ -323,7 +323,7 @@
       <article class="surface-card">
         <div class="surface-head">
           <div>
-            <h3>Odds of Finding a Block</h3>
+            <h3>Block Odds</h3>
           </div>
         </div>
         <div class="odds-grid">
@@ -332,7 +332,6 @@
           <div class="odds-card"><span>1 Month</span><strong id="minerDetailOdds30d">--</strong></div>
           <div class="odds-card"><span>1 Year</span><strong id="minerDetailOdds365d">--</strong></div>
         </div>
-        <p class="miners-cache-note">Calculated from 1d average hashrate vs current network difficulty.</p>
       </article>
 
       <article class="surface-card">
@@ -342,7 +341,7 @@
           </div>
         </div>
         <div class="miners-history-plot" id="minerDetailHashChart">
-          <div class="miners-empty">Loading wallet history...</div>
+          <div class="miners-empty">Loading...</div>
         </div>
         <div class="miners-history-legend miners-history-legend-static" id="minerDetailHashLegend"></div>
       </article>
@@ -350,11 +349,11 @@
       <article class="surface-card">
         <div class="surface-head">
           <div>
-            <h3>Worker Count History</h3>
+            <h3>Worker History</h3>
           </div>
         </div>
         <div class="miners-history-plot" id="minerDetailWorkerChart">
-          <div class="miners-empty">Loading worker history...</div>
+          <div class="miners-empty">Loading...</div>
         </div>
       </article>
 
@@ -365,7 +364,7 @@
           </div>
         </div>
         <div id="minerDetailWorkersTable">
-          <div class="miners-empty">Loading workers...</div>
+          <div class="miners-empty">Loading...</div>
         </div>
       </article>
     </section>

@@ -35,7 +35,7 @@ max_delta_bytes=65536
 case "$service" in
   stratum)
     log_service="stratum"
-    log_path="/root/ckpool/logs/ckpool.log"
+    log_path="/root/block/ckpool/logs/ckpool.log"
     default_limit=200
   ;;
   bitcoind|*)

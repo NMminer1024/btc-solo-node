@@ -5,7 +5,7 @@
 #
 
 CONF=/root/config/ckpool.conf
-LOGDIR=/root/ckpool/logs
+LOGDIR=/root/block/ckpool/logs
 
 if ps | grep -v grep | grep -q ckpool; then
     echo "ckpool already running, showing log..."

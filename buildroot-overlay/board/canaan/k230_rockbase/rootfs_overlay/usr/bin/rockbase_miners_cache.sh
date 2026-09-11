@@ -2,7 +2,7 @@
 # Rockbase ckpool miners cache.
 # Reads small ckpool status JSON files and publishes a single cached JSON file.
 
-LOGDIR=${CKPOOL_LOGDIR:-/root/ckpool/logs}
+LOGDIR=${CKPOOL_LOGDIR:-/root/block/ckpool/logs}
 POOL_STATUS=${POOL_STATUS:-${LOGDIR}/pool/pool.status}
 USERS_DIR=${USERS_DIR:-${LOGDIR}/users}
 CACHE_DIR=${CACHE_DIR:-/run/rockbase}
