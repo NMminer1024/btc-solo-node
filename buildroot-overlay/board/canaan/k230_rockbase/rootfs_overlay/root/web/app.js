@@ -1862,6 +1862,7 @@
   var OTA_CHECK_SECONDS = 60;
   var OTA_PROGRESS_SECONDS = 2;
   var OTA_REBOOT_WATCH_SECONDS = 5;
+  var OTA_REMIND_DELAY_MS = 24 * 60 * 60 * 1000;
   var otaCheckTimer = null;
   var otaProgressTimer = null;
   var otaRebootTimer = null;
@@ -1897,17 +1898,39 @@
     return false;
   }
 
-  function otaDismissedVersion() {
+  function otaDismissRecord() {
     try {
-      return window.localStorage.getItem("nmOtaDismissed") || "";
+      var raw = window.localStorage.getItem("nmOtaDismissed") || "";
+      if (!raw) return null;
+      try {
+        var parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && typeof parsed.version === "string") {
+          return parsed;
+        }
+      } catch (e) {}
+      return { version: String(raw), ts: 0 };
     } catch (e) {
-      return "";
+      return null;
     }
+  }
+
+  function otaDismissedVersion() {
+    var record = otaDismissRecord();
+    if (!record) return "";
+    return record.version || "";
+  }
+
+  function otaShouldSuppress(version) {
+    var record = otaDismissRecord();
+    if (!record || record.version !== version) return false;
+    var ts = Number(record.ts) || 0;
+    if (!ts) return false;
+    return Date.now() - ts < OTA_REMIND_DELAY_MS;
   }
 
   function otaDismiss(version) {
     try {
-      window.localStorage.setItem("nmOtaDismissed", version);
+      window.localStorage.setItem("nmOtaDismissed", JSON.stringify({ version: version, ts: Date.now() }));
     } catch (e) {}
   }
 
@@ -1974,7 +1997,7 @@
         if (!/^v\d+\.\d+\.\d+$/.test(latest)) return null;
         if (!/^v\d+\.\d+\.\d+$/.test(currentProductVersion)) return null;
         if (!otaVersionGt(latest, currentProductVersion)) return null;
-        if (otaDismissedVersion() === latest) return null;
+        if (otaShouldSuppress(latest)) return null;
         otaShowOffer(latest, manifest.released);
         return manifest;
       })
