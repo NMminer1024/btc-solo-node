@@ -747,10 +747,6 @@ render_status_json() {
     if [ -z "${headers}" ] || [ "${headers}" = "-" ]; then
         headers="${log_headers}"
     fi
-    if [ -n "${headers}" ] && [ -n "${log_headers}" ] &&
-       [ "${headers}" != "-" ] && [ "${log_headers}" != "-" ]; then
-        headers=$(max_int "${headers}" "${log_headers}")
-    fi
     if [ -z "${progress}" ] || [ "${progress}" = "-" ]; then
         progress="${log_progress}"
     fi
