@@ -52,6 +52,7 @@ constexpr uint32_t kDisplayRefrPeriodMs = 10;
 constexpr uint32_t kPresentIntervalMs = 20;
 constexpr size_t kStratumChartMaxPoints = 500;
 constexpr const char* kBootLogoRawPath = "/usr/share/rockbase-lcdui/boot-logo-800x480.argb";
+constexpr const char* kProductVersionPath = "/etc/version/product_version";
 constexpr const char* kStatusCachePath = "/tmp/status-api.json";
 constexpr const char* kOtaCheckStatePath = "/run/rockbase/ota-check-state.json";
 constexpr uint32_t kFirmwareAutoCheckIntervalMs = 60000;  // auto check-async cadence
@@ -998,6 +999,20 @@ bool read_text_file(const char* path, std::string& out, size_t max_size = 65536)
 
     close(fd);
     return !out.empty();
+}
+
+std::string read_product_version() {
+    std::string ver;
+    if (!read_text_file(kProductVersionPath, ver, 64)) {
+        return "";
+    }
+    while (!ver.empty() && (ver.back() == '\n' || ver.back() == '\r' || ver.back() == ' ' || ver.back() == '\t')) {
+        ver.pop_back();
+    }
+    while (!ver.empty() && (ver.front() == ' ' || ver.front() == '\t')) {
+        ver.erase(ver.begin());
+    }
+    return ver;
 }
 
 std::string read_timezone_key() {
@@ -3104,6 +3119,18 @@ lv_obj_t* build_boot_scene(lv_obj_t* screen) {
         lv_obj_set_pos(img, 0, 0);
         lv_obj_set_size(img, kUiWidth, kUiHeight);
         make_static(img);
+
+        // Overlay product version at bottom-right, read from /etc/version/product_version
+        std::string ver = read_product_version();
+        if (!ver.empty()) {
+            lv_obj_t* ver_label = lv_label_create(screen);
+            lv_label_set_text(ver_label, ver.c_str());
+            lv_obj_set_style_text_font(ver_label, &lv_font_montserrat_22, 0);
+            lv_obj_set_style_text_color(ver_label, lv_color_hex(0xffffff), 0);
+            lv_obj_clear_flag(ver_label, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_move_to_index(ver_label, lv_obj_get_child_count(screen) - 1);
+            lv_obj_align(ver_label, LV_ALIGN_BOTTOM_RIGHT, -16, -12);
+        }
         return img;
     }
 
