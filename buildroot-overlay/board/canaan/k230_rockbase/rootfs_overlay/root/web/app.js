@@ -1716,10 +1716,13 @@
       bar.style.backgroundColor = index < rssiLevel ? rssiColor : "#555";
     });
 
-    setText("aboutFirmware", data.about.firmware);
+    setText("aboutFirmware", data.system.productVersion);
     setText("aboutUpdated", data.about.updated);
     setText("dashVersion", data.system.productVersion);
     currentProductVersion = data.system.productVersion;
+    setText("aboutCurrentVer", data.system.productVersion);
+    setText("aboutProductVer", data.system.productVersion);
+    setText("aboutUptime", data.system.uptime);
   }
 
   function fetchDashboardData() {
@@ -2242,6 +2245,66 @@
       .catch(function () {});
   }
 
+  /* ── About page: firmware update check ─────────────────── */
+
+  function aboutCheckUpdate() {
+    var badge = document.getElementById("aboutUpdateBadge");
+    var note = document.getElementById("aboutUpdateNote");
+    var updateBtn = document.getElementById("aboutUpdateBtn");
+    var forceBtn = document.getElementById("aboutForceBtn");
+    var checkBtn = document.getElementById("aboutCheckBtn");
+
+    if (checkBtn) checkBtn.disabled = true;
+    if (badge) { badge.textContent = "Checking\u2026"; badge.className = "status-badge status-soft"; }
+    if (note) note.textContent = "Contacting update server\u2026";
+
+    return window.fetch("/api/ota.cgi?action=manifest&_ts=" + Date.now(), { cache: "no-store" })
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(function (manifest) {
+        if (checkBtn) checkBtn.disabled = false;
+        if (!manifest || typeof manifest.version !== "string") {
+          if (badge) { badge.textContent = "Unavailable"; badge.className = "status-badge status-danger"; }
+          if (note) note.textContent = "Could not reach the update server. Try again later.";
+          return;
+        }
+
+        var latest = manifest.version.split("-")[0];
+        var current = currentProductVersion;
+        setText("aboutLatestVer", latest);
+        setText("aboutReleased", manifest.released || "--");
+
+        if (!/^v\d+\.\d+\.\d+$/.test(latest) || !/^v\d+\.\d+\.\d+$/.test(current)) {
+          if (badge) { badge.textContent = "Unknown"; badge.className = "status-badge"; }
+          if (note) note.textContent = "Version format unrecognized.";
+          return;
+        }
+
+        if (otaVersionGt(latest, current)) {
+          if (badge) { badge.textContent = "Update available"; badge.className = "status-badge status-warm"; }
+          if (note) note.textContent = "A newer firmware version is available. Update recommended.";
+          if (updateBtn) updateBtn.hidden = false;
+          if (forceBtn) forceBtn.hidden = true;
+        } else if (otaVersionGt(current, latest)) {
+          if (badge) { badge.textContent = "Up to date"; badge.className = "status-badge status-ok"; }
+          if (note) note.textContent = "You are running a newer version than the latest release.";
+          if (updateBtn) updateBtn.hidden = true;
+          if (forceBtn) forceBtn.hidden = false;
+        } else {
+          if (badge) { badge.textContent = "Up to date"; badge.className = "status-badge status-ok"; }
+          if (note) note.textContent = "You are running the latest firmware version.";
+          if (updateBtn) updateBtn.hidden = true;
+          if (forceBtn) forceBtn.hidden = false;
+        }
+      })
+      .catch(function () {
+        if (checkBtn) checkBtn.disabled = false;
+        if (badge) { badge.textContent = "Error"; badge.className = "status-badge status-danger"; }
+        if (note) note.textContent = "Failed to check for updates.";
+      });
+  }
+
   function bindOtaControls() {
     var later = document.getElementById("otaLaterBtn");
     var update = document.getElementById("otaUpdateBtn");
@@ -2268,6 +2331,27 @@
         otaConfirmReboot();
       });
     }
+
+    /* About page update buttons */
+    var aboutCheck = document.getElementById("aboutCheckBtn");
+    var aboutUpdate = document.getElementById("aboutUpdateBtn");
+    var aboutForce = document.getElementById("aboutForceBtn");
+    if (aboutCheck) {
+      aboutCheck.addEventListener("click", function () {
+        aboutCheckUpdate();
+      });
+    }
+    if (aboutUpdate) {
+      aboutUpdate.addEventListener("click", function () {
+        otaClearDismiss();
+        startOtaApply();
+      });
+    }
+    if (aboutForce) {
+      aboutForce.addEventListener("click", function () {
+        startOtaApply();
+      });
+    }
   }
 
   function init() {
@@ -2286,6 +2370,8 @@
     startRefreshCountdown();
     startOtaChecking();
     resumeOtaIfApplying();
+    /* initial About-page update check after real data has loaded */
+    window.setTimeout(aboutCheckUpdate, 3000);
 
     var initial = window.location.hash ? window.location.hash.slice(1) : "dashboard";
     if (initial.indexOf("miner/") === 0) {

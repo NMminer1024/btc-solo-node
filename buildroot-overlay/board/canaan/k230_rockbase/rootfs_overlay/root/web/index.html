@@ -447,23 +447,42 @@
 
     <section class="panel-view" data-view-panel="about">
       <section class="subpage-hero">
-        <p>This menu is for versioning, API metadata, and support diagnostics.</p>
+        <p>Versioning, firmware updates, and support diagnostics.</p>
       </section>
+
+      <article class="surface-card about-update-card">
+        <div class="surface-head">
+          <h3>Firmware Update</h3>
+          <span class="status-badge" id="aboutUpdateBadge">Checking&hellip;</span>
+        </div>
+        <div class="stack-list">
+          <div class="stack-row"><span>Current</span><strong class="mono" id="aboutCurrentVer">--</strong></div>
+          <div class="stack-row"><span>Latest</span><strong class="mono" id="aboutLatestVer">--</strong></div>
+          <div class="stack-row"><span>Released</span><strong id="aboutReleased">--</strong></div>
+        </div>
+        <p class="wifi-note" id="aboutUpdateNote">Checking for updates&hellip;</p>
+        <div class="about-update-actions">
+          <button class="action-button" id="aboutCheckBtn" type="button">Check for Updates</button>
+          <button class="action-button action-button-primary" id="aboutUpdateBtn" type="button" hidden>Update Now</button>
+          <button class="action-button" id="aboutForceBtn" type="button" hidden>Force Update</button>
+        </div>
+      </article>
+
       <section class="subpage-grid">
         <article class="surface-card">
           <h3>Firmware</h3>
           <div class="stack-list">
             <div class="stack-row"><span>Board</span><strong>Rockbase</strong></div>
-            <div class="stack-row"><span>Firmware</span><strong id="aboutFirmware">mock-fw-20260722</strong></div>
+            <div class="stack-row"><span>Firmware</span><strong id="aboutFirmware">--</strong></div>
             <div class="stack-row"><span>API</span><strong>preview-v1</strong></div>
           </div>
         </article>
         <article class="surface-card">
-          <h3>Frontend</h3>
+          <h3>System</h3>
           <div class="stack-list">
-            <div class="stack-row"><span>Mode</span><strong>Static Preview</strong></div>
-            <div class="stack-row"><span>Data Source</span><strong>Embedded mock</strong></div>
-            <div class="stack-row"><span>Last Updated</span><strong id="aboutUpdated">2026-07-22 14:30</strong></div>
+            <div class="stack-row"><span>Product Version</span><strong class="mono" id="aboutProductVer">--</strong></div>
+            <div class="stack-row"><span>Uptime</span><strong id="aboutUptime">--</strong></div>
+            <div class="stack-row"><span>Last Updated</span><strong id="aboutUpdated">--</strong></div>
           </div>
         </article>
       </section>
@@ -508,6 +527,6 @@
   </div>
 </div>
 
-<script src="/app.js?v=20260910-dash11"></script>
+<script src="/app.js?v=20260915-about2"></script>
 </body>
 </html>

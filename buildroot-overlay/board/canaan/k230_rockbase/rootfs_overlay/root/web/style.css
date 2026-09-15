@@ -1123,6 +1123,20 @@ textarea {
   color: var(--accent);
 }
 
+/* ── About: firmware update card ─────────────────────────── */
+
+.about-update-card {
+  margin-bottom: 16px;
+  border-color: var(--accent);
+}
+
+.about-update-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
 .wifi-note {
   margin: 14px 0 0;
   color: var(--muted);
