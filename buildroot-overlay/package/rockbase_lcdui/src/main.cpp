@@ -3125,7 +3125,7 @@ lv_obj_t* build_boot_scene(lv_obj_t* screen) {
         if (!ver.empty()) {
             lv_obj_t* ver_label = lv_label_create(screen);
             lv_label_set_text(ver_label, ver.c_str());
-            lv_obj_set_style_text_font(ver_label, &lv_font_montserrat_22, 0);
+            lv_obj_set_style_text_font(ver_label, &lv_font_montserrat_32, 0);
             lv_obj_set_style_text_color(ver_label, lv_color_hex(0xffffff), 0);
             lv_obj_clear_flag(ver_label, LV_OBJ_FLAG_CLICKABLE);
             lv_obj_move_to_index(ver_label, lv_obj_get_child_count(screen) - 1);
