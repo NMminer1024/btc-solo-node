@@ -1895,6 +1895,9 @@
   var otaStateFailCount = 0;
   var OTA_STATE_FAIL_REBOOT_THRESHOLD = 3;
   var OTA_STALL_SECONDS = 90;
+  var OTA_AUTO_REBOOT_DELAY_MS = 3000;
+  var otaAutoRebootTimer = null;
+  var otaRebootTriggered = false;
   var currentProductVersion = "--";
 
   var OTA_PHASE_LABELS = {
@@ -2050,6 +2053,8 @@
   }
 
   function otaShowProgress() {
+    if (otaAutoRebootTimer) { window.clearTimeout(otaAutoRebootTimer); otaAutoRebootTimer = null; }
+    otaRebootTriggered = false;
     setText("otaPhaseLabel", OTA_PHASE_LABELS.preparing);
     setText("otaProgressSpeed", "");
     setText("otaProgressMsg", "Do not power off the node.");
@@ -2064,14 +2069,20 @@
   function otaShowRebootPending() {
     setText("otaPhaseLabel", OTA_PHASE_LABELS.reboot_pending);
     setText("otaProgressSpeed", "");
-    setText("otaProgressMsg", "The new system is written and verified. Click Reboot Now to switch over and restart the node.");
+    setText("otaProgressMsg", "The new system is written and verified. Rebooting automatically in a few seconds...");
     otaSetProgress(100);
     var rebootActions = document.getElementById("otaRebootActions");
     if (rebootActions) rebootActions.hidden = false;
+    /* Auto-trigger the reboot once the 100% write-complete state is confirmed;
+       the Reboot Now button remains as a manual fallback. */
+    if (otaAutoRebootTimer) window.clearTimeout(otaAutoRebootTimer);
+    otaAutoRebootTimer = window.setTimeout(otaConfirmReboot, OTA_AUTO_REBOOT_DELAY_MS);
   }
 
   function otaShowFailed(message) {
     otaApplying = false;
+    if (otaAutoRebootTimer) { window.clearTimeout(otaAutoRebootTimer); otaAutoRebootTimer = null; }
+    otaRebootTriggered = false;
     stopOtaProgressPolling();
     setText("otaPhaseLabel", OTA_PHASE_LABELS.failed);
     setText("otaProgressMsg", message || "See /root/config/ota/ota.log on the node for details.");
@@ -2216,6 +2227,9 @@
   }
 
   function otaConfirmReboot() {
+    if (otaRebootTriggered) return;
+    otaRebootTriggered = true;
+    if (otaAutoRebootTimer) { window.clearTimeout(otaAutoRebootTimer); otaAutoRebootTimer = null; }
     var btn = document.getElementById("otaRebootBtn");
     if (btn) btn.disabled = true;
     setText("otaPhaseLabel", OTA_PHASE_LABELS.switching);
