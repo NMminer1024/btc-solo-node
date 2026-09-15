@@ -1618,6 +1618,29 @@ void split_date_time(const std::string& value, std::string& date_part, std::stri
     time_part = value.substr(split + 1);
 }
 
+// Convert a UTC timestamp string like "2026-09-15 00:09:36 UTC" into local
+// date/time parts using the process timezone (set by sync_process_timezone).
+// Returns false if the string cannot be parsed as a UTC datetime.
+bool convert_utc_to_local(const std::string& value, std::string& date_part, std::string& time_part) {
+    tm utc {};
+    if (strptime(value.c_str(), "%Y-%m-%d %H:%M:%S", &utc) == nullptr) {
+        return false;
+    }
+    const time_t epoch = timegm(&utc);
+    if (epoch < 0) {
+        return false;
+    }
+    tm local {};
+    localtime_r(&epoch, &local);
+    char date_buf[16];
+    char time_buf[16];
+    std::strftime(date_buf, sizeof(date_buf), "%Y-%m-%d", &local);
+    std::strftime(time_buf, sizeof(time_buf), "%H:%M:%S", &local);
+    date_part = date_buf;
+    time_part = time_buf;
+    return true;
+}
+
 void split_pair_value(const std::string& value, std::string& left_part, std::string& right_part) {
     if (!has_value(value)) {
         left_part = "--";
@@ -2501,7 +2524,9 @@ bool build_ui_model(UiModel& model) {
     const std::string blocks = join_value(data.blocks_fmt, " / ", data.headers_fmt);
     std::string block_date;
     std::string block_time;
-    split_date_time(data.best_block_date, block_date, block_time);
+    if (!convert_utc_to_local(data.best_block_date, block_date, block_time)) {
+        split_date_time(data.best_block_date, block_date, block_time);
+    }
 
     model.status_available = true;
     model.bitcoin.stage_index = bitcoin_stage_index(data);

@@ -556,6 +556,21 @@
     return clean.length ? clean.join(" · ") : fallback;
   }
 
+  // Reformat a UTC timestamp ("YYYY-MM-DD HH:MM:SS UTC") into the browser's
+  // local timezone so users see a familiar local time. Falls back to the
+  // original string when it does not match the expected shape.
+  function formatUtcToLocal(value) {
+    var text = String(value || "");
+    var match = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+    if (!match) return text;
+    var ts = Date.UTC(+match[1], +match[2] - 1, +match[3], +match[4], +match[5], +match[6]);
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return text;
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " +
+           pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+  }
+
   function parseRssiDbm(value) {
     var match = String(value || "").match(/-?\d+/);
     return match ? Number(match[0]) : NaN;
@@ -616,8 +631,8 @@
         progressPct: progressPct,
         blocks: joinParts([bitcoin.blocks_fmt, "/ " + toText(bitcoin.headers_fmt, "-")], mock.bitcoin.blocks).replace(" · / ", " / "),
         chainName: chainName,
-        bestBlockDate: toText(bitcoin.best_block_date, "-"),
-        meta: joinParts([chainName, bitcoin.best_block_date], mock.bitcoin.meta),
+        bestBlockDate: formatUtcToLocal(toText(bitcoin.best_block_date, "-")),
+        meta: joinParts([chainName, formatUtcToLocal(toText(bitcoin.best_block_date, "-"))], mock.bitcoin.meta),
         connections: toText(bitcoin.connections, mock.bitcoin.connections),
         difficulty: toText(bitcoin.difficulty_display, mock.bitcoin.difficulty),
         utxoSize: toText(bitcoin.utxo_size, mock.bitcoin.utxoSize),
