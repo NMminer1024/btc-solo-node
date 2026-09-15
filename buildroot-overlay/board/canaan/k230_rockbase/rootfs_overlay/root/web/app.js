@@ -1965,10 +1965,12 @@
     var overlay = document.getElementById("otaOverlay");
     var offer = document.getElementById("otaOfferView");
     var progress = document.getElementById("otaProgressView");
+    var confirm = document.getElementById("otaConfirmView");
     if (!overlay || !offer || !progress) return;
     overlay.hidden = view === null;
     offer.hidden = view !== "offer";
     progress.hidden = view !== "progress";
+    if (confirm) confirm.hidden = view !== "confirm";
   }
 
   function otaFormatSpeed(bps) {
@@ -2334,6 +2336,19 @@
         otaConfirmReboot();
       });
     }
+    var forceCancel = document.getElementById("otaForceCancelBtn");
+    var forceConfirm = document.getElementById("otaForceConfirmBtn");
+    if (forceCancel) {
+      forceCancel.addEventListener("click", function () {
+        otaShowView(null);
+      });
+    }
+    if (forceConfirm) {
+      forceConfirm.addEventListener("click", function () {
+        forceConfirm.disabled = true;
+        startOtaApply();
+      });
+    }
 
     /* About page update buttons */
     var aboutCheck = document.getElementById("aboutCheckBtn");
@@ -2352,9 +2367,17 @@
     }
     if (aboutForce) {
       aboutForce.addEventListener("click", function () {
-        startOtaApply();
+        otaShowForceConfirm();
       });
     }
+  }
+
+  function otaShowForceConfirm() {
+    if (otaApplying) return;
+    var btn = document.getElementById("otaForceConfirmBtn");
+    if (btn) btn.disabled = false;
+    setText("otaForceVer", currentProductVersion || "--");
+    otaShowView("confirm");
   }
 
   function init() {
