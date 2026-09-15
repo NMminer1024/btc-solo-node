@@ -344,6 +344,14 @@ collect_system() {
     product_version=$(cat /etc/version/product_version 2>/dev/null | tr -d ' \t\r\n')
     [ -n "${product_version}" ] || product_version="-"
 
+    # Extract build date (YYYY-MM-DD) from /etc/version/release_version
+    build_date="-"
+    _rv=$(sed -n 's/^sdk://p' /etc/version/release_version 2>/dev/null | head -1)
+    _bd=$(printf '%s\n' "${_rv}" | grep -oE '[0-9]{8}-[0-9]{6}' | head -1 | cut -d- -f1)
+    if [ -n "${_bd}" ]; then
+        build_date="${_bd:0:4}-${_bd:4:2}-${_bd:6:2}"
+    fi
+
     temp="N/A"
     for t in /sys/class/thermal/thermal_zone*/temp /sys/class/hwmon/hwmon*/temp1_input; do
         [ -r "${t}" ] || continue
@@ -396,6 +404,7 @@ collect_system() {
         state_raw block_disk_found "${block_disk_found}"
         state_str block_disk_path "${block_disk_path}"
         state_str product_version "${product_version}"
+        state_str build_date "${build_date}"
     } | write_state_file "${SYSTEM_STATE}"
 }
 
@@ -674,6 +683,7 @@ render_status_json() {
     block_disk_found=true
     block_disk_path="${DATADIR}"
     product_version="-"
+    build_date="-"
 
     headers="-"
     blocks="-"
@@ -1014,7 +1024,8 @@ render_status_json() {
     printf '    "block_disk_found": %s,\n' "${block_disk_found}"
     printf '    "block_disk_value": %s,\n' "$(json_str "${block_disk_value}")"
     printf '    "block_disk_path": %s,\n' "$(json_str "${block_disk_path}")"
-    printf '    "product_version": %s\n' "$(json_str "${product_version}")"
+    printf '    "product_version": %s,\n' "$(json_str "${product_version}")"
+    printf '    "build_date": %s\n' "$(json_str "${build_date}")"
     printf '  },\n'
 
     printf '  "bitcoin": {\n'

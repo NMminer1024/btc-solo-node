@@ -654,7 +654,10 @@
         rssi: toText(network.rssi_display, mock.network.rssi),
         signalLevel: toNumber(network.signal_level, getRssiLevel(toText(network.rssi_display, mock.network.rssi)))
       },
-      about: mock.about
+      about: {
+        firmware: toText(system.product_version, mock.about.firmware),
+        updated: toText(system.build_date, mock.about.updated)
+      }
     };
   }
 
