@@ -157,8 +157,10 @@ void WifiConfigOverlay::clear_body() {
     }
     body_ = lv_obj_create(content);
     lv_obj_remove_style_all(body_);
-    lv_obj_set_pos(body_, 24, 64);
-    lv_obj_set_size(body_, 712, 376);
+    // Start below the ghost close button (which spans y 16-72) so the first
+    // list row is not covered by the close hit-target.
+    lv_obj_set_pos(body_, 24, 80);
+    lv_obj_set_size(body_, 712, 352);
     lv_obj_clear_flag(body_, LV_OBJ_FLAG_SCROLLABLE);
 }
 
@@ -228,7 +230,7 @@ void WifiConfigOverlay::build_list() {
     lv_obj_t* list = lv_obj_create(body_);
     lv_obj_remove_style_all(list);
     lv_obj_set_pos(list, 0, 0);
-    lv_obj_set_size(list, 712, 376);
+    lv_obj_set_size(list, 712, 352);
     lv_obj_set_style_pad_all(list, 0, 0);
     lv_obj_set_style_pad_row(list, 8, 0);
     lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
