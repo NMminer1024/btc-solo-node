@@ -1688,6 +1688,33 @@ html[data-theme="light"] .miners-history-grid {
   font-variant-numeric: tabular-nums;
 }
 
+.ota-reboot-wait {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg3);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.ota-reboot-wait-spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: ota-reboot-spin 0.9s linear infinite;
+}
+
+@keyframes ota-reboot-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ── Dashboard footer (copyright + product version) ──────── */
 
 .dashboard-footer {

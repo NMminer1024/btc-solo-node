@@ -2074,7 +2074,7 @@
     var rebootActions = document.getElementById("otaRebootActions");
     if (rebootActions) rebootActions.hidden = false;
     /* Auto-trigger the reboot once the 100% write-complete state is confirmed;
-       the Reboot Now button remains as a manual fallback. */
+       the UI only shows a "rebooting automatically" waiting indicator. */
     if (otaAutoRebootTimer) window.clearTimeout(otaAutoRebootTimer);
     otaAutoRebootTimer = window.setTimeout(otaConfirmReboot, OTA_AUTO_REBOOT_DELAY_MS);
   }
@@ -2230,8 +2230,6 @@
     if (otaRebootTriggered) return;
     otaRebootTriggered = true;
     if (otaAutoRebootTimer) { window.clearTimeout(otaAutoRebootTimer); otaAutoRebootTimer = null; }
-    var btn = document.getElementById("otaRebootBtn");
-    if (btn) btn.disabled = true;
     setText("otaPhaseLabel", OTA_PHASE_LABELS.switching);
     setText("otaProgressMsg", "Reboot command sent. The node is restarting, this page reloads when it is back.");
     window.fetch("/api/ota.cgi?action=reboot&_ts=" + Date.now(), {
@@ -2328,7 +2326,6 @@
     var later = document.getElementById("otaLaterBtn");
     var update = document.getElementById("otaUpdateBtn");
     var close = document.getElementById("otaCloseBtn");
-    var reboot = document.getElementById("otaRebootBtn");
     if (later) {
       later.addEventListener("click", function () {
         if (otaOfferedVersion) otaDismiss(otaOfferedVersion);
@@ -2343,11 +2340,6 @@
     if (close) {
       close.addEventListener("click", function () {
         otaShowView(null);
-      });
-    }
-    if (reboot) {
-      reboot.addEventListener("click", function () {
-        otaConfirmReboot();
       });
     }
     var forceCancel = document.getElementById("otaForceCancelBtn");

@@ -500,7 +500,7 @@
         <span class="mono ota-ver-new" id="otaLatestVer">--</span>
       </p>
       <p class="ota-sub" id="otaReleaseDate"></p>
-      <p class="ota-note">The update is downloaded, verified and written to the standby system slot. Syncing and mining pause during the upgrade. When writing finishes you confirm the reboot. Do not power off.</p>
+      <p class="ota-note">The update is downloaded, verified and written to the standby system slot. Syncing and mining pause during the upgrade. When writing finishes the node reboots automatically. Do not power off.</p>
       <div class="ota-actions">
         <button class="action-button" id="otaLaterBtn" type="button">Remind me tomorrow</button>
         <button class="action-button action-button-primary" id="otaUpdateBtn" type="button">Update Now</button>
@@ -525,8 +525,9 @@
         <span id="otaProgressSpeed"></span>
       </div>
       <p class="ota-note" id="otaProgressMsg">Do not power off the node.</p>
-      <div class="ota-actions" id="otaRebootActions" hidden>
-        <button class="action-button action-button-primary" id="otaRebootBtn" type="button">Reboot Now</button>
+      <div class="ota-reboot-wait" id="otaRebootActions" hidden>
+        <span class="ota-reboot-wait-spinner" aria-hidden="true"></span>
+        <span>Rebooting automatically &mdash; please wait, do not power off.</span>
       </div>
       <div class="ota-actions" id="otaErrorActions" hidden>
         <button class="action-button" id="otaCloseBtn" type="button">Close</button>
@@ -535,6 +536,6 @@
   </div>
 </div>
 
-<script src="/app.js?v=20260915-about4"></script>
+<script src="/app.js?v=20260916-ota1"></script>
 </body>
 </html>
