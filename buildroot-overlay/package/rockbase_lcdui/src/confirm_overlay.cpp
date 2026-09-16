@@ -51,14 +51,19 @@ lv_obj_t* button_label(lv_obj_t* btn, const char* text, uint32_t color) {
 }  // namespace
 
 void ConfirmOverlay::open(const char* title, const char* message,
-                          const char* confirm_text, const char* cancel_text) {
+                          const char* confirm_text, const char* cancel_text,
+                          const char* dont_ask_text) {
     title_ = title != nullptr ? title : "";
     message_ = message != nullptr ? message : "";
     confirm_text_ = confirm_text != nullptr ? confirm_text : "OK";
     single_button_ = cancel_text == nullptr;
     cancel_text_ = cancel_text != nullptr ? cancel_text : "";
+    dont_ask_text_ = dont_ask_text != nullptr ? dont_ask_text : "";
+    dont_ask_checked_ = false;
     result_ = Result::None;
-    overlay_.show(title_.c_str(), kPanelW, kPanelH);
+    // Grow the panel to fit the optional "Don't ask me" checkbox row.
+    const int32_t panel_h = dont_ask_text_.empty() ? kPanelH : kPanelH + 44;
+    overlay_.show(title_.c_str(), kPanelW, panel_h, true);
     // The confirm/cancel buttons already cover dismissal; hide the ghost X.
     overlay_.hide_close_button();
     build();
@@ -94,7 +99,7 @@ void ConfirmOverlay::build() {
     lv_label_set_text(msg, message_.c_str());
     lv_obj_set_pos(msg, kPadX, 72);
     lv_obj_set_width(msg, kPanelW - 2 * kPadX);
-    lv_obj_set_style_text_font(msg, &lv_font_montserrat_18, 0);
+    lv_obj_set_style_text_font(msg, &lv_font_montserrat_22, 0);
     lv_obj_set_style_text_color(msg, lv_color_hex(0x9fb0ba), 0);
     lv_label_set_long_mode(msg, LV_LABEL_LONG_WRAP);
 
@@ -130,4 +135,24 @@ void ConfirmOverlay::build() {
             self->result_ = Result::Confirmed;
         }
     }, LV_EVENT_CLICKED, this);
+
+    if (!dont_ask_text_.empty()) {
+        dont_ask_cb_ = lv_checkbox_create(content);
+        lv_obj_set_pos(dont_ask_cb_, kPadX, 244);
+        // In LVGL 8 the checkbox label is the first child object.
+        lv_obj_t* cb_label = lv_obj_get_child(dont_ask_cb_, 0);
+        lv_label_set_text(cb_label, dont_ask_text_.c_str());
+        lv_obj_set_style_text_font(cb_label, &lv_font_montserrat_18, 0);
+        lv_obj_set_style_text_color(cb_label, lv_color_hex(0x9fb0ba), 0);
+        lv_obj_set_style_bg_color(dont_ask_cb_, lv_color_hex(0x18242e), LV_PART_INDICATOR);
+        lv_obj_set_style_bg_color(dont_ask_cb_, lv_color_hex(0x3b82c4), LV_PART_INDICATOR | LV_STATE_CHECKED);
+        lv_obj_set_style_radius(dont_ask_cb_, 6, LV_PART_INDICATOR);
+        lv_obj_add_event_cb(dont_ask_cb_, [](lv_event_t* e) {
+            auto* self = static_cast<ConfirmOverlay*>(lv_event_get_user_data(e));
+            if (self != nullptr) {
+                self->dont_ask_checked_ =
+                    lv_obj_has_state(static_cast<lv_obj_t*>(lv_event_get_target(e)), LV_STATE_CHECKED);
+            }
+        }, LV_EVENT_VALUE_CHANGED, this);
+    }
 }

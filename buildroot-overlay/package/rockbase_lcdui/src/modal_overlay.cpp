@@ -4,7 +4,7 @@ ModalOverlay::~ModalOverlay() {
     hide();
 }
 
-lv_obj_t* ModalOverlay::show(const char* title, int32_t width, int32_t height) {
+lv_obj_t* ModalOverlay::show(const char* title, int32_t width, int32_t height, bool center_title) {
     hide();
     close_requested_ = false;
 
@@ -40,6 +40,10 @@ lv_obj_t* ModalOverlay::show(const char* title, int32_t width, int32_t height) {
     lv_obj_set_width(title_label, width - 120);
     lv_obj_set_style_text_font(title_label, &lv_font_montserrat_22, 0);
     lv_obj_set_style_text_color(title_label, lv_color_hex(0xf4efe2), 0);
+    if (center_title) {
+        lv_obj_set_width(title_label, width - 64);
+        lv_obj_set_style_text_align(title_label, LV_TEXT_ALIGN_CENTER, 0);
+    }
     lv_label_set_long_mode(title_label, LV_LABEL_LONG_DOT);
 
     // Ghost close icon: transparent, unobtrusive (top-right), but with a

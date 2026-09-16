@@ -11,7 +11,7 @@ namespace {
 constexpr const char* kCheckStatePath = "/run/rockbase/ota-check-state.json";
 constexpr uint32_t kPollIntervalMs = 1000;
 constexpr uint32_t kCheckTimeoutMs = 25000;
-constexpr uint32_t kCheckIntervalMs = 60000;   // periodic check-async cadence
+constexpr uint32_t kCheckIntervalMs = 6 * 3600 * 1000;  // periodic check-async cadence (6 h)
 constexpr uint32_t kFirstCheckDelayMs = 60000;  // first check after boot
 
 uint32_t monotonic_ms() {
@@ -118,6 +118,12 @@ void FirmwareUpdateOverlay::update() {
             confirm_.close();
         }
         else if (result == ConfirmOverlay::Result::Cancelled) {
+            // "Not Now": if the user ticked "Don't ask me", suppress this
+            // version for the rest of the boot cycle; otherwise the next
+            // periodic poll will prompt again.
+            if (confirm_.dont_ask_checked() && !latest_version_.empty()) {
+                suppressed_version_ = latest_version_;
+            }
             confirm_.close();
         }
         return;
@@ -163,17 +169,17 @@ void FirmwareUpdateOverlay::poll_state_file() {
     latest_version_ = json_value_at(json, 0, "latest_version");
     manifest_url_ = json_value_at(json, 0, "manifest_url");
 
-    // Prompt only when a genuinely newer version is available and we have
-    // not already prompted for this exact version (so a dismissed prompt
-    // does not re-appear on every 60 s poll).
+    // Prompt when a genuinely newer version is available, unless the user
+    // chose "Don't ask me" for this exact version this boot. A plain
+    // "Not Now" does NOT suppress, so the next periodic poll prompts again.
     if (phase_name == "update_available" && !latest_version_.empty() &&
-        latest_version_ != prompted_version_) {
-        prompted_version_ = latest_version_;
+        latest_version_ != suppressed_version_) {
         const std::string msg = std::string("A new version ") + latest_version_ +
                                  " is available (current: " + current_version_ + "). Update now?";
-        confirm_.open("Update Available", msg.c_str(), "Update", "Not Now");
+        confirm_.open("Update Available", msg.c_str(), "Update", "Not Now",
+                      "Don't ask me again");
     }
-    // up_to_date / failed / already-prompted version: stay silent.
+    // up_to_date / failed / suppressed version: stay silent.
     phase_ = Phase::Idle;
 }
 

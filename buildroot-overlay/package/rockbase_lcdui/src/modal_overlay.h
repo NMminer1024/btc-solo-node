@@ -7,7 +7,8 @@ public:
     ModalOverlay() = default;
     ~ModalOverlay();
 
-    lv_obj_t* show(const char* title, int32_t width = 760, int32_t height = 456);
+    lv_obj_t* show(const char* title, int32_t width = 760, int32_t height = 456,
+                   bool center_title = false);
     void hide();
     bool visible() const { return panel_ != nullptr; }
     bool close_requested() const { return close_requested_; }
