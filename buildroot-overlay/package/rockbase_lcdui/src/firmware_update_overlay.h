@@ -5,40 +5,37 @@
 
 #include "confirm_overlay.h"
 #include "lvgl/lvgl.h"
-#include "modal_overlay.h"
 
-// "Firmware / Check Update" card on the System page. Kicks off
-// `rockbase-ota.sh check-async` in the background and polls
-// /run/rockbase/ota-check-state.json (same file-polling pattern as
-// OtaOverlay) for the result. If an update is available the user is asked
-// via ConfirmOverlay; confirming hands off to `rockbase-ota.sh apply
-// --force`, whose progress is then shown by the existing OtaOverlay.
+// Passive OTA update checker. Periodically (every 60 s, first run 60 s
+// after boot) launches `rockbase-ota.sh check-async` in the background and
+// polls /run/rockbase/ota-check-state.json for the result. When a newer
+// version is available the user is prompted via ConfirmOverlay; confirming
+// hands off to `rockbase-ota.sh apply --force`, whose progress is then
+// shown by the existing OtaOverlay. No prompt is shown when the board is
+// already on the latest version or when the check fails, and a dismissed
+// prompt is not repeated for the same version.
 class FirmwareUpdateOverlay {
 public:
-    void open();   // start a check; safe to call repeatedly (no-op while busy)
-    void update(); // call once per main-loop tick
-    bool active() const { return overlay_.visible() || confirm_.active(); }
+    void update();  // call once per main-loop tick
+    bool active() const { return confirm_.active(); }
 
 private:
     enum class Phase {
-        Hidden,
+        Idle,
         Checking,
-        UpToDate,
-        UpdateAvailable,
-        Failed,
     };
 
+    void start_check();
     void poll_state_file();
-    void show_message(const char* title, const std::string& message);
     void start_apply();
 
-    ModalOverlay overlay_;
     ConfirmOverlay confirm_;
-    Phase phase_ = Phase::Hidden;
+    Phase phase_ = Phase::Idle;
     std::string current_version_;
     std::string latest_version_;
     std::string manifest_url_;
-    std::string message_;
+    std::string prompted_version_;  // last version prompted for (suppress re-prompts)
     uint32_t check_start_ms_ = 0;
     uint32_t last_poll_ms_ = 0;
+    uint32_t last_check_ms_ = 0;
 };
