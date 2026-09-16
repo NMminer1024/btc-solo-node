@@ -25,6 +25,7 @@
 
 #include "lvgl/lvgl.h"
 #include "lvgl/draw/lv_snapshot.h"
+#include "buzzer.h"
 #include "timezone_overlay.h"
 #include "wifi_config_overlay.h"
 #include "ota_overlay.h"
@@ -391,6 +392,7 @@ bool trigger_config_hotspot(int hotspot_index) {
     if (hotspot.open == nullptr) {
         return false;
     }
+    buzzer_beep();
     hotspot.open();
     return true;
 }
@@ -1830,6 +1832,7 @@ void cleanup_display() {
         close(g_backlight_fd);
         g_backlight_fd = -1;
     }
+    buzzer_shutdown();
     for (display_buffer*& buffer : g_display_buffers) {
         if (buffer != nullptr) {
             display_free_buffer(buffer);
@@ -2044,6 +2047,19 @@ void init_touch_input(lv_display_t* disp) {
     lv_indev_set_display(indev, disp);
     lv_indev_set_read_cb(indev, touch_read_cb);
     lv_timer_set_period(lv_indev_get_read_timer(indev), kTouchReadPeriodMs);
+
+    // Global click feedback: LV_EVENT_CLICKED is first dispatched to the indev
+    // itself (before the target object), and its param is the clicked object.
+    // This single handler covers every LVGL control (buttons, checkboxes,
+    // keyboard keys) across all overlays, without touching each call site.
+    lv_indev_add_event_cb(indev, [](lv_event_t* e) {
+        if (lv_event_get_code(e) != LV_EVENT_CLICKED) {
+            return;
+        }
+        if (lv_event_get_param(e) != nullptr) {
+            buzzer_beep();
+        }
+    }, LV_EVENT_CLICKED, nullptr);
 }
 
 lv_obj_t* add_label(lv_obj_t* parent, const char* text, int32_t x, int32_t y,
@@ -3096,6 +3112,7 @@ int main() {
     sync_process_timezone();
 
     const bool backlight_ready = init_backlight_gpio(0);
+    buzzer_init();
 
     if (!init_display()) {
         cleanup_display();
