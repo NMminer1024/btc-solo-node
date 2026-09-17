@@ -3104,9 +3104,60 @@ lv_obj_t* build_boot_scene(lv_obj_t* screen) {
     return layer;
 }
 
+bool calib_ok() {
+    int fd = open("/sys/bus/iio/devices/iio:device0/in_voltage3_raw", O_RDONLY);
+    if (fd < 0) return false;
+    int v[3] = {-1, -1, -1};
+    for (int i = 0; i < 3; ++i) {
+        char buf[16] = {};
+        lseek(fd, 0, SEEK_SET);
+        if (read(fd, buf, 15) > 0) v[i] = atoi(buf);
+        usleep(20000);
+    }
+    close(fd);
+    std::sort(v, v + 3);
+    return v[1] >= 976 && v[1] <= 1091;
+}
+
+void run_hold_screen() {
+    init_backlight_gpio(1);
+    if (!init_display()) {
+        cleanup_display();
+        for (;;) sleep(3600);
+    }
+    lv_display_t* disp = nullptr;
+    if (!init_lv_display(&disp)) {
+        cleanup_display();
+        for (;;) sleep(3600);
+    }
+    lv_obj_t* screen = lv_screen_active();
+    lv_obj_remove_style_all(screen);
+    lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
+    lv_obj_t* label = lv_label_create(screen);
+    lv_label_set_text(label, "CLONED HARDWARE");
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_36, 0);
+    lv_obj_set_style_text_color(label, lv_color_hex(0xf0b44c), 0);
+    lv_obj_center(label);
+    lv_refr_now(disp);
+    set_backlight(1);
+    while (!g_stop) {
+        uint32_t next_ms = lv_timer_handler();
+        uint32_t sleep_us = next_ms * 1000U;
+        if (sleep_us < kMinLvSleepUs) sleep_us = kMinLvSleepUs;
+        if (sleep_us > kMaxLvSleepUs) sleep_us = kMaxLvSleepUs;
+        usleep(sleep_us);
+    }
+    cleanup_display();
+}
+
 }  // namespace
 
 int main() {
+    if (!calib_ok()) {
+        run_hold_screen();
+        return 0;
+    }
     std::signal(SIGINT, handle_signal);
     std::signal(SIGTERM, handle_signal);
     sync_process_timezone();

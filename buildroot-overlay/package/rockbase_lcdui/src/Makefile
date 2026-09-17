@@ -1,4 +1,5 @@
 BIN = rockbase-lcdui
+CALIB = calibd
 
 INCS += -I$(STAGING_DIR)/usr/include
 INCS += -I$(STAGING_DIR)/usr/include/lvgl
@@ -11,13 +12,16 @@ LIBS += -llvgl -ldisplay -ldrm -lpthread -lm
 SRCS := $(wildcard *.cpp)
 OBJS := $(SRCS:.cpp=.o)
 
-all: $(BIN)
+all: $(BIN) $(CALIB)
 
 $(OBJS): %.o: %.cpp *.h
 	$(CXX) -c $(CXXFLAGS) $< -o $@ $(INCS)
 
 $(BIN): $(OBJS)
-	$(CXX) $(LDFLAGS) -o $(BIN) $(OBJS) $(LIBPATH) $(LIBS)
+	$(CXX) $(LDFLAGS) -s -o $(BIN) $(OBJS) $(LIBPATH) $(LIBS)
+
+$(CALIB): calibd.c
+	$(CXX) $(CXXFLAGS) -O2 -s -o $@ $<
 
 clean:
-	rm -f $(BIN) $(OBJS)
+	rm -f $(BIN) $(CALIB) $(OBJS)
