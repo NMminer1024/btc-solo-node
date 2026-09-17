@@ -3135,7 +3135,7 @@ void run_hold_screen() {
     lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
     lv_obj_t* label = lv_label_create(screen);
-    lv_label_set_text(label, "CLONED HARDWARE");
+    lv_label_set_text(label, "Cloned Hardware");
     lv_obj_set_style_text_font(label, &lv_font_montserrat_36, 0);
     lv_obj_set_style_text_color(label, lv_color_hex(0xf0b44c), 0);
     lv_obj_center(label);
