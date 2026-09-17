@@ -16,11 +16,16 @@ description: 'Build Rockbase images with Bitcoin block seed data, or sync seed d
 | IP | 型号 | 角色 | 凭据 | bitcoind datadir |
 |----|------|------|------|------------------|
 | `192.168.124.12` | RDK X5 (Ubuntu 22.04 ARM64) | Seed 源 | `sunrise` / `sunrise` | `/home/sunrise/Desktop/bitcoind/data` |
+| `192.168.124.32` | Raspberry Pi 4B Rev 1.4 | Seed 源 | `bitpony` / `qawsed123` | `/home/bitpony/block` |
 
 注意：
 - RDK X5 上 bitcoind 通过 snap 安装（`/snap/bitcoin-core/222/bin/bitcoind`）。
 - 同步 seed 前必须先优雅停止 bitcoind：`sshpass -p 'sunrise' ssh sunrise@192.168.124.12 '/home/sunrise/Desktop/bitcoind/stop.sh'`。
 - 同步完成后重启 bitcoind：`sshpass -p 'sunrise' ssh sunrise@192.168.124.12 'nohup /snap/bin/bitcoin-core.daemon -conf=/home/sunrise/Desktop/bitcoind/bitcoin.conf -datadir=/home/sunrise/Desktop/bitcoind/data &'`。
+- Raspberry Pi 4B 上 bitcoind 二进制在 `/home/bitpony/bitcoind/bin/bitcoind`，conf 在 `/home/bitpony/bitcoind/bitcoin.conf`，datadir=`/home/bitpony/block`（prune=4000）。
+  停止：`sshpass -p 'qawsed123' ssh bitpony@192.168.124.32 '/home/bitpony/bitcoind/bin/bitcoin-cli -conf=/home/bitpony/bitcoind/bitcoin.conf stop'`。
+  重启：`sshpass -p 'qawsed123' ssh bitpony@192.168.124.32 'nohup /home/bitpony/bitcoind/bin/bitcoind -conf=/home/bitpony/bitcoind/bitcoin.conf &'`。
+- ⚠️ `tools/sync-rockbase-seed-from-device.sh` 的 bitcoind 自动检测/停止/重启逻辑硬编码针对 RDK X5（匹配 `Desktop/bitcoind` 路径），对树莓派不生效。从树莓派同步时必须**手动**先停止、同步后手动重启（用上面的命令），否则会在 bitcoind 写入时同步导致 LevelDB 损坏。
 
 ---
 
@@ -130,6 +135,32 @@ bash tools/sync-rockbase-seed-from-device.sh
 
 # 同步完成后重启远端 bitcoind
 sshpass -p 'sunrise' ssh sunrise@192.168.124.12 'nohup /snap/bin/bitcoin-core.daemon -conf=/home/sunrise/Desktop/bitcoind/bitcoin.conf -datadir=/home/sunrise/Desktop/bitcoind/data > /dev/null 2>&1 &'
+```
+
+### 从 Seed 源设备 (Raspberry Pi 4B) 同步
+
+> ⚠️ 脚本的 bitcoind 自动停止/重启对树莓派不生效（硬编码 RDK X5 路径），必须手动停止/重启。
+> 另外脚本在本地 seed 目录非空时会弹交互确认，nohup 后台跑时 `read` 会读到 EOF 直接退出。
+> 所以**先手动清空本地目录**，脚本检测到空目录会跳过确认直接进 rsync。
+
+```bash
+# 1. 手动停止树莓派 bitcoind 并等待退出
+sshpass -p 'qawsed123' ssh bitpony@192.168.124.32 \
+  '/home/bitpony/bitcoind/bin/bitcoin-cli -conf=/home/bitpony/bitcoind/bitcoin.conf stop; \
+   for i in $(seq 1 60); do pgrep -f "[b]itcoind -conf" >/dev/null || { echo STOPPED; exit 0; }; sleep 2; done; echo STILL_RUNNING'
+
+# 2. 清空本地 seed 目录（跳过脚本交互确认）
+rm -rf seed/root-block && mkdir -p seed/root-block
+
+# 3. 后台同步（nohup + 日志，15G 约 7 分钟）
+REMOTE_HOST=192.168.124.32 REMOTE_USER=bitpony REMOTE_PASSWORD=qawsed123 \
+REMOTE_DIR=/home/bitpony/block \
+nohup bash tools/sync-rockbase-seed-from-device.sh > /tmp/seed-sync.log 2>&1 &
+# 轮询: tail -c 300 /tmp/seed-sync.log
+
+# 4. 同步完成后手动重启树莓派 bitcoind
+sshpass -p 'qawsed123' ssh bitpony@192.168.124.32 \
+  'nohup /home/bitpony/bitcoind/bin/bitcoind -conf=/home/bitpony/bitcoind/bitcoin.conf > /dev/null 2>&1 &'
 ```
 
 ### 交互式同步（通用）

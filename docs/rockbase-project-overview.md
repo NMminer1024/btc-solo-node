@@ -25,6 +25,7 @@ Rockbase 是基于 K230 的 Bitcoin 剪枝验证节点与本地 Stratum/solo min
 Seed 源设备：
 
 - `192.168.124.12`：RDK X5 (Ubuntu 22.04 ARM64)，凭据 `sunrise` / `sunrise`，bitcoind datadir `/home/sunrise/Desktop/bitcoind/data`。
+- `192.168.124.32`：Raspberry Pi 4B Rev 1.4，凭据 `bitpony` / `qawsed123`，bitcoind datadir `/home/bitpony/block`（prune=4000）。
 
 重要 MMC host 拓扑：
 

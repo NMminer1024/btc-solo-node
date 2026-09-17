@@ -21,6 +21,7 @@
 | IP | 型号 | 凭据 | bitcoind datadir |
 |----|------|------|------------------|
 | `192.168.124.12` | RDK X5 (Ubuntu 22.04) | `sunrise` / `sunrise` | `/home/sunrise/Desktop/bitcoind/data` |
+| `192.168.124.32` | Raspberry Pi 4B Rev 1.4 | `bitpony` / `qawsed123` | `/home/bitpony/block` |
 
 Seed 同步流程见 skill: `rockbase-seed`。
 

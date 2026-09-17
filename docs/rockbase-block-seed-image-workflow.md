@@ -10,6 +10,7 @@
 | IP | 型号 | 凭据 | bitcoind datadir |
 |----|------|------|------------------|
 | `192.168.124.12` | RDK X5 (Ubuntu 22.04 ARM64) | `sunrise` / `sunrise` | `/home/sunrise/Desktop/bitcoind/data` |
+| `192.168.124.32` | Raspberry Pi 4B Rev 1.4 | `bitpony` / `qawsed123` | `/home/bitpony/block` |
 
 同步流程见 skill: `rockbase-seed`，或直接运行 `tools/sync-rockbase-seed-from-device.sh`。
 ## 默认 seed 路径
