@@ -72,7 +72,9 @@ ddr_test_img_% :sync buildroot ###128/512/1024/2048
 
 buildroot: sync $(BRW_BUILD_DIR)/.config
 	@tools/rockbase_net_mode.sh "$(K230_NET)" "$(BRW_BUILD_DIR)" "$(BR_SRC_DIR)" "$(CONF)"
-	+make -C $(BRW_BUILD_DIR) all   BR2_PRIMARY_SITE=$(BR2_PRIMARY_SITE) K230_NET=$(K230_NET)
+	# BR2_JLEVEL 可选透传：低内存机器（<8G）构建 bitcoin 等大 C++ 包时加 BR2_JLEVEL=3 防 OOM；
+	# 不传则用 .config 默认值（0 = nproc+1 自动并行）。命令行变量优先级最高，不影响其他机器。
+	+make -C $(BRW_BUILD_DIR) all   BR2_PRIMARY_SITE=$(BR2_PRIMARY_SITE) K230_NET=$(K230_NET) $(if $(BR2_JLEVEL),BR2_JLEVEL=$(BR2_JLEVEL))
 
 .PHONY:dl
 dl:   $(BRW_BUILD_DIR)/.config
