@@ -126,6 +126,9 @@ ssh -o StrictHostKeyChecking=no root@$IP \
 
 > 说明：`--direct=1` 直接绕过 page cache 读写，等价于 dd 的冷读 + fsync 写，所以**不再需要手动 drop_caches**。
 
+> ⚠️ **顺序写必须区分 SLC 缓存值与持续写值**（2026-09-17 踩坑）：SD 卡内部有 SLC 缓存，**第一次写会命中缓存测出偏高值**（如 17-19 MB/s），缓存耗尽后掉到 TLC 持续速度（如 ~12 MB/s）。若只跑 1 次顺序写，可能误判卡快/慢。
+> **正确做法**：顺序写前先跑 1 次**预热写**（不计入结果），再跑 3 次取持续写值；或顺序写跑 3 次，**取最低/中位值**作为持续写代表值。横向对比时统一用持续写口径，不要用 SLC 缓存命中值。
+
 ### 可选：测 blockdata 分区（p3，bitcoind 数据分区）
 
 把测试文件路径换成 `/root/block/sdtest.bin`（需 `/root/block` 仍挂载，S59blockdata 未停所以正常挂载）：
@@ -251,11 +254,25 @@ fio 输出形如：
 
 | 板子 | 分区 | 顺序写 | 顺序读 | 4K 随机读 IOPS | 4K 随机写 IOPS | 卡型号/等级 |
 |------|------|--------|--------|---------------|---------------|------------|
-| 124.23 (2G) | p2 rootfs | 19.6 MB/s | 21.5 MB/s | 2065 | 1545 | SD64G (SDXC) |
+| 124.23 (2G) | p2 rootfs | ~12 MB/s（持续）| 23.4 MB/s | 2642 | 1364 | SD64G (SDXC, 用户称 A3 U3) |
+| 124.9 (1G) | p2 rootfs | 17.0 MB/s | 21.7 MB/s | 1690 | 593 | SK32G (SDXC, A1 U1) |
 
-其它板子/分区（1G、p3 blockdata）待实测，跑完后回填上表。
+其它板子/分区（p3 blockdata）待实测，跑完后回填上表。
 
-> 关键结论：顺序读写 ~20 MB/s 已顶到 HS 模式（4-bit × 50MHz ≈ 25MB/s）天花板，板子未启用 UHS-I（1.8V），这是总线/驱动限制而非卡慢。4K 随机读 2065 IOPS 对 SD 卡偏优，能支撑 bitcoind UTXO 库（LevelDB）随机读。
+> **124.23 SD64G 复测**（2026-09-17，HS 4-bit 50MHz，CPU idle 92%）：
+> - 预热写 17.7 MB/s（卡 SLC 缓存命中）；顺序写 ×3 = 11.7 / 13.6 / 12.1 MB/s（**真实持续写 ~12**）
+> - 顺序读 ×3 = 23.6 / 23.5 / 23.2 MB/s（稳定）；4K 随机写 1364 / 随机读 2642 IOPS
+> - **写掉速根因**：SD 卡内部 SLC 缓存耗尽后掉到 TLC 持续速度，属正常现象，**不是测错**。8-13 基线的 19.6 MB/s 是 SLC 缓存命中值，持续写实际 ~12 MB/s
+> - 与 8-13 基线对比：顺序读 21.5→23.4（略升）、随机读 2065→2642（升）、随机写 1545→1364（略降）、持续写 19.6→12（SLC 缓存差异，非退化）
+
+> **124.9 SK32G A1 U1 对比结论**（2026-09-17，HS 4-bit 50MHz，CPU idle 83%）：
+> - 顺序写 3 次 = 19.4 / 12.4 / 19.3 MB/s（run1/3 为 SLC 缓存命中，run2 12.4 接近持续写），顺序读 3 次 = 21.9 / 22.0 / 21.3 MB/s
+> - **顺序速度基本持平**（持续写 ~12-17 vs 124.23 的 ~12，读 ~21.7 vs 23.4）：都顶到 HS 总线天花板（4-bit × 50MHz ≈ 25MB/s），与卡等级无关
+> - **4K 随机写差距巨大**：593 vs 1364 IOPS（低 ~57%）；随机读 1690 vs 2642（低 ~36%）
+> - SK32G 实测刚好踩在 A1 标称下限（随机写 ≥500 / 随机读 ≥1500），SD64G 则远超 A1 标称
+> - 对 bitcoind UTXO 库（LevelDB 大量随机 IO）而言，SK32G 的随机写是明显短板，节点数据库写入/同步会比 SD64G 慢
+
+> 关键结论：顺序读 ~22-23 MB/s 已顶到 HS 模式（4-bit × 50MHz ≈ 25MB/s）天花板，板子未启用 UHS-I（1.8V），这是总线/驱动限制而非卡慢。顺序写受卡内部 SLC 缓存影响波动大（缓存命中 ~17-19，耗尽后持续 ~12），**测速时务必区分 SLC 缓存值与持续写值**。4K 随机读 2642 IOPS（SD64G）对 SD 卡偏优，能支撑 bitcoind UTXO 库（LevelDB）随机读。
 
 ---
 
@@ -288,7 +305,7 @@ ssh root@<IP> 'rm -f /root/sdtest.bin /root/block/sdtest.bin'
 
 ## 附：快速单板一键测速脚本
 
-把以下内容在 WSL 中整段执行，指定 IP 后自动完成"停服务 → 等待 → 验 CPU → 写×3 → 读×3 → 清理提示"：
+把以下内容在 WSL 中整段执行，指定 IP 后自动完成"停服务 → 等待 → 验 CPU → 预热写 → 写×3 → 读×3 → 清理提示"：
 
 ```bash
 IP=192.168.124.XX
@@ -309,10 +326,18 @@ ssh -o StrictHostKeyChecking=no root@$IP 'top -b -n2 -d2 | grep "^CPU" | tail -1
 echo ">>> SD card device / free space:"
 ssh -o StrictHostKeyChecking=no root@$IP 'grep mmcblk /proc/partitions; df -h /'
 
-echo ">>> Seq write (fio, 100M, direct=1, end_fsync):"
+echo ">>> Warmup write (fio, 100M, 不计入结果, 排除 SLC 缓存冷启动):"
 ssh -o StrictHostKeyChecking=no root@$IP \
-  'fio --name=seqwrite --filename=/root/sdtest.bin --rw=write --bs=1M --size=100M \
-       --direct=1 --iodepth=1 --end_fsync=1 --group_reporting 2>&1 | grep -iE "WRITE:|bw=|iops="'
+  'fio --name=warmup --filename=/root/sdtest.bin --rw=write --bs=1M --size=100M \
+       --direct=1 --iodepth=1 --end_fsync=1 --group_reporting 2>&1 | grep -iE "WRITE: bw="'
+
+echo ">>> Seq write ×3 (fio, 100M, direct=1, end_fsync, 取持续写值):"
+for i in 1 2 3; do
+  echo "--- write run $i ---"
+  ssh -o StrictHostKeyChecking=no root@$IP \
+    'fio --name=seqwrite --filename=/root/sdtest.bin --rw=write --bs=1M --size=100M \
+         --direct=1 --iodepth=1 --end_fsync=1 --group_reporting 2>&1 | grep -iE "WRITE: bw="'
+done
 
 echo ">>> Seq read (fio, 100M, direct=1):"
 ssh -o StrictHostKeyChecking=no root@$IP \
@@ -339,6 +364,7 @@ echo "    ssh root@$IP 'rm -f /root/sdtest.bin; reboot'"
 
 - 测试文件必须落在真实 SD 卡分区（`/root/` 或 `/root/block/`），**不要放 `/tmp`**（那是 tmpfs 内存盘，测的是内存不是卡）
 - 测速统一用 fio `--direct=1`（绕过 page cache），写加 `--end_fsync=1` 强制刷盘；这样无需手动 drop_caches
+- **顺序写先跑 1 次预热写再测 3 次**：SD 卡 SLC 缓存会让第一次写偏高（~17-19 MB/s），耗尽后掉到持续写（~12 MB/s）；横向对比统一用持续写口径，避免误判
 - busybox dd 无速度输出（未编译 `FEATURE_DD_THIRD_STATUS_LINE`），只显示 `100+0 records`，**不要用它测速度**
 - fio 的 IOPS 在**小写**行 `write: IOPS=...`，带宽在**大写**行 `WRITE: bw=...`，抓取用 `grep -iE`
 - debugfs 默认未挂载，读 `/sys/kernel/debug/mmc*/ios` 前先 `mount -t debugfs none /sys/kernel/debug`
