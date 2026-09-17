@@ -8,6 +8,10 @@ PIDFILE=/var/run/rockbase-lcdui.pid
 LOGFILE=/dev/null
 if [ -r /etc/TZ ]; then
 	TZ="$(sed 's/[[:space:]]//g' </etc/TZ 2>/dev/null)"
+	# 时区名 -> POSIX TZ（启动时导出给 lcdui 进程）。
+	# 注意：新增/删除时区时，必须与
+	#   package/rockbase_lcdui/src/timezone_overlay.h 的 kZones[]、
+	#   以及 src/main.cpp 的 timezone_posix_spec() 保持同步。
 	case "${TZ}" in
 		""|UTC|UTC0|Etc/UTC) TZ="UTC0" ;;
 		CST-8|Asia/Shanghai) TZ="CST-8" ;;
@@ -17,10 +21,16 @@ if [ -r /etc/TZ ]; then
 		Asia/Singapore) TZ="<+08>-8" ;;
 		Asia/Dubai) TZ="<+04>-4" ;;
 		Asia/Kolkata) TZ="IST-5:30" ;;
+		Asia/Tehran) TZ="<+03:30>-3:30" ;;
+		Asia/Kabul) TZ="<+04:30>-4:30" ;;
+		Asia/Karachi) TZ="PKST-5" ;;
+		Asia/Dhaka) TZ="<+06>-6" ;;
+		Asia/Yangon) TZ="<+06:30>-6:30" ;;
 		Europe/London) TZ="GMT0BST,M3.5.0/1,M10.5.0/2" ;;
 		Europe/Berlin) TZ="CET-1CEST,M3.5.0/2,M10.5.0/3" ;;
 		Europe/Moscow) TZ="MSK-3" ;;
 		Europe/Istanbul) TZ="<+03>-3" ;;
+		Atlantic/Azores) TZ="<-01>1<-00>,M3.5.0/0,M10.5.0/1" ;;
 		Africa/Cairo) TZ="EET-2" ;;
 		Africa/Johannesburg) TZ="SAST-2" ;;
 		America/New_York) TZ="EST5EDT,M3.2.0/2,M11.1.0/2" ;;
@@ -32,8 +42,11 @@ if [ -r /etc/TZ ]; then
 		America/Santiago) TZ="<+04>4<+03>,M9.1.6/24,M4.1.6/24" ;;
 		America/Anchorage) TZ="AKST9AKDT,M3.2.0/2,M11.1.0/2" ;;
 		Pacific/Honolulu) TZ="HST10" ;;
+		Pacific/Pago_Pago) TZ="SST11" ;;
 		Pacific/Auckland) TZ="NZST-12NZDT,M9.5.0/2,M4.1.0/3" ;;
+		Pacific/Noumea) TZ="NCT-11" ;;
 		Australia/Perth) TZ="AWST-8" ;;
+		Australia/Adelaide) TZ="ACST-9:30ACDT,M10.1.0/2,M4.1.0/3" ;;
 		Australia/Sydney) TZ="AEST-10AEDT,M10.1.0/2,M4.1.0/3" ;;
 		*) TZ="UTC0" ;;
 	esac

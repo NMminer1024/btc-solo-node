@@ -4,6 +4,8 @@ ZONEINFO_DIR=${ZONEINFO_DIR:-/usr/share/zoneinfo}
 TZ_FILE=${TZ_FILE:-/etc/TZ}
 LOCALTIME_FILE=${LOCALTIME_FILE:-/etc/localtime}
 
+# 时区名归一化（仅兼容旧值 CST-8/UTC）。
+# 新增时区无需在此添加（标准 IANA 名直接透传）；时区清单见下方 list 命令。
 normalize_tz() {
     case "$1" in
         CST-8|Asia/Shanghai) printf '%s' 'Asia/Shanghai' ;;
@@ -50,13 +52,17 @@ case "${1:-status}" in
         shift
         apply_tz "${1:-UTC}"
         ;;
+    # 时区清单：新增/删除时区时，必须与
+    #   package/rockbase_lcdui/src/timezone_overlay.h 的 kZones[] 保持同步。
     list)
         printf '%s\n' \
-            UTC Asia/Shanghai Asia/Tokyo Asia/Seoul Asia/Bangkok Asia/Singapore \
-            Europe/London Europe/Berlin Europe/Moscow Europe/Istanbul Africa/Cairo \
-            Africa/Johannesburg America/New_York America/Chicago America/Denver \
-            America/Los_Angeles America/Mexico_City America/Sao_Paulo America/Santiago \
-            America/Anchorage Pacific/Honolulu Pacific/Auckland Australia/Perth Australia/Sydney
+            Pacific/Pago_Pago Pacific/Honolulu America/Anchorage America/Los_Angeles \
+            America/Denver America/Chicago America/New_York America/Santiago \
+            America/Sao_Paulo Atlantic/Azores UTC Europe/Berlin Africa/Cairo \
+            Europe/Moscow Asia/Tehran Asia/Dubai Asia/Kabul Asia/Karachi \
+            Asia/Kolkata Asia/Dhaka Asia/Yangon Asia/Bangkok Asia/Shanghai \
+            Australia/Perth Asia/Tokyo Australia/Adelaide Australia/Sydney \
+            Pacific/Noumea Pacific/Auckland
         ;;
     *)
         echo "Usage: $0 {status|get|apply <zone>|list}"

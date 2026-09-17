@@ -46,6 +46,9 @@ void style_button(lv_obj_t* btn, uint32_t color) {
     lv_obj_set_style_border_width(btn, 0, 0);
 }
 
+// 读取 /etc/TZ 并回显为 IANA 时区名（仅兼容旧值 CST-8）。
+// 无需维护时区清单：新增时区为标准 IANA 名，会原样返回。
+// 时区清单与映射见 timezone_overlay.h 的 kZones[] 及 main.cpp 的 timezone_posix_spec()。
 std::string current_timezone_text() {
     int rc = 0;
     std::string text = run_command("sh -c 'cat /etc/TZ 2>/dev/null || readlink /etc/localtime 2>/dev/null || echo UTC'", &rc);

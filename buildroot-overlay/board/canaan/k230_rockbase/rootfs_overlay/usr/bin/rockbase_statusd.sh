@@ -209,6 +209,9 @@ chain_from_conf() {
     esac
 }
 
+# 从 /etc/TZ 读取并上报为 IANA 时区名（仅兼容旧值 CST-8）。
+# 无需维护时区清单：新增时区为标准 IANA 名，会原样返回。
+# 时区清单与映射见 package/rockbase_lcdui/src/timezone_overlay.h 的 kZones[]。
 timezone_from_system() {
     if [ -L /etc/localtime ]; then
         target=$(readlink /etc/localtime 2>/dev/null || true)

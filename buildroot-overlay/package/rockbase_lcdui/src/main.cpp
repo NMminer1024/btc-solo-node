@@ -1026,6 +1026,9 @@ std::string read_timezone_key() {
     return tz;
 }
 
+// 时区名 -> POSIX TZ 字符串（经 sync_process_timezone 的 setenv/tzset 在进程内生效）。
+// 注意：新增/删除时区时，必须与 timezone_overlay.h 的 kZones[]、
+//       timezone_offset_label()、以及 etc/init.d/S03lcdui 的 case "${TZ}" 保持同步。
 std::string timezone_posix_spec(const std::string& key) {
     if (key.empty() || key == "UTC") return "UTC0";
     if (key == "Asia/Shanghai") return "CST-8";
@@ -1035,12 +1038,18 @@ std::string timezone_posix_spec(const std::string& key) {
     if (key == "Asia/Singapore") return "<+08>-8";
     if (key == "Asia/Dubai") return "<+04>-4";
     if (key == "Asia/Kolkata") return "IST-5:30";
+    if (key == "Asia/Tehran") return "<+03:30>-3:30";
+    if (key == "Asia/Kabul") return "<+04:30>-4:30";
+    if (key == "Asia/Karachi") return "PKST-5";
+    if (key == "Asia/Dhaka") return "<+06>-6";
+    if (key == "Asia/Yangon") return "<+06:30>-6:30";
     if (key == "Europe/London") return "GMT0BST,M3.5.0/1,M10.5.0/2";
     if (key == "Europe/Berlin") return "CET-1CEST,M3.5.0/2,M10.5.0/3";
     if (key == "Europe/Moscow") return "MSK-3";
     if (key == "Europe/Istanbul") return "<+03>-3";
     if (key == "Africa/Cairo") return "EET-2";
     if (key == "Africa/Johannesburg") return "SAST-2";
+    if (key == "Atlantic/Azores") return "<-01>1<-00>,M3.5.0/0,M10.5.0/1";
     if (key == "America/New_York") return "EST5EDT,M3.2.0/2,M11.1.0/2";
     if (key == "America/Chicago") return "CST6CDT,M3.2.0/2,M11.1.0/2";
     if (key == "America/Denver") return "MST7MDT,M3.2.0/2,M11.1.0/2";
@@ -1050,9 +1059,12 @@ std::string timezone_posix_spec(const std::string& key) {
     if (key == "America/Santiago") return "<+04>4<+03>,M9.1.6/24,M4.1.6/24";
     if (key == "America/Anchorage") return "AKST9AKDT,M3.2.0/2,M11.1.0/2";
     if (key == "Pacific/Honolulu") return "HST10";
+    if (key == "Pacific/Pago_Pago") return "SST11";
     if (key == "Pacific/Auckland") return "NZST-12NZDT,M9.5.0/2,M4.1.0/3";
+    if (key == "Pacific/Noumea") return "NCT-11";
     if (key == "Australia/Perth") return "AWST-8";
     if (key == "Australia/Sydney") return "AEST-10AEDT,M10.1.0/2,M4.1.0/3";
+    if (key == "Australia/Adelaide") return "ACST-9:30ACDT,M10.1.0/2,M4.1.0/3";
     return "UTC0";
 }
 
@@ -1665,34 +1677,45 @@ std::string timezone_label(const std::string& key) {
     return key;
 }
 
+// 时区名 -> UTC 偏移显示文本。
+// 注意：新增/删除时区时，必须与 timezone_overlay.h 的 kZones[] 保持同步。
 std::string timezone_offset_label(const std::string& key) {
     const std::string zone = timezone_label(key);
     if (zone == "UTC") return "+0.0";
-    if (zone == "Africa/Cairo") return "+3.0";
-    if (zone == "Africa/Johannesburg") return "+2.0";
-    if (zone == "America/Anchorage") return "-8.0";
-    if (zone == "America/Chicago") return "-5.0";
-    if (zone == "America/Denver") return "-6.0";
-    if (zone == "America/Los_Angeles") return "-7.0";
+    if (zone == "Pacific/Pago_Pago") return "-11.0";
+    if (zone == "Pacific/Honolulu") return "-10.0";
+    if (zone == "America/Anchorage") return "-9.0";
+    if (zone == "America/Los_Angeles") return "-8.0";
+    if (zone == "America/Denver") return "-7.0";
+    if (zone == "America/Chicago") return "-6.0";
     if (zone == "America/Mexico_City") return "-6.0";
-    if (zone == "America/New_York") return "-4.0";
+    if (zone == "America/New_York") return "-5.0";
     if (zone == "America/Santiago") return "-4.0";
     if (zone == "America/Sao_Paulo") return "-3.0";
-    if (zone == "Asia/Bangkok") return "+7.0";
+    if (zone == "Atlantic/Azores") return "-1.0";
+    if (zone == "Europe/Berlin") return "+1.0";
+    if (zone == "Europe/London") return "+0.0";
+    if (zone == "Africa/Cairo") return "+2.0";
+    if (zone == "Africa/Johannesburg") return "+2.0";
+    if (zone == "Europe/Moscow") return "+3.0";
+    if (zone == "Europe/Istanbul") return "+3.0";
+    if (zone == "Asia/Tehran") return "+3.5";
     if (zone == "Asia/Dubai") return "+4.0";
+    if (zone == "Asia/Kabul") return "+4.5";
+    if (zone == "Asia/Karachi") return "+5.0";
     if (zone == "Asia/Kolkata") return "+5.5";
-    if (zone == "Asia/Seoul") return "+9.0";
+    if (zone == "Asia/Dhaka") return "+6.0";
+    if (zone == "Asia/Yangon") return "+6.5";
+    if (zone == "Asia/Bangkok") return "+7.0";
     if (zone == "Asia/Shanghai") return "+8.0";
     if (zone == "Asia/Singapore") return "+8.0";
+    if (zone == "Asia/Seoul") return "+9.0";
     if (zone == "Asia/Tokyo") return "+9.0";
-    if (zone == "Australia/Perth") return "+8.0";
+    if (zone == "Australia/Adelaide") return "+9.5";
     if (zone == "Australia/Sydney") return "+10.0";
-    if (zone == "Europe/Berlin") return "+2.0";
-    if (zone == "Europe/Istanbul") return "+3.0";
-    if (zone == "Europe/London") return "+1.0";
-    if (zone == "Europe/Moscow") return "+3.0";
+    if (zone == "Australia/Perth") return "+8.0";
+    if (zone == "Pacific/Noumea") return "+11.0";
     if (zone == "Pacific/Auckland") return "+12.0";
-    if (zone == "Pacific/Honolulu") return "-10.0";
     return "--";
 }
 
