@@ -4,25 +4,35 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <dirent.h>
 #include <fcntl.h>
-#include <linux/gpio.h>
-#include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
 namespace {
 
-// IO43 lives on gpio1_ports (IO32-63), exposed as /dev/gpiochip1 with
-// per-chip line numbering, so IO43 = line 11 (43 - 32). It is NOT on
-// gpiochip0 (IO0-31), which is why a gpiochip0/line-43 request fails with
-// EINVAL. (IO43 alt2 = PWM1, but Plan B bit-bangs it as a plain GPIO.)
-constexpr const char* kBuzzerGpioChip = "/dev/gpiochip1";
-constexpr uint32_t kBuzzerGpioLine = 11;  // IO43
+// IO43 is muxed to PWM1 (alt2), which is channel 1 of the pwm0_2 node
+// (compatible "canaan,k230-pwm", npwm=3). The kernel exposes each enabled
+// pwm node as a chip under /sys/class/pwm (e.g. pwmchip0 for pwm0_2,
+// pwmchip3 for pwm3_5). A channel's pwmN sysfs directory only appears after
+// the channel is written to the chip's "export" file, so we must export
+// channel 1 before touching period/duty_cycle/enable. We identify the right
+// chip by its device path containing "pwm0_2" (IO43 = PWM1 lives there, not
+// on pwm3_5 where channel 1 would be PWM4).
+constexpr const char* kPwmClassDir = "/sys/class/pwm";
+constexpr const char* kBuzzerPwmNode = "pwm0_2";  // IO43 = PWM1 = channel 1 of pwm0_2
+constexpr const char* kBuzzerPwmChannel = "pwm1";  // channel 1 of pwm0_2
 constexpr uint32_t kBuzzerFreqHz = 1000;  // passive buzzer resonant tone
 constexpr uint32_t kBuzzerBeepMs = 80;    // single click duration
 constexpr uint32_t kBuzzerMinIntervalMs = 60;  // throttle: avoid a buzz on rapid taps
 
-int g_buzzer_fd = -1;
+char g_chip_dir[128] = {};
+char g_export_path[128] = {};
+char g_period_path[128] = {};
+char g_duty_path[128] = {};
+char g_enable_path[128] = {};
+bool g_pwm_ready = false;
 uint64_t g_last_beep_ms = 0;
 
 // Millisecond monotonic clock, matching the tick_ms() style used elsewhere.
@@ -32,74 +42,98 @@ uint64_t now_ms() {
     return static_cast<uint64_t>(ts.tv_sec) * 1000U + static_cast<uint64_t>(ts.tv_nsec) / 1000000U;
 }
 
-// Microsecond-accurate delay. usleep() has ~1ms granularity on Linux, which is
-// far too coarse for a ~185us half-period, so spin on CLOCK_MONOTONIC instead.
-// A short beep only spins for a few tens of ms total, so the CPU cost is
-// negligible.
-void delay_us(uint32_t us) {
-    struct timespec start {};
-    clock_gettime(CLOCK_MONOTONIC, &start);
-    const long target_ns = static_cast<long>(us) * 1000L;
-    for (;;) {
-        struct timespec now {};
-        clock_gettime(CLOCK_MONOTONIC, &now);
-        const long elapsed_ns =
-            (now.tv_sec - start.tv_sec) * 1000000000L + (now.tv_nsec - start.tv_nsec);
-        if (elapsed_ns >= target_ns) {
-            break;
-        }
-    }
-}
-
-bool set_buzzer(int value) {
-    if (g_buzzer_fd < 0) {
+// Write a string to a sysfs file, truncating. Returns true on success.
+bool sysfs_write(const char* path, const char* value) {
+    int fd = open(path, O_WRONLY | O_TRUNC);
+    if (fd < 0) {
+        std::fprintf(stderr, "rockbase-lcdui: open %s failed: %s\n", path, std::strerror(errno));
         return false;
     }
-    gpio_v2_line_values values {};
-    values.mask = 1;
-    values.bits = value ? 1 : 0;
-    if (ioctl(g_buzzer_fd, GPIO_V2_LINE_SET_VALUES_IOCTL, &values) < 0) {
-        std::fprintf(stderr, "rockbase-lcdui: buzzer gpio set failed: %s\n", std::strerror(errno));
+    const size_t len = std::strlen(value);
+    const ssize_t n = write(fd, value, len);
+    close(fd);
+    if (n != static_cast<ssize_t>(len)) {
+        std::fprintf(stderr, "rockbase-lcdui: write %s failed: %s\n", path, std::strerror(errno));
         return false;
     }
     return true;
 }
 
+// Locate the pwm chip whose device path contains the target node (pwm0_2) and
+// fill in the export / period / duty_cycle / enable sysfs paths. The channel
+// directory (pwm1) does not exist yet; it is created by writing to export.
+// Returns true on success.
+bool find_buzzer_pwm() {
+    DIR* dir = opendir(kPwmClassDir);
+    if (!dir) {
+        std::fprintf(stderr, "rockbase-lcdui: open %s failed: %s\n", kPwmClassDir, std::strerror(errno));
+        return false;
+    }
+    bool found = false;
+    struct dirent* ent;
+    while ((ent = readdir(dir)) != nullptr) {
+        if (std::strncmp(ent->d_name, "pwmchip", 7) != 0) {
+            continue;
+        }
+        char device_link[128];
+        std::snprintf(device_link, sizeof(device_link), "%s/%s/device", kPwmClassDir, ent->d_name);
+        char device_path[256] = {};
+        const ssize_t n = readlink(device_link, device_path, sizeof(device_path) - 1);
+        if (n <= 0) {
+            continue;
+        }
+        device_path[n] = '\0';
+        if (std::strstr(device_path, kBuzzerPwmNode) == nullptr) {
+            continue;  // not the pwm0_2 chip (IO43 = PWM1 lives here)
+        }
+        std::snprintf(g_chip_dir, sizeof(g_chip_dir), "%s/%s", kPwmClassDir, ent->d_name);
+        std::snprintf(g_export_path, sizeof(g_export_path), "%s/export", g_chip_dir);
+        std::snprintf(g_period_path, sizeof(g_period_path), "%s/%s/period", g_chip_dir, kBuzzerPwmChannel);
+        std::snprintf(g_duty_path, sizeof(g_duty_path), "%s/%s/duty_cycle", g_chip_dir, kBuzzerPwmChannel);
+        std::snprintf(g_enable_path, sizeof(g_enable_path), "%s/%s/enable", g_chip_dir, kBuzzerPwmChannel);
+        found = true;
+        break;
+    }
+    closedir(dir);
+    return found;
+}
+
 }  // namespace
 
 void buzzer_init() {
-    int chip_fd = open(kBuzzerGpioChip, O_RDONLY | O_CLOEXEC);
-    if (chip_fd < 0) {
-        std::fprintf(stderr, "rockbase-lcdui: open %s failed: %s\n",
-                     kBuzzerGpioChip, std::strerror(errno));
+    if (!find_buzzer_pwm()) {
+        std::fprintf(stderr,
+                     "rockbase-lcdui: buzzer pwm %s (%s) not found (is CONFIG_PWM_K230 built in?)\n",
+                     kBuzzerPwmChannel, kBuzzerPwmNode);
         return;
     }
 
-    gpio_v2_line_request request {};
-    request.offsets[0] = kBuzzerGpioLine;
-    request.num_lines = 1;
-    request.config.flags = GPIO_V2_LINE_FLAG_OUTPUT;
-    request.config.num_attrs = 1;
-    request.config.attrs[0].attr.id = GPIO_V2_LINE_ATTR_ID_OUTPUT_VALUES;
-    request.config.attrs[0].attr.values = 0;
-    request.config.attrs[0].mask = 1;
-    std::snprintf(request.consumer, sizeof(request.consumer), "rockbase-lcdui");
+    // Export the channel so its pwm1 sysfs directory (period / duty_cycle /
+    // enable) is created. If it is already exported this write fails harmlessly.
+    sysfs_write(g_export_path, "1");
 
-    if (ioctl(chip_fd, GPIO_V2_GET_LINE_IOCTL, &request) < 0) {
-        std::fprintf(stderr, "rockbase-lcdui: request %s line %u failed: %s\n",
-                     kBuzzerGpioChip, kBuzzerGpioLine, std::strerror(errno));
-        close(chip_fd);
+    // Configure a 1kHz, 50% duty waveform once. The k230 pwm driver keeps the
+    // period/duty in the hardware; we only toggle enable to beep.
+    const uint32_t period_ns = 1000000000U / kBuzzerFreqHz;  // 1,000,000 ns
+    const uint32_t duty_ns = period_ns / 2U;                 // 500,000 ns
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%u", period_ns);
+    if (!sysfs_write(g_period_path, buf)) {
         return;
     }
-    close(chip_fd);
-
-    g_buzzer_fd = request.fd;
-    std::printf("rockbase-lcdui: buzzer=%s line=%u freq=%uHz\n",
-                kBuzzerGpioChip, kBuzzerGpioLine, kBuzzerFreqHz);
+    std::snprintf(buf, sizeof(buf), "%u", duty_ns);
+    if (!sysfs_write(g_duty_path, buf)) {
+        return;
+    }
+    // Start disabled.
+    sysfs_write(g_enable_path, "0");
+    g_pwm_ready = true;
+    std::printf("rockbase-lcdui: buzzer=pwm %s (%s) freq=%uHz\n",
+                kBuzzerPwmChannel, kBuzzerPwmNode, kBuzzerFreqHz);
 }
 
 void buzzer_beep() {
-    if (g_buzzer_fd < 0) {
+    if (!g_pwm_ready) {
         return;
     }
     const uint64_t now = now_ms();
@@ -108,21 +142,16 @@ void buzzer_beep() {
     }
     g_last_beep_ms = now;
 
-    const uint32_t period_us = 1000000U / kBuzzerFreqHz;
-    const uint32_t half_us = period_us / 2U;
-    const uint32_t cycles = (kBuzzerBeepMs * 1000U) / period_us;
-    for (uint32_t i = 0; i < cycles; ++i) {
-        set_buzzer(1);
-        delay_us(half_us);
-        set_buzzer(0);
-        delay_us(half_us);
+    if (!sysfs_write(g_enable_path, "1")) {
+        return;
     }
-    set_buzzer(0);
+    usleep(kBuzzerBeepMs * 1000U);
+    sysfs_write(g_enable_path, "0");
 }
 
 void buzzer_shutdown() {
-    if (g_buzzer_fd >= 0) {
-        close(g_buzzer_fd);
-        g_buzzer_fd = -1;
+    if (g_pwm_ready) {
+        sysfs_write(g_enable_path, "0");
+        g_pwm_ready = false;
     }
 }

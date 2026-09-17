@@ -1,16 +1,13 @@
 #pragma once
 
-// PWM-driven passive buzzer on GPIO43 (IO43, alt2 = PWM1).
+// PWM-driven passive buzzer on IO43 (alt2 = PWM1, channel 1 of the pwm0_2
+// node, compatible "canaan,k230-pwm").
 //
-// Plan B (userspace bit-bang): the buzzer is driven from userspace by
-// toggling the GPIO with a gpio_v2 handle plus a microsecond-accurate delay,
-// the same pattern the backlight fade already uses. This needs no kernel or
-// DTS change, so it can be hot-deployed and validated immediately.
-//
-// Once the kernel PWM subsystem is enabled (Plan A), only this module's
-// internals change to write the PWM sysfs nodes (period / duty_cycle /
-// enable); the public API below stays identical, so the call sites in
-// main.cpp and modal_overlay.cpp are untouched.
+// Plan A (kernel PWM): the buzzer is driven through the PWM sysfs interface.
+// The kernel PWM subsystem (CONFIG_PWM + CONFIG_PWM_K230) and the DTS
+// (&pwm0_2 + buzzer_pwm1_pins iomux) are required. This module configures a
+// 1kHz / 50% duty waveform once at init, then toggles the channel's
+// enable node to beep. No userspace bit-banging or busy-wait delay.
 //
 // A short beep is emitted on user "clicks": any button inside a modal
 // (bubbled up to the modal content) and any main-page config hotspot.

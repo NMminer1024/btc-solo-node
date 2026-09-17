@@ -203,7 +203,7 @@ inherits runtime hardware description from CanMV v3.
 +};
 --- /dev/null
 +++ b/arch/riscv/boot/dts/canaan/k230-rockbase-lcd.dts
-@@ -0,0 +1,199 @@
+@@ -0,0 +1,228 @@
 +// SPDX-License-Identifier: GPL-2.0 OR MIT
 +/*
 + * Copyright (C) 2024 Yangyu Chen <cyy@cyyself.name>
@@ -358,6 +358,19 @@ inherits runtime hardware description from CanMV v3.
 +			input-schmitt;
 +		};
 +	};
++
++	buzzer_pwm1_pins: buzzer_pwm1_pins {
++		pins = K230_IO43;
++		function = K230_IO43_PWM1;
++		output-enable;
++		drive-strength = <8>;
++	};
++};
++
++&pwm0_2 {
++	status = "okay";
++	pinctrl-names = "default";
++	pinctrl-0 = <&buzzer_pwm1_pins>;
 +};
 +
 +&i2c4 {
