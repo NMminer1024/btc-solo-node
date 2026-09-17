@@ -29,28 +29,13 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 
 ## 并行编译（强制）
 
-> **所有编译——无论全量还是增量——都必须使用最快的编译方式：多核 CPU 并行化。**
+> **所有编译——无论全量还是增量——都必须使用最大并行度：全 CPU 核心并行化，不做任何内存检查或并行度降级。**
 
-- 顶层 `make` 命令**必须显式追加 `-j$(nproc)`**，启用多核并行
-- Buildroot 内部默认已是 `nproc+1` 并行（`BR2_JLEVEL=0` 时），但显式指定可避免歧义、保证跨环境行为一致
+- 顶层 `make` 命令**必须显式追加 `-j$(nproc)`**，启用全核并行
+- Buildroot 内部默认已是 `nproc+1` 并行（`BR2_JLEVEL=0` 时），无需额外指定
+- **禁止**根据 `free -h`、内存大小等条件降低并行度或追加 `BR2_JLEVEL` 限制
 - 禁止使用 `-j1` 或任何串行编译方式
 - 本规则适用于所有构建入口：`buildroot`、`clean`、`linux-dirclean`、`rockbase_lcdui-rebuild` 等
-
-### 低内存机器（<8G RAM）：追加 `BR2_JLEVEL=3`
-
-> **顶层 `-jN` 只控制 buildroot 包级并行，管不到包内部（如 bitcoin 的 cmake）的并行度。**
-> 包内并行由 `BR2_JLEVEL` 控制（defconfig 默认 0 = nproc+1）。
-
-- bitcoin 31.1 交叉编译单文件峰值 ~1.5G 内存，16 核机器 `BR2_JLEVEL=0` 会起 17 个 cc1plus → **OOM**（日志 `Killed signal terminated program cc1plus`）
-- **低内存机器构建命令追加 `BR2_JLEVEL=3`**（顶层 Makefile 已支持透传，不传则用 .config 默认值，高内存机器无需任何改动）：
-
-```bash
-make CONF=k230_rockbase_defconfig buildroot -j$(nproc) BR2_JLEVEL=3 \
-  K230_BLOCKDATA_SIZE=20G K230_IMAGE_GZIP=0
-```
-
-- 判断标准：`free -h` 可用内存 < 8G 就加；≥ 16G 不用加
-- 2026-09-17 实测：7.4G 机器 `-j16`/`-j4` 均 OOM，`BR2_JLEVEL=3` 通过（峰值 ~4.5G）
 
 ---
 
