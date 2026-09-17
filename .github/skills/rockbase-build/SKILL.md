@@ -360,6 +360,48 @@ make CONF=k230_rockbase_defconfig wireless_tools-dirclean
 
 ---
 
+### ⚠️ 内核 autoconf.h 丢失 → depmod 报 WSL 主机版本
+
+**症状**：构建在 `target-finalize` 阶段报错，且版本号是 WSL 宿主机的内核版本：
+
+```
+depmod: ERROR: could not open directory .../target/lib/modules/6.6.87.2-microsoft-standard-WSL2: No such file or directory
+depmod: FATAL: could not search modules: No such file or directory
+```
+
+**根因**：内核构建目录 `output/<CONF>/build/linux-*/include/generated/autoconf.h`
+（连带 `include/config/kernel.release`）丢失了，但 `.stamp_configured` / `.stamp_built`
+还在。Buildroot 依据 stamp 判断「内核已配置完成」，增量构建会**跳过 `make prepare`**，
+于是 `make kernelrelease` 拿不到目标内核版本（`6.6.36`），回退成宿主机版本
+`6.6.87.2-microsoft-standard-WSL2`，`target-finalize` 的 `depmod -a <ver>` 就去
+`target/lib/modules/<hostver>` 找一个不存在的目录而失败。
+
+典型诱因：在内核目录里手动 `make clean` / `rm include/generated/*`，或做过
+`linux-dirclean` 后没走完整重编，造成「stamp 与文件实际状态不一致」的脏增量状态。
+
+**标准修复（推荐，走 buildroot 机制）**：
+
+```bash
+# 让 buildroot 清掉内核 stamp 并重新 prepare / 重编，别手动补文件
+make CONF=k230_rockbase_defconfig linux-rebuild
+# 若仍异常，退回更彻底的重建
+make CONF=k230_rockbase_defconfig linux-dirclean
+```
+
+**轻量修复（仅补回丢失文件，跳过 stamp 机制，应急用）**：在内核目录里执行
+
+```bash
+cd output/k230_rockbase_defconfig/build/linux-*
+make ARCH=riscv syncconfig
+```
+
+> ⚠️ 必须带 `ARCH=riscv`。不带架构时 `make syncconfig` 会报
+> `drivers/gpu/drm/Kconfig:8: recursive dependency detected`（DRM → DRM_CANAAN → OF →
+> X86_INTEL_CE → ... → DRM 的环），这是 Kconfig 在未指定架构时把 **x86 的 Kconfig 也
+> 拉进来一起解析**产生的假象，不是真实依赖问题。加 `ARCH=riscv` 后 `syncconfig` 干净通过。
+
+---
+
 ## 构建后验证（重要）
 
 如果本次目标是验证 kernel patch 是否真的进镜像，构建后至少做一项源码侧检查和一项实机侧检查。
