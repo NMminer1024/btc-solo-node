@@ -13,7 +13,7 @@ class WifiConfigOverlay {
 public:
     void open();
     void update();
-    bool active() const { return overlay_.visible(); }
+    bool active() const { return overlay_.visible() || confirm_.active(); }
 
 private:
     struct Network {

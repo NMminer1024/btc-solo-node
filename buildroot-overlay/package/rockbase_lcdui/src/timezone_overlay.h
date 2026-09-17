@@ -13,7 +13,7 @@ class TimezoneOverlay {
 public:
     void open();
     void update();
-    bool active() const { return overlay_.visible(); }
+    bool active() const { return overlay_.visible() || confirm_.active(); }
     void set_status_refresh_request(void (*cb)()) { status_refresh_request_ = cb; }
 
 private:

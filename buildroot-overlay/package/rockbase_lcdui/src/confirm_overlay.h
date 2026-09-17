@@ -16,7 +16,8 @@ public:
     void open(const char* title, const char* message,
               const char* confirm_text = "OK",
               const char* cancel_text = "Cancel",
-              const char* dont_ask_text = nullptr);
+              const char* dont_ask_text = nullptr,
+              uint32_t message_color = 0x9fb0ba);
     void update();
     void close();
 
@@ -37,6 +38,10 @@ private:
     std::string confirm_text_;
     std::string cancel_text_;
     std::string dont_ask_text_;
+    uint32_t message_color_ = 0x9fb0ba;
+    // confirm_text == nullptr in open() means "no buttons": a bare progress
+    // panel (used for "Applying..." while a worker runs in the background).
+    bool no_button_ = false;
     // cancel_text == nullptr in open() means "single button": no Cancel
     // button at all, just a wide centered confirm button (see build()).
     bool single_button_ = false;

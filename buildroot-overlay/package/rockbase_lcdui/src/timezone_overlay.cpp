@@ -1,5 +1,7 @@
 #include "timezone_overlay.h"
 
+#include "ui_style.h"
+
 #include <cstdio>
 #include <cstring>
 #include <sstream>
@@ -44,15 +46,6 @@ void style_button(lv_obj_t* btn, uint32_t color) {
     lv_obj_set_style_border_width(btn, 0, 0);
 }
 
-lv_obj_t* button_label(lv_obj_t* btn, const char* text) {
-    lv_obj_t* label = lv_label_create(btn);
-    lv_label_set_text(label, text);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_36, 0);
-    lv_obj_set_style_text_color(label, lv_color_hex(0xffffff), 0);
-    lv_obj_center(label);
-    return label;
-}
-
 std::string current_timezone_text() {
     int rc = 0;
     std::string text = run_command("sh -c 'cat /etc/TZ 2>/dev/null || readlink /etc/localtime 2>/dev/null || echo UTC'", &rc);
@@ -89,14 +82,25 @@ void TimezoneOverlay::update() {
     if (confirm_.active()) {
         const ConfirmOverlay::Result result = confirm_.consume_result();
         if (result == ConfirmOverlay::Result::Confirmed) {
-            confirm_.close();
-            set_phase(Phase::Applying);
-            rebuild();
-            start_apply();
+            if (phase_ == Phase::Confirm) {
+                confirm_.close();
+                set_phase(Phase::Applying);
+                rebuild();
+                start_apply();
+            }
+            else if (phase_ == Phase::Result) {
+                confirm_.close();
+                close();
+                return;
+            }
         }
         else if (result == ConfirmOverlay::Result::Cancelled) {
-            confirm_.close();
-            set_phase(Phase::List);
+            if (phase_ == Phase::Confirm) {
+                confirm_.close();
+                overlay_.show("Timezone");
+                set_phase(Phase::List);
+                rebuild();
+            }
         }
     }
     if (close_requested_ || overlay_.close_requested()) {
@@ -104,10 +108,18 @@ void TimezoneOverlay::update() {
         return;
     }
     if (!overlay_.visible()) {
-        phase_ = Phase::Hidden;
-        built_phase_ = Phase::Hidden;
-        body_ = nullptr;
-        message_label_ = nullptr;
+        // 大覆膜已隐藏；小弹窗仍在时继续推进（Applying 进度 → Result）。
+        if (!confirm_.active()) {
+            phase_ = Phase::Hidden;
+            built_phase_ = Phase::Hidden;
+            body_ = nullptr;
+            message_label_ = nullptr;
+            return;
+        }
+        finish_worker_if_ready();
+        if (phase_ != built_phase_) {
+            rebuild();
+        }
         return;
     }
     finish_worker_if_ready();
@@ -226,55 +238,32 @@ void TimezoneOverlay::build_list() {
                 }
             }
             if (self->selected_zone_ == nullptr) return;
+            self->overlay_.hide();
+            self->body_ = nullptr;
+            self->message_label_ = nullptr;
             self->set_phase(Phase::Confirm);
             self->rebuild();
-            std::string message = "Switch timezone to \"" + std::string(self->selected_zone_->key) + "\"?";
-            self->confirm_.open("Confirm Timezone", message.c_str(), "OK", "Cancel");
         }, LV_EVENT_CLICKED, this);
     }
 }
 
 void TimezoneOverlay::build_confirm() {
-    message_label_ = lv_label_create(body_);
-    lv_label_set_text(message_label_, "Waiting for confirmation...");
-    lv_obj_set_style_text_font(message_label_, &lv_font_montserrat_22, 0);
-    lv_obj_set_style_text_color(message_label_, lv_color_hex(0xc7d2d8), 0);
-    lv_obj_center(message_label_);
+    std::string message = "Switch timezone to \"" +
+        std::string(selected_zone_ != nullptr ? selected_zone_->key : "") + "\"?";
+    confirm_.open("Confirm Timezone", message.c_str(), "OK", "Cancel");
 }
 
 void TimezoneOverlay::build_applying() {
-    message_label_ = lv_label_create(body_);
-    std::string text = std::string("Applying ") + (selected_zone_ != nullptr ? selected_zone_->key : "UTC") + "...";
-    lv_label_set_text(message_label_, text.c_str());
-    lv_obj_set_style_text_font(message_label_, &lv_font_montserrat_22, 0);
-    lv_obj_set_style_text_color(message_label_, lv_color_hex(0xc7d2d8), 0);
-    lv_obj_center(message_label_);
+    std::string text = std::string("Applying ") +
+        (selected_zone_ != nullptr ? selected_zone_->key : "UTC") + "...";
+    confirm_.open("Timezone", text.c_str(), nullptr, nullptr);
 }
 
 void TimezoneOverlay::build_result() {
-    message_label_ = lv_label_create(body_);
     std::string text = worker_message_.empty()
         ? "Timezone updated.\nTakes effect immediately."
         : worker_message_;
-    lv_label_set_text(message_label_, text.c_str());
-    lv_obj_set_width(message_label_, 680);
-    lv_obj_set_style_text_font(message_label_, &lv_font_montserrat_18, 0);
-    lv_obj_set_style_text_color(message_label_, lv_color_hex(0xc7d2d8), 0);
-    lv_obj_set_style_text_align(message_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_long_mode(message_label_, LV_LABEL_LONG_WRAP);
-    lv_obj_align(message_label_, LV_ALIGN_TOP_MID, 0, 24);
-
-    lv_obj_t* done_btn = lv_btn_create(body_);
-    lv_obj_set_size(done_btn, 220, 72);
-    lv_obj_align(done_btn, LV_ALIGN_CENTER, 0, 86);
-    style_button(done_btn, 0x2b6b57);
-    button_label(done_btn, "Done");
-    lv_obj_add_event_cb(done_btn, [](lv_event_t* e) {
-        auto* self = static_cast<TimezoneOverlay*>(lv_event_get_user_data(e));
-        if (self != nullptr) {
-            self->request_close();
-        }
-    }, LV_EVENT_CLICKED, this);
+    confirm_.open("Timezone", text.c_str(), "Done", nullptr);
 }
 
 void TimezoneOverlay::start_apply() {

@@ -1,5 +1,7 @@
 #include "wifi_config_overlay.h"
 
+#include "ui_style.h"
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -83,15 +85,6 @@ void style_button(lv_obj_t* btn, uint32_t color) {
     lv_obj_set_style_border_width(btn, 0, 0);
 }
 
-lv_obj_t* button_label(lv_obj_t* btn, const char* text) {
-    lv_obj_t* label = lv_label_create(btn);
-    lv_label_set_text(label, text);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_22, 0);
-    lv_obj_set_style_text_color(label, lv_color_hex(0xffffff), 0);
-    lv_obj_center(label);
-    return label;
-}
-
 }  // namespace
 
 void WifiConfigOverlay::open() {
@@ -112,14 +105,25 @@ void WifiConfigOverlay::update() {
     if (confirm_.active()) {
         const ConfirmOverlay::Result result = confirm_.consume_result();
         if (result == ConfirmOverlay::Result::Confirmed) {
-            confirm_.close();
-            cleanup_keyboard();
-            set_phase(Phase::Applying);
-            start_apply();
+            if (phase_ == Phase::Confirm) {
+                confirm_.close();
+                set_phase(Phase::Applying);
+                rebuild();
+                start_apply();
+            }
+            else if (phase_ == Phase::Result) {
+                confirm_.close();
+                close();
+                return;
+            }
         }
         else if (result == ConfirmOverlay::Result::Cancelled) {
-            confirm_.close();
-            show_keyboard();
+            if (phase_ == Phase::Confirm) {
+                confirm_.close();
+                overlay_.show("Wi-Fi Setup");
+                set_phase(Phase::Password);
+                rebuild();
+            }
         }
     }
     if (close_requested_ || overlay_.close_requested()) {
@@ -127,12 +131,20 @@ void WifiConfigOverlay::update() {
         return;
     }
     if (!overlay_.visible()) {
-        cleanup_keyboard();
-        phase_ = Phase::Hidden;
-        built_phase_ = Phase::Hidden;
-        body_ = nullptr;
-        message_label_ = nullptr;
-        password_ta_ = nullptr;
+        // 大覆膜已隐藏；小弹窗仍在时继续推进（Applying 进度 → Result）。
+        if (!confirm_.active()) {
+            cleanup_keyboard();
+            phase_ = Phase::Hidden;
+            built_phase_ = Phase::Hidden;
+            body_ = nullptr;
+            message_label_ = nullptr;
+            password_ta_ = nullptr;
+            return;
+        }
+        finish_worker_if_ready();
+        if (phase_ != built_phase_) {
+            rebuild();
+        }
         return;
     }
     finish_worker_if_ready();
@@ -349,8 +361,8 @@ void WifiConfigOverlay::build_password() {
     lv_obj_t* cancel_btn = lv_btn_create(body_);
     lv_obj_set_size(cancel_btn, 198, 60);
     lv_obj_set_pos(cancel_btn, 0, 102);
-    style_button(cancel_btn, 0x35414a);
-    button_label(cancel_btn, "Back");
+    ui_style_secondary_button(cancel_btn);
+    ui_button_label(cancel_btn, "Back", 0xc7d2d8);
     lv_obj_add_event_cb(cancel_btn, [](lv_event_t* e) {
         auto* self = static_cast<WifiConfigOverlay*>(lv_event_get_user_data(e));
         if (self == nullptr) return;
@@ -361,19 +373,21 @@ void WifiConfigOverlay::build_password() {
     lv_obj_t* apply_btn = lv_btn_create(body_);
     lv_obj_set_size(apply_btn, 198, 60);
     lv_obj_set_pos(apply_btn, 514, 102);
-    style_button(apply_btn, 0x2d8f5a);
-    button_label(apply_btn, "Apply");
+    ui_style_primary_button(apply_btn);
+    ui_button_label(apply_btn, "Apply", 0xffffff);
     lv_obj_add_event_cb(apply_btn, [](lv_event_t* e) {
         auto* self = static_cast<WifiConfigOverlay*>(lv_event_get_user_data(e));
         if (self == nullptr) return;
         if (self->password_ta_ != nullptr) {
             self->pending_password_ = lv_textarea_get_text(self->password_ta_);
         }
-        self->hide_keyboard();
+        self->cleanup_keyboard();
+        self->overlay_.hide();
+        self->body_ = nullptr;
+        self->message_label_ = nullptr;
+        self->password_ta_ = nullptr;
         self->set_phase(Phase::Confirm);
         self->rebuild();
-        std::string message = "Connect to \"" + self->pending_ssid_ + "\" now?";
-        self->confirm_.open("Confirm Wi-Fi", message.c_str(), "OK", "Cancel");
     }, LV_EVENT_CLICKED, this);
 
     keyboard_ = lv_keyboard_create(lv_layer_top());
@@ -397,49 +411,18 @@ void WifiConfigOverlay::build_password() {
 }
 
 void WifiConfigOverlay::build_confirm() {
-    message_label_ = lv_label_create(body_);
-    std::string text = "Waiting for confirmation...";
-    lv_label_set_text(message_label_, text.c_str());
-    lv_obj_set_style_text_font(message_label_, &lv_font_montserrat_22, 0);
-    lv_obj_set_style_text_color(message_label_, lv_color_hex(0xc7d2d8), 0);
-    lv_obj_center(message_label_);
+    std::string message = "Connect to \"" + pending_ssid_ + "\" now?";
+    confirm_.open("Confirm Wi-Fi", message.c_str(), "OK", "Cancel");
 }
 
 void WifiConfigOverlay::build_applying() {
-    message_label_ = lv_label_create(body_);
-    std::string text = "Applying Wi-Fi profile...\nIf it fails, Rockbase will restore the previous profile.";
-    lv_label_set_text(message_label_, text.c_str());
-    lv_obj_set_width(message_label_, 620);
-    lv_obj_set_style_text_font(message_label_, &lv_font_montserrat_22, 0);
-    lv_obj_set_style_text_color(message_label_, lv_color_hex(0xf4efe2), 0);
-    lv_obj_set_style_text_align(message_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_long_mode(message_label_, LV_LABEL_LONG_WRAP);
-    lv_obj_center(message_label_);
+    confirm_.open("Wi-Fi Setup", "Applying Wi-Fi profile...", nullptr, nullptr);
 }
 
 void WifiConfigOverlay::build_result() {
-    message_label_ = lv_label_create(body_);
     std::string text = worker_message_.empty() ? "Wi-Fi operation finished." : worker_message_;
-    lv_label_set_text(message_label_, text.c_str());
-    lv_obj_set_width(message_label_, 620);
-    lv_obj_set_style_text_font(message_label_, &lv_font_montserrat_22, 0);
-    lv_obj_set_style_text_color(message_label_, lv_color_hex(worker_ok_ ? 0x59d79b : 0xff8c64), 0);
-    lv_obj_set_style_text_align(message_label_, LV_TEXT_ALIGN_CENTER, 0);
-    lv_label_set_long_mode(message_label_, LV_LABEL_LONG_WRAP);
-    lv_obj_align(message_label_, LV_ALIGN_CENTER, 0, -34);
-
-    lv_obj_t* done_btn = lv_btn_create(body_);
-    lv_obj_set_size(done_btn, 220, 72);
-    lv_obj_align(done_btn, LV_ALIGN_CENTER, 0, 72);
-    style_button(done_btn, 0x263946);
-    button_label(done_btn, "Done");
-    lv_obj_add_event_cb(done_btn, [](lv_event_t* e) {
-        auto* self = static_cast<WifiConfigOverlay*>(lv_event_get_user_data(e));
-        if (self != nullptr) {
-            self->request_close();
-        }
-        lv_event_stop_processing(e);
-    }, LV_EVENT_CLICKED, this);
+    confirm_.open("Wi-Fi Setup", text.c_str(), "Done", nullptr, nullptr,
+                  worker_ok_ ? 0x59d79b : 0xff8c64);
 }
 
 void WifiConfigOverlay::start_scan() {
