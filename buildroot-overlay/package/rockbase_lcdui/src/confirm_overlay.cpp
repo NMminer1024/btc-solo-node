@@ -139,11 +139,11 @@ void ConfirmOverlay::build() {
     if (!dont_ask_text_.empty()) {
         dont_ask_cb_ = lv_checkbox_create(content);
         lv_obj_set_pos(dont_ask_cb_, kPadX, 244);
-        // In LVGL 8 the checkbox label is the first child object.
-        lv_obj_t* cb_label = lv_obj_get_child(dont_ask_cb_, 0);
-        lv_label_set_text(cb_label, dont_ask_text_.c_str());
-        lv_obj_set_style_text_font(cb_label, &lv_font_montserrat_18, 0);
-        lv_obj_set_style_text_color(cb_label, lv_color_hex(0x9fb0ba), 0);
+        // In LVGL 8 the checkbox text is stored in cb->txt (default "Check box"),
+        // not a child label. Set it directly and style the checkbox object itself.
+        lv_checkbox_set_text(dont_ask_cb_, dont_ask_text_.c_str());
+        lv_obj_set_style_text_font(dont_ask_cb_, &lv_font_montserrat_18, 0);
+        lv_obj_set_style_text_color(dont_ask_cb_, lv_color_hex(0x6b7d8a), 0);
         lv_obj_set_style_bg_color(dont_ask_cb_, lv_color_hex(0x18242e), LV_PART_INDICATOR);
         lv_obj_set_style_bg_color(dont_ask_cb_, lv_color_hex(0x3b82c4), LV_PART_INDICATOR | LV_STATE_CHECKED);
         lv_obj_set_style_radius(dont_ask_cb_, 6, LV_PART_INDICATOR);
