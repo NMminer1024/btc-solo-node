@@ -117,7 +117,8 @@ struct TileRuntime {
     lv_obj_t* stratum_legend_6h = nullptr;
     lv_obj_t* stratum_legend_1d = nullptr;
     lv_obj_t* stratum_total_hashrate = nullptr;
-    lv_obj_t* stratum_best_share = nullptr;
+    lv_obj_t* stratum_best_share_prefix = nullptr;
+    lv_obj_t* stratum_best_share_value = nullptr;
     lv_obj_t* stratum_y_unit = nullptr;
     lv_obj_t* stratum_y_ticks[5] {};
     lv_obj_t* stratum_x_ticks[3] {};
@@ -2196,13 +2197,14 @@ bool update_stratum_chart(const StratumPageModel& model) {
     const HashrateDisplay axis_display = format_hashrate_display(static_cast<double>(max_value));
     if (g_tiles.stratum_total_hashrate != nullptr) {
         const double total_ghs = parse_hashrate_ghs(model.total_hashrate_5m);
-        const std::string total_value = format_hashrate_value(total_ghs);
-        const HashrateDisplay total_display = format_hashrate_display(total_ghs);
-        std::string total_text = total_value + " " + total_display.unit;
+        // No unit while no miner is connected (hashrate 0): just "--".
+        std::string total_text = (total_ghs <= 0.0)
+            ? std::string("--")
+            : format_hashrate_value(total_ghs) + " " + format_hashrate_display(total_ghs).unit;
         lv_label_set_text(g_tiles.stratum_total_hashrate, total_text.c_str());
     }
-    if (g_tiles.stratum_best_share != nullptr) {
-        lv_label_set_text(g_tiles.stratum_best_share, ("Best " + model.best_share).c_str());
+    if (g_tiles.stratum_best_share_value != nullptr) {
+        lv_label_set_text(g_tiles.stratum_best_share_value, model.best_share.c_str());
     }
     if (g_tiles.stratum_y_unit != nullptr) {
         lv_label_set_text(g_tiles.stratum_y_unit, axis_display.unit);
@@ -2770,14 +2772,22 @@ void build_stratum_tile(lv_obj_t* tv) {
 
     // Top-right metric block: total hashrate (large) + best share (smaller),
     // right-aligned in the empty space to the right of the URL row.
-    g_tiles.stratum_total_hashrate = add_label(tile, "--", 0, 0, &lv_font_montserrat_32, lv_color_hex(0xf4efe2));
+    // Total hashrate: font 36, top-aligned with the "Stratum" page title (y=30).
+    g_tiles.stratum_total_hashrate = add_label(tile, "--", 0, 0, &lv_font_montserrat_36, lv_color_hex(0xf4efe2));
     lv_obj_set_width(g_tiles.stratum_total_hashrate, 240);
     lv_obj_set_style_text_align(g_tiles.stratum_total_hashrate, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_align(g_tiles.stratum_total_hashrate, LV_ALIGN_TOP_RIGHT, -38, 44);
-    g_tiles.stratum_best_share = add_label(tile, "Best --", 0, 0, &lv_font_montserrat_18, lv_color_hex(0x9fb1b9));
-    lv_obj_set_width(g_tiles.stratum_best_share, 240);
-    lv_obj_set_style_text_align(g_tiles.stratum_best_share, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_align(g_tiles.stratum_best_share, LV_ALIGN_TOP_RIGHT, -38, 84);
+    lv_obj_set_style_text_letter_space(g_tiles.stratum_total_hashrate, 2, 0);
+    lv_obj_align(g_tiles.stratum_total_hashrate, LV_ALIGN_TOP_RIGHT, -38, 30);
+    // Best share: value label right-aligned, top-aligned with the URL row (y=82);
+    // dim "Best" prefix hangs to its left for a two-tone hierarchy.
+    g_tiles.stratum_best_share_value = add_label(tile, "--", 0, 0, &lv_font_montserrat_18, lv_color_hex(0xb7c2c8));
+    lv_obj_set_width(g_tiles.stratum_best_share_value, 100);
+    lv_obj_set_style_text_align(g_tiles.stratum_best_share_value, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_letter_space(g_tiles.stratum_best_share_value, 1, 0);
+    lv_obj_align(g_tiles.stratum_best_share_value, LV_ALIGN_TOP_RIGHT, -38, 82);
+    g_tiles.stratum_best_share_prefix = add_label(tile, "Best", 0, 0, &lv_font_montserrat_18, lv_color_hex(0x78848b));
+    lv_obj_set_style_text_letter_space(g_tiles.stratum_best_share_prefix, 1, 0);
+    lv_obj_align_to(g_tiles.stratum_best_share_prefix, g_tiles.stratum_best_share_value, LV_ALIGN_OUT_LEFT_MID, -6, 0);
 
     // Panel bottom must stay above the page-indicator dots (fixed at y=438).
     // (42,114) + 312 = 426, leaving a safe gap to the dots.
@@ -2805,20 +2815,30 @@ void build_stratum_tile(lv_obj_t* tv) {
     lv_obj_set_style_text_align(g_tiles.stratum_chart_hint, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_add_flag(g_tiles.stratum_chart_hint, LV_OBJ_FLAG_HIDDEN);
 
+    // Chart height 240 (y 26..266): leaves room for the x-axis tick labels
+    // (y 272..286) inside the panel content area (312 - 2*16 pad = 280).
+    // Width 632: right edge at x=52+632=684, leaving a 16px margin inside the
+    // panel content right edge (716 - 16 pad = 700) so the rightmost x-tick is
+    // never clipped by the panel border.
     g_tiles.stratum_chart = lv_chart_create(chart_panel);
     make_static(g_tiles.stratum_chart);
     lv_obj_set_pos(g_tiles.stratum_chart, 52, 26);
-    lv_obj_set_size(g_tiles.stratum_chart, 656, 258);
+    lv_obj_set_size(g_tiles.stratum_chart, 632, 240);
     lv_obj_set_style_radius(g_tiles.stratum_chart, 0, 0);
     lv_obj_set_style_bg_color(g_tiles.stratum_chart, lv_color_hex(0x0f171d), 0);
     lv_obj_set_style_bg_opa(g_tiles.stratum_chart, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(g_tiles.stratum_chart, 0, 0);
+    // Zero padding so content area = full 240px; grid lines land exactly at
+    // y = 26 + 240*i/4, matching the Y-tick label positions.
+    lv_obj_set_style_pad_all(g_tiles.stratum_chart, 0, 0);
     lv_obj_set_style_size(g_tiles.stratum_chart, 0, 0, LV_PART_INDICATOR);
     lv_obj_set_style_line_width(g_tiles.stratum_chart, 1, LV_PART_MAIN);
     lv_obj_set_style_line_color(g_tiles.stratum_chart, lv_color_hex(0x26333b), LV_PART_MAIN);
     lv_chart_set_type(g_tiles.stratum_chart, LV_CHART_TYPE_LINE);
     lv_chart_set_update_mode(g_tiles.stratum_chart, LV_CHART_UPDATE_MODE_SHIFT);
-    lv_chart_set_div_line_count(g_tiles.stratum_chart, 4, 4);
+    // 5 horizontal divisions -> 5 grid lines at 60px spacing (26/86/146/206/266),
+    // matching the 5 Y-axis tick values exactly.
+    lv_chart_set_div_line_count(g_tiles.stratum_chart, 5, 4);
     lv_chart_set_point_count(g_tiles.stratum_chart, 32);
     lv_chart_set_axis_range(g_tiles.stratum_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 20000);
     g_tiles.stratum_series_5m = lv_chart_add_series(g_tiles.stratum_chart, lv_color_hex(0x51c7a3), LV_CHART_AXIS_PRIMARY_Y);
@@ -2830,7 +2850,9 @@ void build_stratum_tile(lv_obj_t* tv) {
     lv_chart_set_series_values(g_tiles.stratum_chart, g_tiles.stratum_series_1d, zeros.data(), zeros.size());
     lv_chart_refresh(g_tiles.stratum_chart);
 
-    g_tiles.stratum_y_unit = add_label(chart_panel, "GH/s", 8, 26, &lv_font_montserrat_14, lv_color_hex(0x9aa6ac));
+    // Unit sits above the topmost Y tick (y=26) so it never overlaps the value.
+    // Brighter than the tick values (0x78848b) so the unit reads as a distinct label.
+    g_tiles.stratum_y_unit = add_label(chart_panel, "GH/s", 8, 6, &lv_font_montserrat_14, lv_color_hex(0xb7c2c8));
     lv_obj_set_width(g_tiles.stratum_y_unit, 44);
     lv_obj_set_style_text_align(g_tiles.stratum_y_unit, LV_TEXT_ALIGN_LEFT, 0);
     for (size_t i = 0; i < 5; ++i) {
@@ -2838,11 +2860,15 @@ void build_stratum_tile(lv_obj_t* tv) {
         lv_obj_set_width(g_tiles.stratum_y_ticks[i], 44);
         lv_obj_set_style_text_align(g_tiles.stratum_y_ticks[i], LV_TEXT_ALIGN_RIGHT, 0);
     }
-    lv_obj_set_pos(g_tiles.stratum_y_ticks[0], 0, 26);
-    lv_obj_set_pos(g_tiles.stratum_y_ticks[1], 0, 90);
-    lv_obj_set_pos(g_tiles.stratum_y_ticks[2], 0, 155);
-    lv_obj_set_pos(g_tiles.stratum_y_ticks[3], 0, 219);
-    lv_obj_set_pos(g_tiles.stratum_y_ticks[4], 0, 284);
+    // Y ticks: grid lines at y = 26, 86, 146, 206, 266 (5 lines, 60px spacing).
+    // montserrat_14: line_height 16, cap_height 10, base_line 3 -> digit visual
+    // center sits 8px below the label top. Offset -8 so the digit center aligns
+    // with the grid line.
+    lv_obj_set_pos(g_tiles.stratum_y_ticks[0], 0, 18);
+    lv_obj_set_pos(g_tiles.stratum_y_ticks[1], 0, 78);
+    lv_obj_set_pos(g_tiles.stratum_y_ticks[2], 0, 138);
+    lv_obj_set_pos(g_tiles.stratum_y_ticks[3], 0, 198);
+    lv_obj_set_pos(g_tiles.stratum_y_ticks[4], 0, 258);
 
     g_tiles.stratum_x_ticks[0] = add_label(chart_panel, "--", 0, 0, &lv_font_montserrat_14, lv_color_hex(0x78848b));
     g_tiles.stratum_x_ticks[1] = add_label(chart_panel, "--", 0, 0, &lv_font_montserrat_14, lv_color_hex(0x78848b));
