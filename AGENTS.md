@@ -89,6 +89,8 @@ local 包（`rockbase_lcdui` 等）源码改动后，顶层 `buildroot` 构建**
 | Web/API 开发 | `rockbase-web` |
 | 网络测速（停服务→验CPU→SSH吞吐测试） | `rockbase-netspeed` |
 | CPU 压力分布测试（按页面/进程，`/root/script/cpu_page.sh`） | `rockbase-cpupress` |
+| LCD 截屏（DRM framebuffer 抓屏，lcdui UI 目视验证闭环） | `rockbase-screenshot` |
+| 触摸滑屏/点按钮（tileview 翻页、关弹窗，闭环调试导航） | `rockbase-swipe` |
 | OTA 发布到 GitHub Releases（打版本包/签名/发布到公开发布仓库） | `rockbase-ota-release` |
 | OTA 升级真机（「ota升级124.30」→ 触发/监控/验证） | `rockbase-ota` |
 | 产品可读版本号（VERSION 文件、vX.Y.Z 含义、升版流程） | `rockbase-version` |

@@ -26,6 +26,12 @@
 #include "lvgl/lvgl.h"
 #include "lvgl/draw/lv_snapshot.h"
 #include "buzzer.h"
+
+// DSEG7 digital-tube font (see font/README.md). Its glyph set has no
+// comma/slash/percent, so those must stay in a regular font.
+LV_FONT_DECLARE(dseg7c700_font_22);
+LV_FONT_DECLARE(dseg7c700_font_28);
+LV_FONT_DECLARE(dseg7c700_font_32);
 #include "timezone_overlay.h"
 #include "wifi_config_overlay.h"
 #include "ota_overlay.h"
@@ -96,6 +102,7 @@ struct TileRuntime {
     lv_obj_t* bitcoin_stage_dot[kBitcoinStageCount] {};
     lv_obj_t* bitcoin_stage_label[kBitcoinStageCount] {};
     lv_obj_t* bitcoin_progress = nullptr;
+    lv_obj_t* bitcoin_progress_unit = nullptr;
     lv_obj_t* bitcoin_height_title = nullptr;
     lv_obj_t* bitcoin_height_current = nullptr;
     lv_obj_t* bitcoin_height_sep = nullptr;
@@ -117,8 +124,10 @@ struct TileRuntime {
     lv_obj_t* stratum_legend_6h = nullptr;
     lv_obj_t* stratum_legend_1d = nullptr;
     lv_obj_t* stratum_total_hashrate = nullptr;
+    lv_obj_t* stratum_total_hashrate_unit = nullptr;
     lv_obj_t* stratum_best_share_prefix = nullptr;
     lv_obj_t* stratum_best_share_value = nullptr;
+    lv_obj_t* stratum_best_share_unit = nullptr;
     lv_obj_t* stratum_y_unit = nullptr;
     lv_obj_t* stratum_y_ticks[5] {};
     lv_obj_t* stratum_x_ticks[3] {};
@@ -202,7 +211,6 @@ struct DashboardData {
 struct HeightCardModel {
     std::string title = "Blocks / Header";
     std::string value = "--";
-    bool split_pair = false;
 };
 
 struct BitcoinPageModel {
@@ -1582,7 +1590,32 @@ bool has_value(const std::string& value) {
     return !value.empty() && value != "-";
 }
 
-std::string format_progress_percent(const std::string& value, int32_t max_width) {
+std::string strip_commas(const std::string& value) {
+    std::string out;
+    out.reserve(value.size());
+    for (char ch : value) {
+        if (ch != ',') {
+            out += ch;
+        }
+    }
+    return out;
+}
+
+bool is_all_digits(const std::string& value) {
+    if (value.empty()) {
+        return false;
+    }
+    for (char ch : value) {
+        if (ch < '0' || ch > '9') {
+            return false;
+        }
+    }
+    return true;
+}
+
+// DSEG7 has no '%' glyph, so the value label only ever holds the integer
+// digits; the '%' suffix is rendered separately in a regular font.
+std::string format_progress_int(const std::string& value) {
     if (!has_value(value)) {
         return "--";
     }
@@ -1594,17 +1627,7 @@ std::string format_progress_percent(const std::string& value, int32_t max_width)
     }
 
     char buf[16];
-    for (int precision = 6; precision >= 0; --precision) {
-        std::snprintf(buf, sizeof(buf), "%.*f%%", precision, pct);
-
-        lv_point_t size {};
-        lv_text_get_size(&size, buf, &lv_font_montserrat_36, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-        if (size.x <= max_width) {
-            return buf;
-        }
-    }
-
-    std::snprintf(buf, sizeof(buf), "%.0f%%", pct);
+    std::snprintf(buf, sizeof(buf), "%.0f", pct);
     return buf;
 }
 
@@ -2197,14 +2220,18 @@ bool update_stratum_chart(const StratumPageModel& model) {
     const HashrateDisplay axis_display = format_hashrate_display(static_cast<double>(max_value));
     if (g_tiles.stratum_total_hashrate != nullptr) {
         const double total_ghs = parse_hashrate_ghs(model.total_hashrate_5m);
-        // No unit while no miner is connected (hashrate 0): just "--".
-        std::string total_text = (total_ghs <= 0.0)
-            ? std::string("--")
-            : format_hashrate_value(total_ghs) + " " + format_hashrate_display(total_ghs).unit;
-        lv_label_set_text(g_tiles.stratum_total_hashrate, total_text.c_str());
-    }
-    if (g_tiles.stratum_best_share_value != nullptr) {
-        lv_label_set_text(g_tiles.stratum_best_share_value, model.best_share.c_str());
+        if (total_ghs <= 0.0) {
+            lv_label_set_text(g_tiles.stratum_total_hashrate, "--");
+            lv_label_set_text(g_tiles.stratum_total_hashrate_unit, "");
+        } else {
+            lv_label_set_text(g_tiles.stratum_total_hashrate, format_hashrate_value(total_ghs).c_str());
+            lv_label_set_text(g_tiles.stratum_total_hashrate_unit, format_hashrate_display(total_ghs).unit);
+        }
+        lv_point_t unit_size {};
+        lv_text_get_size(&unit_size, lv_label_get_text(g_tiles.stratum_total_hashrate_unit),
+                         &lv_font_montserrat_22, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        lv_obj_align_to(g_tiles.stratum_total_hashrate, g_tiles.stratum_total_hashrate_unit,
+                        LV_ALIGN_OUT_LEFT_TOP, 72 - unit_size.x - 4, -13);
     }
     if (g_tiles.stratum_y_unit != nullptr) {
         lv_label_set_text(g_tiles.stratum_y_unit, axis_display.unit);
@@ -2514,13 +2541,11 @@ HeightCardModel make_height_card_model(const DashboardData& data, const std::str
     HeightCardModel card;
     card.title = "Blocks / Header";
     card.value = blocks;
-    card.split_pair = false;
 
     if (data.ibd_stage_key == "pre_headers" || data.ibd_stage_key == "sync_headers") {
         card.title = "Header";
         const std::string height = has_value(data.ibd_stage_height) ? data.ibd_stage_height : data.headers_fmt;
         card.value = join_value(height, " / ", data.headers_fmt);
-        card.split_pair = true;
     }
     else if (data.ibd_stage_key == "sync_blocks") {
         card.title = "Block Sync";
@@ -2565,7 +2590,7 @@ bool build_ui_model(UiModel& model) {
 
     model.status_available = true;
     model.bitcoin.stage_index = bitcoin_stage_index(data);
-    model.bitcoin.progress = format_progress_percent(data.progress_ring, lv_obj_get_width(g_tiles.bitcoin_progress));
+    model.bitcoin.progress = format_progress_int(data.progress_ring);
     model.bitcoin.height = make_height_card_model(data, blocks);
     model.bitcoin.peers = data.connections;
     model.bitcoin.block_date = block_date;
@@ -2726,21 +2751,35 @@ void build_bitcoin_tile(lv_obj_t* tv) {
     g_tiles.bitcoin_peers = create_card(tile, 540, 142, 216, 96, "Peers", "--", accent);
     g_tiles.bitcoin_height = create_card(tile, 300, 262, 456, 88, "Blocks / Header", "--", accent,
                                          &g_tiles.bitcoin_height_title);
-    lv_obj_set_style_text_font(g_tiles.bitcoin_progress, &lv_font_montserrat_36, 0);
-    lv_obj_set_style_text_font(g_tiles.bitcoin_peers, &lv_font_montserrat_36, 0);
-    lv_obj_set_style_text_font(g_tiles.bitcoin_height, &lv_font_montserrat_36, 0);
-    lv_obj_set_y(g_tiles.bitcoin_height, 24);
+    // DSEG7 digital-tube font for the Bitcoind value cards. Its glyph set
+    // has no comma/slash/percent, so those are drawn in montserrat instead,
+    // and font_28 (not _36) is used so the digits fit inside the card
+    // without clipping/wrapping at the bottom.
+    lv_obj_set_style_text_font(g_tiles.bitcoin_progress, &dseg7c700_font_28, 0);
+    lv_obj_set_style_text_font(g_tiles.bitcoin_peers, &dseg7c700_font_28, 0);
+    lv_obj_set_style_text_font(g_tiles.bitcoin_height, &dseg7c700_font_28, 0);
+    lv_obj_set_y(g_tiles.bitcoin_progress, 30);
+    lv_obj_set_y(g_tiles.bitcoin_peers, 30);
+    lv_label_set_long_mode(g_tiles.bitcoin_progress, LV_LABEL_LONG_MODE_CLIP);
+    lv_label_set_long_mode(g_tiles.bitcoin_peers, LV_LABEL_LONG_MODE_CLIP);
+    lv_obj_add_flag(g_tiles.bitcoin_height, LV_OBJ_FLAG_HIDDEN);
+
+    lv_point_t progress_num_size {};
+    lv_text_get_size(&progress_num_size, "100", &dseg7c700_font_28, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    g_tiles.bitcoin_progress_unit = add_label(lv_obj_get_parent(g_tiles.bitcoin_progress), "%",
+                                              progress_num_size.x + 4, 30,
+                                              &lv_font_montserrat_32, lv_color_hex(0x9aa6ac));
+
     g_tiles.bitcoin_height_current = add_label(lv_obj_get_parent(g_tiles.bitcoin_height), "--", 0, 24,
-                                               &lv_font_montserrat_36, lv_color_hex(0x78848b));
+                                               &dseg7c700_font_28, lv_color_hex(0x78848b));
     lv_obj_set_width(g_tiles.bitcoin_height_current, 152);
-    lv_label_set_long_mode(g_tiles.bitcoin_height_current, LV_LABEL_LONG_MODE_DOTS);
-    g_tiles.bitcoin_height_sep = add_label(lv_obj_get_parent(g_tiles.bitcoin_height), "/", 156, 24,
-                                           &lv_font_montserrat_36, lv_color_hex(0x9aa6ac));
+    lv_label_set_long_mode(g_tiles.bitcoin_height_current, LV_LABEL_LONG_MODE_CLIP);
+    g_tiles.bitcoin_height_sep = add_label(lv_obj_get_parent(g_tiles.bitcoin_height), "/", 156, 22,
+                                           &lv_font_montserrat_32, lv_color_hex(0x9aa6ac));
     g_tiles.bitcoin_height_total = add_label(lv_obj_get_parent(g_tiles.bitcoin_height), "", 184, 24,
-                                             &lv_font_montserrat_36, lv_color_hex(0xf4efe2));
+                                             &dseg7c700_font_28, lv_color_hex(0xf4efe2));
     lv_obj_set_width(g_tiles.bitcoin_height_total, 190);
-    lv_label_set_long_mode(g_tiles.bitcoin_height_total, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_add_flag(g_tiles.bitcoin_height_current, LV_OBJ_FLAG_HIDDEN);
+    lv_label_set_long_mode(g_tiles.bitcoin_height_total, LV_LABEL_LONG_MODE_CLIP);
     lv_obj_add_flag(g_tiles.bitcoin_height_sep, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(g_tiles.bitcoin_height_total, LV_OBJ_FLAG_HIDDEN);
     lv_obj_t* block_time_card = create_card_frame(tile, 300, 372, 456, 58, "Block Time", accent,
@@ -2767,27 +2806,8 @@ void build_stratum_tile(lv_obj_t* tv) {
     lv_obj_set_width(g_tiles.stratum_url_label, 500);
     lv_label_set_long_mode(g_tiles.stratum_url_label, LV_LABEL_LONG_MODE_DOTS);
 
-    g_tiles.stratum_state_dot = create_status_dot(tile, 613, 85, 14);
+    g_tiles.stratum_state_dot = create_status_dot(tile, 548, 85, 14);
     g_tiles.stratum_state_label = nullptr;
-
-    // Top-right metric block: total hashrate (large) + best share (smaller),
-    // right-aligned in the empty space to the right of the URL row.
-    // Total hashrate: font 36, top-aligned with the "Stratum" page title (y=30).
-    g_tiles.stratum_total_hashrate = add_label(tile, "--", 0, 0, &lv_font_montserrat_36, lv_color_hex(0xf4efe2));
-    lv_obj_set_width(g_tiles.stratum_total_hashrate, 240);
-    lv_obj_set_style_text_align(g_tiles.stratum_total_hashrate, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_style_text_letter_space(g_tiles.stratum_total_hashrate, 2, 0);
-    lv_obj_align(g_tiles.stratum_total_hashrate, LV_ALIGN_TOP_RIGHT, -38, 30);
-    // Best share: value label right-aligned, top-aligned with the URL row (y=82);
-    // dim "Best" prefix hangs to its left for a two-tone hierarchy.
-    g_tiles.stratum_best_share_value = add_label(tile, "--", 0, 0, &lv_font_montserrat_18, lv_color_hex(0xb7c2c8));
-    lv_obj_set_width(g_tiles.stratum_best_share_value, 100);
-    lv_obj_set_style_text_align(g_tiles.stratum_best_share_value, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_style_text_letter_space(g_tiles.stratum_best_share_value, 1, 0);
-    lv_obj_align(g_tiles.stratum_best_share_value, LV_ALIGN_TOP_RIGHT, -38, 82);
-    g_tiles.stratum_best_share_prefix = add_label(tile, "Best", 0, 0, &lv_font_montserrat_18, lv_color_hex(0x78848b));
-    lv_obj_set_style_text_letter_space(g_tiles.stratum_best_share_prefix, 1, 0);
-    lv_obj_align_to(g_tiles.stratum_best_share_prefix, g_tiles.stratum_best_share_value, LV_ALIGN_OUT_LEFT_MID, -6, 0);
 
     // Panel bottom must stay above the page-indicator dots (fixed at y=438).
     // (42,114) + 312 = 426, leaving a safe gap to the dots.
@@ -2801,6 +2821,16 @@ void build_stratum_tile(lv_obj_t* tv) {
     lv_obj_set_style_border_width(chart_panel, 1, 0);
     lv_obj_set_style_border_color(chart_panel, lv_color_hex(0x2f4250), 0);
     lv_obj_set_style_pad_all(chart_panel, 16, 0);
+
+    g_tiles.stratum_total_hashrate_unit = add_label(tile, "", 0, 0, &lv_font_montserrat_22, lv_color_hex(0x9aa6ac));
+    lv_obj_set_width(g_tiles.stratum_total_hashrate_unit, 72);
+    lv_obj_set_style_text_align(g_tiles.stratum_total_hashrate_unit, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align_to(g_tiles.stratum_total_hashrate_unit, chart_panel, LV_ALIGN_OUT_TOP_RIGHT, 0, -4);
+    g_tiles.stratum_total_hashrate = add_label(tile, "--", 0, 0, &dseg7c700_font_32, lv_color_hex(0xf0b44c));
+    lv_obj_set_width(g_tiles.stratum_total_hashrate, 120);
+    lv_obj_set_style_text_align(g_tiles.stratum_total_hashrate, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_label_set_long_mode(g_tiles.stratum_total_hashrate, LV_LABEL_LONG_MODE_CLIP);
+    lv_obj_align_to(g_tiles.stratum_total_hashrate, g_tiles.stratum_total_hashrate_unit, LV_ALIGN_OUT_LEFT_TOP, -4, -13);
 
     g_tiles.stratum_legend_5m = add_label(chart_panel, "5m", 0, 0, &lv_font_montserrat_16, lv_color_hex(0x51c7a3));
     g_tiles.stratum_legend_6h = add_label(chart_panel, "6h", 0, 0, &lv_font_montserrat_16, lv_color_hex(0x7fa16c));
@@ -2957,35 +2987,30 @@ bool update_height_card(const HeightCardModel& card) {
     bool dirty = false;
 
     dirty |= set_label(g_tiles.bitcoin_height_title, card.title);
-    if (card.split_pair) {
-        std::string left_value;
-        std::string right_value;
-        split_pair_value(card.value, left_value, right_value);
-        dirty |= set_label(g_tiles.bitcoin_height_current, left_value);
-        dirty |= set_label(g_tiles.bitcoin_height_sep, right_value.empty() ? "" : "/");
-        dirty |= set_label(g_tiles.bitcoin_height_total, right_value);
-        dirty |= set_hidden(g_tiles.bitcoin_height, true);
-        dirty |= set_hidden(g_tiles.bitcoin_height_current, false);
-        dirty |= set_hidden(g_tiles.bitcoin_height_sep, false);
-        dirty |= set_hidden(g_tiles.bitcoin_height_total, false);
-    }
-    else {
-        dirty |= set_hidden(g_tiles.bitcoin_height, false);
-        dirty |= set_hidden(g_tiles.bitcoin_height_current, true);
-        dirty |= set_hidden(g_tiles.bitcoin_height_sep, true);
-        dirty |= set_hidden(g_tiles.bitcoin_height_total, true);
-        dirty |= set_label(g_tiles.bitcoin_height, card.value);
-    }
+
+    std::string left_value;
+    std::string right_value;
+    split_pair_value(card.value, left_value, right_value);
+    // DSEG7 has no ',' or '/' glyph: numbers are stripped of thousands
+    // separators and the separator is drawn in a regular font instead.
+    left_value = strip_commas(left_value);
+    right_value = strip_commas(right_value);
+    const bool show_total = !right_value.empty();
+
+    dirty |= set_label(g_tiles.bitcoin_height_current, left_value);
+    dirty |= set_label(g_tiles.bitcoin_height_sep, show_total ? "/" : "");
+    dirty |= set_label(g_tiles.bitcoin_height_total, right_value);
+    dirty |= set_hidden(g_tiles.bitcoin_height_sep, !show_total);
+    dirty |= set_hidden(g_tiles.bitcoin_height_total, !show_total);
     return dirty;
 }
 
 uint32_t apply_status_unavailable_model() {
     bool dirty = false;
     dirty |= set_label(g_tiles.bitcoin_progress, "No status");
+    dirty |= set_hidden(g_tiles.bitcoin_progress_unit, true);
     dirty |= set_label(g_tiles.bitcoin_height_title, "Blocks / Header");
-    dirty |= set_label(g_tiles.bitcoin_height, "--");
-    dirty |= set_hidden(g_tiles.bitcoin_height, false);
-    dirty |= set_hidden(g_tiles.bitcoin_height_current, true);
+    dirty |= set_label(g_tiles.bitcoin_height_current, "--");
     dirty |= set_hidden(g_tiles.bitcoin_height_sep, true);
     dirty |= set_hidden(g_tiles.bitcoin_height_total, true);
     dirty |= set_label(g_tiles.bitcoin_block_date_title, "Block Time");
@@ -3000,6 +3025,7 @@ uint32_t apply_ui_model(const UiModel& model) {
 
     dirty |= update_bitcoin_stage_list(model.bitcoin.stage_index);
     dirty |= set_label(g_tiles.bitcoin_progress, model.bitcoin.progress);
+    dirty |= set_hidden(g_tiles.bitcoin_progress_unit, !is_all_digits(model.bitcoin.progress));
     dirty |= update_height_card(model.bitcoin.height);
     dirty |= set_label(g_tiles.bitcoin_peers, model.bitcoin.peers);
     dirty |= set_label(g_tiles.bitcoin_block_date_title, "Block Time");
