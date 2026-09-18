@@ -35,7 +35,7 @@ namespace {
 
 constexpr uint32_t kUiWidth = 800;
 constexpr uint32_t kUiHeight = 480;
-constexpr uint32_t kSwipeDragStartThresholdPx = 10;
+constexpr uint32_t kSwipeDragStartThresholdPx = 40;
 constexpr uint32_t kPageSwitchThresholdPx = kUiWidth / 10U;
 constexpr uint32_t kFramePixels = kUiWidth * kUiHeight;
 constexpr uint32_t kTileCount = 4;
@@ -117,6 +117,7 @@ struct TileRuntime {
     lv_obj_t* stratum_legend_6h = nullptr;
     lv_obj_t* stratum_legend_1d = nullptr;
     lv_obj_t* stratum_total_hashrate = nullptr;
+    lv_obj_t* stratum_best_share = nullptr;
     lv_obj_t* stratum_y_unit = nullptr;
     lv_obj_t* stratum_y_ticks[5] {};
     lv_obj_t* stratum_x_ticks[3] {};
@@ -223,6 +224,7 @@ struct StratumPageModel {
     std::string user = "--";
     std::string mode = "--";
     std::string total_hashrate_5m = "0";
+    std::string best_share = "--";
     std::vector<int32_t> history_5m;
     std::vector<int32_t> history_6h;
     std::vector<int32_t> history_1d;
@@ -2199,6 +2201,9 @@ bool update_stratum_chart(const StratumPageModel& model) {
         std::string total_text = total_value + " " + total_display.unit;
         lv_label_set_text(g_tiles.stratum_total_hashrate, total_text.c_str());
     }
+    if (g_tiles.stratum_best_share != nullptr) {
+        lv_label_set_text(g_tiles.stratum_best_share, ("Best " + model.best_share).c_str());
+    }
     if (g_tiles.stratum_y_unit != nullptr) {
         lv_label_set_text(g_tiles.stratum_y_unit, axis_display.unit);
     }
@@ -2574,6 +2579,9 @@ bool build_ui_model(UiModel& model) {
     model.stratum.user = data.btc_address != "-" ? data.btc_address : data.user_hint;
     model.stratum.mode = data.recommended_mode;
     model.stratum.total_hashrate_5m = data.miners_hashrate_5m;
+    if (!data.miners_snapshot.miners.empty()) {
+        model.stratum.best_share = data.miners_snapshot.miners[0].best_share;
+    }
     model.stratum.history_5m = data.miners_history_5m;
     model.stratum.history_6h = data.miners_history_6h;
     model.stratum.history_1d = data.miners_history_1d;
@@ -2754,16 +2762,29 @@ void build_stratum_tile(lv_obj_t* tv) {
     lv_obj_t* tile = create_tile_base(tv, 1, spec);
 
     g_tiles.stratum_url_label = add_label(tile, "stratum+tcp://-", 38, 82, &lv_font_montserrat_18, lv_color_hex(0xf4efe2));
-    lv_obj_set_width(g_tiles.stratum_url_label, 560);
+    lv_obj_set_width(g_tiles.stratum_url_label, 500);
     lv_label_set_long_mode(g_tiles.stratum_url_label, LV_LABEL_LONG_MODE_DOTS);
 
     g_tiles.stratum_state_dot = create_status_dot(tile, 613, 85, 14);
     g_tiles.stratum_state_label = nullptr;
 
+    // Top-right metric block: total hashrate (large) + best share (smaller),
+    // right-aligned in the empty space to the right of the URL row.
+    g_tiles.stratum_total_hashrate = add_label(tile, "--", 0, 0, &lv_font_montserrat_32, lv_color_hex(0xf4efe2));
+    lv_obj_set_width(g_tiles.stratum_total_hashrate, 240);
+    lv_obj_set_style_text_align(g_tiles.stratum_total_hashrate, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align(g_tiles.stratum_total_hashrate, LV_ALIGN_TOP_RIGHT, -38, 44);
+    g_tiles.stratum_best_share = add_label(tile, "Best --", 0, 0, &lv_font_montserrat_18, lv_color_hex(0x9fb1b9));
+    lv_obj_set_width(g_tiles.stratum_best_share, 240);
+    lv_obj_set_style_text_align(g_tiles.stratum_best_share, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align(g_tiles.stratum_best_share, LV_ALIGN_TOP_RIGHT, -38, 84);
+
+    // Panel bottom must stay above the page-indicator dots (fixed at y=438).
+    // (42,114) + 312 = 426, leaving a safe gap to the dots.
     lv_obj_t* chart_panel = lv_obj_create(tile);
     make_static(chart_panel);
-    lv_obj_set_pos(chart_panel, 42, 118);
-    lv_obj_set_size(chart_panel, 716, 308);
+    lv_obj_set_pos(chart_panel, 42, 114);
+    lv_obj_set_size(chart_panel, 716, 312);
     lv_obj_set_style_radius(chart_panel, 20, 0);
     lv_obj_set_style_bg_color(chart_panel, lv_color_hex(0x0f171d), 0);
     lv_obj_set_style_bg_opa(chart_panel, LV_OPA_70, 0);
@@ -2774,23 +2795,20 @@ void build_stratum_tile(lv_obj_t* tv) {
     g_tiles.stratum_legend_5m = add_label(chart_panel, "5m", 0, 0, &lv_font_montserrat_16, lv_color_hex(0x51c7a3));
     g_tiles.stratum_legend_6h = add_label(chart_panel, "6h", 0, 0, &lv_font_montserrat_16, lv_color_hex(0x7fa16c));
     g_tiles.stratum_legend_1d = add_label(chart_panel, "1d", 0, 0, &lv_font_montserrat_16, lv_color_hex(0xc66f4f));
-    lv_obj_align(g_tiles.stratum_legend_1d, LV_ALIGN_TOP_RIGHT, -2, 0);
-    lv_obj_align_to(g_tiles.stratum_legend_6h, g_tiles.stratum_legend_1d, LV_ALIGN_OUT_LEFT_MID, -18, 0);
+    // Legend row centered horizontally at the top of the chart area.
+    lv_obj_align(g_tiles.stratum_legend_6h, LV_ALIGN_TOP_MID, 0, 6);
     lv_obj_align_to(g_tiles.stratum_legend_5m, g_tiles.stratum_legend_6h, LV_ALIGN_OUT_LEFT_MID, -18, 0);
-    g_tiles.stratum_total_hashrate = add_label(chart_panel, "--", 0, 0, &lv_font_montserrat_22, lv_color_hex(0xf4efe2));
-    lv_obj_set_width(g_tiles.stratum_total_hashrate, 260);
-    lv_obj_set_style_text_align(g_tiles.stratum_total_hashrate, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_align(g_tiles.stratum_total_hashrate, LV_ALIGN_TOP_MID, 0, -2);
-    g_tiles.stratum_chart_hint = add_label(chart_panel, "Waiting for hashrate history...", 0, 126,
+    lv_obj_align_to(g_tiles.stratum_legend_1d, g_tiles.stratum_legend_6h, LV_ALIGN_OUT_RIGHT_MID, 18, 0);
+    g_tiles.stratum_chart_hint = add_label(chart_panel, "Waiting for hashrate history...", 0, 145,
                                            &lv_font_montserrat_18, lv_color_hex(0x78848b));
-    lv_obj_set_width(g_tiles.stratum_chart_hint, 684);
+    lv_obj_set_width(g_tiles.stratum_chart_hint, 656);
     lv_obj_set_style_text_align(g_tiles.stratum_chart_hint, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_add_flag(g_tiles.stratum_chart_hint, LV_OBJ_FLAG_HIDDEN);
 
     g_tiles.stratum_chart = lv_chart_create(chart_panel);
     make_static(g_tiles.stratum_chart);
-    lv_obj_set_pos(g_tiles.stratum_chart, 56, 34);
-    lv_obj_set_size(g_tiles.stratum_chart, 628, 214);
+    lv_obj_set_pos(g_tiles.stratum_chart, 52, 26);
+    lv_obj_set_size(g_tiles.stratum_chart, 656, 258);
     lv_obj_set_style_radius(g_tiles.stratum_chart, 0, 0);
     lv_obj_set_style_bg_color(g_tiles.stratum_chart, lv_color_hex(0x0f171d), 0);
     lv_obj_set_style_bg_opa(g_tiles.stratum_chart, LV_OPA_TRANSP, 0);
@@ -2812,7 +2830,7 @@ void build_stratum_tile(lv_obj_t* tv) {
     lv_chart_set_series_values(g_tiles.stratum_chart, g_tiles.stratum_series_1d, zeros.data(), zeros.size());
     lv_chart_refresh(g_tiles.stratum_chart);
 
-    g_tiles.stratum_y_unit = add_label(chart_panel, "GH/s", 8, 34, &lv_font_montserrat_14, lv_color_hex(0x9aa6ac));
+    g_tiles.stratum_y_unit = add_label(chart_panel, "GH/s", 8, 26, &lv_font_montserrat_14, lv_color_hex(0x9aa6ac));
     lv_obj_set_width(g_tiles.stratum_y_unit, 44);
     lv_obj_set_style_text_align(g_tiles.stratum_y_unit, LV_TEXT_ALIGN_LEFT, 0);
     for (size_t i = 0; i < 5; ++i) {
@@ -2820,21 +2838,22 @@ void build_stratum_tile(lv_obj_t* tv) {
         lv_obj_set_width(g_tiles.stratum_y_ticks[i], 44);
         lv_obj_set_style_text_align(g_tiles.stratum_y_ticks[i], LV_TEXT_ALIGN_RIGHT, 0);
     }
-    lv_obj_set_pos(g_tiles.stratum_y_ticks[0], 0, 50);
-    lv_obj_set_pos(g_tiles.stratum_y_ticks[1], 0, 102);
-    lv_obj_set_pos(g_tiles.stratum_y_ticks[2], 0, 154);
-    lv_obj_set_pos(g_tiles.stratum_y_ticks[3], 0, 206);
-    lv_obj_set_pos(g_tiles.stratum_y_ticks[4], 0, 248);
+    lv_obj_set_pos(g_tiles.stratum_y_ticks[0], 0, 26);
+    lv_obj_set_pos(g_tiles.stratum_y_ticks[1], 0, 90);
+    lv_obj_set_pos(g_tiles.stratum_y_ticks[2], 0, 155);
+    lv_obj_set_pos(g_tiles.stratum_y_ticks[3], 0, 219);
+    lv_obj_set_pos(g_tiles.stratum_y_ticks[4], 0, 284);
 
-    g_tiles.stratum_x_ticks[0] = add_label(chart_panel, "--", 56, 258, &lv_font_montserrat_14, lv_color_hex(0x78848b));
-    g_tiles.stratum_x_ticks[1] = add_label(chart_panel, "--", 0, 258, &lv_font_montserrat_14, lv_color_hex(0x78848b));
-    g_tiles.stratum_x_ticks[2] = add_label(chart_panel, "--", 0, 258, &lv_font_montserrat_14, lv_color_hex(0x78848b));
+    g_tiles.stratum_x_ticks[0] = add_label(chart_panel, "--", 0, 0, &lv_font_montserrat_14, lv_color_hex(0x78848b));
+    g_tiles.stratum_x_ticks[1] = add_label(chart_panel, "--", 0, 0, &lv_font_montserrat_14, lv_color_hex(0x78848b));
+    g_tiles.stratum_x_ticks[2] = add_label(chart_panel, "--", 0, 0, &lv_font_montserrat_14, lv_color_hex(0x78848b));
     lv_obj_set_width(g_tiles.stratum_x_ticks[0], 120);
     lv_obj_set_width(g_tiles.stratum_x_ticks[1], 120);
     lv_obj_set_width(g_tiles.stratum_x_ticks[2], 120);
     lv_obj_set_style_text_align(g_tiles.stratum_x_ticks[0], LV_TEXT_ALIGN_LEFT, 0);
     lv_obj_set_style_text_align(g_tiles.stratum_x_ticks[1], LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_align(g_tiles.stratum_x_ticks[2], LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_align_to(g_tiles.stratum_x_ticks[0], g_tiles.stratum_chart, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 6);
     lv_obj_align_to(g_tiles.stratum_x_ticks[1], g_tiles.stratum_chart, LV_ALIGN_OUT_BOTTOM_MID, 0, 6);
     lv_obj_align_to(g_tiles.stratum_x_ticks[2], g_tiles.stratum_chart, LV_ALIGN_OUT_BOTTOM_RIGHT, 0, 6);
 }
