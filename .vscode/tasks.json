@@ -6,7 +6,7 @@
             "type": "shell",
             "command": "make",
             "options": {
-                "cwd": "/home/bitpony/k230_linux_sdk",
+                "cwd": "${workspaceFolder}",
                 "env": {
                     "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
                 }
