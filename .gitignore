@@ -16,6 +16,11 @@ GPATH
 GRTAGS
 GTAGS
 gtags.files
+# rockbase_lcdui local-package build artifacts (built in-tree by src/Makefile)
+buildroot-overlay/package/rockbase_lcdui/src/*.o
+buildroot-overlay/package/rockbase_lcdui/src/font/*.o
+buildroot-overlay/package/rockbase_lcdui/src/rockbase-lcdui
+buildroot-overlay/package/rockbase_lcdui/src/calibd
 df/
 .vscode/settings.json
 __pycache__/

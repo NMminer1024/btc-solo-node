@@ -26,6 +26,8 @@
 #include "lvgl/lvgl.h"
 #include "lvgl/draw/lv_snapshot.h"
 #include "buzzer.h"
+#include "network_settings_overlay.h"
+#include "ui_style.h"
 
 // DSEG7 digital-tube font (see font/README.md). Its glyph set has no
 // comma/slash/percent, so those must stay in a regular font.
@@ -134,19 +136,36 @@ struct TileRuntime {
     lv_chart_series_t* stratum_series_5m = nullptr;
     lv_chart_series_t* stratum_series_6h = nullptr;
     lv_chart_series_t* stratum_series_1d = nullptr;
-    lv_obj_t* system_cpu_busy = nullptr;
-    lv_obj_t* system_mem = nullptr;
-    lv_obj_t* system_disk = nullptr;
+    lv_obj_t* system_version_chip = nullptr;
+    lv_obj_t* system_cpu_arc = nullptr;
+    lv_obj_t* system_cpu_value = nullptr;
+    lv_obj_t* system_cpu_sub = nullptr;
+    lv_obj_t* system_mem_arc = nullptr;
+    lv_obj_t* system_mem_value = nullptr;
+    lv_obj_t* system_mem_sub = nullptr;
+    lv_obj_t* system_temp_arc = nullptr;
+    lv_obj_t* system_temp_value = nullptr;
+    lv_obj_t* system_temp_sub = nullptr;
+    lv_obj_t* system_disk_pct = nullptr;
+    lv_obj_t* system_disk_fill = nullptr;
+    lv_obj_t* system_disk_detail = nullptr;
+    lv_obj_t* system_swap_pct = nullptr;
+    lv_obj_t* system_swap_fill = nullptr;
+    lv_obj_t* system_swap_detail = nullptr;
     lv_obj_t* system_uptime = nullptr;
-    lv_obj_t* system_temp = nullptr;
-    lv_obj_t* network_ip = nullptr;
-    lv_obj_t* network_ssid = nullptr;
-    lv_obj_t* network_rssi = nullptr;
-    lv_obj_t* network_timezone = nullptr;
-    lv_obj_t* network_timezone_offset = nullptr;
+    lv_obj_t* system_footer_right = nullptr;
+    lv_obj_t* network_iface_icon = nullptr;
+    lv_obj_t* network_settings_icon = nullptr;
+    lv_obj_t* network_signal_arc = nullptr;
+    lv_obj_t* network_signal_value = nullptr;
+    lv_obj_t* network_signal_sub = nullptr;
+    lv_obj_t* network_device_dot = nullptr;
+    lv_obj_t* network_device_value = nullptr;
+    lv_obj_t* network_device_mac = nullptr;
+    lv_obj_t* network_gateway_dot = nullptr;
     lv_obj_t* network_gateway = nullptr;
+    lv_obj_t* network_dns_dot = nullptr;
     lv_obj_t* network_dns = nullptr;
-    lv_obj_t* network_ntp = nullptr;
 };
 
 struct TileSpec {
@@ -186,11 +205,20 @@ struct DashboardData {
     std::string disk_size_info = "-";
     std::string swap_used_display = "-";
     std::string swap_total_display = "-";
+    std::string mem_pct = "-";
+    std::string disk_pct = "-";
+    std::string swap_pct = "-";
+    std::string load_avg_1 = "-";
+    std::string load_avg_5 = "-";
+    std::string load_avg_15 = "-";
+    std::string product_version = "-";
     std::string temp = "-";
     std::string uptime = "-";
     std::string ip_addr = "-";
+    std::string iface = "-";
     std::string wifi_ssid = "-";
     std::string rssi_display = "-";
+    std::string rssi_pct = "0";
     int signal_level = 0;
     std::string ntp_key = "-";
     std::string mac_addr = "-";
@@ -242,15 +270,33 @@ struct StratumPageModel {
 };
 
 struct SystemPageModel {
-    std::string cpu_busy = "--";
-    std::string mem = "--";
-    std::string disk = "--";
+    int cpu_value = 0;
+    std::string cpu_text = "--";
+    std::string cpu_sub = "Load avg --";
+    int mem_value = 0;
+    std::string mem_text = "--";
+    std::string mem_sub = "-- / --";
+    int temp_value = 0;
+    std::string temp_text = "--";
+    std::string temp_sub = "--";
+    int disk_value = 0;
+    std::string disk_pct_text = "--";
+    std::string disk_detail = "--";
+    int swap_value = 0;
+    std::string swap_pct_text = "--";
+    std::string swap_detail = "--";
     std::string uptime = "--";
-    std::string temp = "--";
+    std::string footer_right = "--";
+    std::string version_text = "--";
 };
 
 struct NetworkPageModel {
+    std::string iface_icon = LV_SYMBOL_WIFI;
+    int signal_value = 0;
+    std::string signal_text = "--";
+    std::string signal_sub = "--";
     std::string ip = "--";
+    std::string mac = "--";
     std::string ssid = "--";
     std::string rssi = "--";
     int signal_level = 0;
@@ -258,7 +304,9 @@ struct NetworkPageModel {
     std::string timezone_offset = "--";
     std::string gateway = "--";
     std::string dns = "--";
-    std::string ntp = "--";
+    bool device_up = false;
+    bool gateway_up = false;
+    bool dns_up = false;
 };
 
 struct UiModel {
@@ -276,8 +324,8 @@ constexpr uint32_t page_dirty_bit(uint32_t page) {
 constexpr TileSpec kTiles[kTileCount] = {
     {"Bitcoind", "Local Bitcoin solo node overview", 0x0a141b, 0xf0b44c, true},
     {"Stratum", "", 0x101418, 0x51c7a3, true},
-    {"System", "CPU, memory, disk and uptime", 0x13151e, 0x8fb7ff, true},
-    {"Network", "WiFi, timezone and network details", 0x101719, 0xff8c64, true},
+    {"System", "Core vitals - CPU / Memory / Thermal", 0x13151e, 0x8fb7ff, true},
+    {"Network", "Active interface and upstream path", 0x101719, 0xff8c64, true},
 };
 
 constexpr const char* kPageBgRawPaths[kTileCount] = {
@@ -327,6 +375,13 @@ bool g_wifi_config_overlay_open_pending = false;
 bool g_wifi_config_overlay_wait_release = false;
 TimezoneOverlay g_timezone_overlay;
 bool g_timezone_overlay_open_pending = false;
+NetworkSettingsOverlay g_network_settings_overlay;
+bool g_network_settings_overlay_open_pending = false;
+bool g_network_settings_overlay_wait_release = false;
+NetworkSettingsOverlay::Action g_network_settings_child = NetworkSettingsOverlay::Action::None;
+std::string g_network_settings_wifi_summary = "Not connected";
+std::string g_network_settings_timezone_summary = "--";
+bool g_network_settings_wifi_enabled = false;
 MinersOverlay g_miners_overlay;
 bool g_miners_overlay_open_pending = false;
 OtaOverlay g_ota_overlay;
@@ -348,7 +403,8 @@ uint32_t tick_ms() {
 
 bool ui_interacting(uint32_t now_ms = tick_ms()) {
     (void)now_ms;
-    return g_touch.down || g_pager_anim_active || g_wifi_config_overlay.active() ||
+        return g_touch.down || g_pager_anim_active || g_network_settings_overlay.active() ||
+            g_wifi_config_overlay.active() ||
            g_timezone_overlay.active() || g_miners_overlay.active() || g_ota_overlay.active() ||
            g_firmware_update_overlay.active();
 }
@@ -370,14 +426,17 @@ void open_timezone_overlay() {
     g_timezone_overlay_open_pending = true;
 }
 
+void open_network_settings_overlay() {
+    g_network_settings_overlay_open_pending = true;
+}
+
 void open_miners_overlay() {
     g_miners_overlay_open_pending = true;
 }
 
 constexpr ConfigHotspot kConfigHotspots[] = {
     {1, 42, 118, 716, 308, open_miners_overlay},
-    {3, 420, 148, 338, 84, open_wifi_config_overlay},
-    {3, 42, 244, 338, 84, open_timezone_overlay},
+    {3, 704, 20, 64, 64, open_network_settings_overlay},
 };
 
 int find_config_hotspot(uint32_t page, int32_t x, int32_t y) {
@@ -1304,6 +1363,48 @@ int json_int_value(const std::string& object, const char* key, int fallback = 0)
     return static_cast<int>(parsed);
 }
 
+int parse_int_or(const std::string& text, int fallback) {
+    if (text.empty() || text == "-") {
+        return fallback;
+    }
+    char* end = nullptr;
+    const double parsed = std::strtod(text.c_str(), &end);
+    if (end == text.c_str()) {
+        return fallback;
+    }
+    return static_cast<int>(std::lround(parsed));
+}
+
+// Parses strings like "47.3C" or "N/A" produced by rockbase_statusd.sh.
+double parse_temp_celsius(const std::string& text, bool* ok = nullptr) {
+    if (ok != nullptr) {
+        *ok = false;
+    }
+    if (text.empty() || text == "-" || text == "N/A") {
+        return 0.0;
+    }
+    char* end = nullptr;
+    const double parsed = std::strtod(text.c_str(), &end);
+    if (end == text.c_str()) {
+        return 0.0;
+    }
+    if (ok != nullptr) {
+        *ok = true;
+    }
+    return parsed;
+}
+
+// Green/amber/red staging shared by the System page gauges.
+uint32_t threshold_color(double value, double warn, double danger, uint32_t normal_color) {
+    if (value >= danger) {
+        return 0xd65a5a;
+    }
+    if (value >= warn) {
+        return 0xf0b44c;
+    }
+    return normal_color;
+}
+
 double parse_hashrate_ghs(const std::string& value) {
     if (value.empty() || value == "-") {
         return 0.0;
@@ -1795,12 +1896,21 @@ bool load_dashboard_data(DashboardData& data) {
     data.disk_size_info = json_value(system, "disk_size_info");
     data.swap_used_display = json_value(system, "swap_used_display");
     data.swap_total_display = json_value(system, "swap_total_display");
+    data.mem_pct = json_value(system, "mem_pct");
+    data.disk_pct = json_value(system, "disk_pct");
+    data.swap_pct = json_value(system, "swap_pct");
+    data.load_avg_1 = json_value(system, "load_avg_1");
+    data.load_avg_5 = json_value(system, "load_avg_5");
+    data.load_avg_15 = json_value(system, "load_avg_15");
+    data.product_version = json_value(system, "product_version");
     data.temp = json_value(system, "temp");
     data.uptime = json_value(system, "uptime");
 
     data.ip_addr = json_value(network, "ip_addr");
+    data.iface = json_value(network, "iface");
     data.wifi_ssid = json_value(network, "wifi_ssid");
     data.rssi_display = json_value(network, "rssi_display");
+    data.rssi_pct = json_value(network, "rssi_pct");
     data.signal_level = json_int_value(network, "signal_level", 0);
     data.ntp_key = json_value(network, "ntp_key");
     data.mac_addr = json_value(network, "mac_addr");
@@ -2025,8 +2135,16 @@ void touch_read_cb(lv_indev_t*, lv_indev_data_t* data) {
     g_swipe_current_y = data->point.y;
 
     static bool was_down = false;
-    if (g_wifi_config_overlay.active() || g_timezone_overlay.active() || g_miners_overlay.active() ||
+    if (g_network_settings_overlay.active() || g_wifi_config_overlay.active() ||
+        g_timezone_overlay.active() || g_miners_overlay.active() ||
         g_ota_overlay.active() || g_firmware_update_overlay.active()) {
+        if (g_network_settings_overlay.active() && g_network_settings_overlay_wait_release) {
+            if (!g_touch.down) {
+                g_network_settings_overlay_wait_release = false;
+            }
+            was_down = g_touch.down;
+            return;
+        }
         if (g_wifi_config_overlay.active() && g_wifi_config_overlay_wait_release) {
             if (!g_touch.down) {
                 g_wifi_config_overlay_wait_release = false;
@@ -2347,6 +2465,91 @@ lv_obj_t* create_card_frame(lv_obj_t* parent, int32_t x, int32_t y, int32_t w, i
     return card;
 }
 
+struct GaugeWidgets {
+    lv_obj_t* arc = nullptr;
+    lv_obj_t* value_label = nullptr;
+    lv_obj_t* sub_label = nullptr;
+};
+
+// Instrument-cluster style ring gauge: 270-degree arc (bottom gap) with a big
+// centered value, a caption baked into the gap, and a detail line underneath.
+GaugeWidgets create_gauge(lv_obj_t* parent, int32_t x, int32_t y, int32_t size,
+                          const char* caption, lv_color_t accent) {
+    GaugeWidgets gw;
+
+    lv_obj_t* arc = lv_arc_create(parent);
+    make_static(arc);
+    lv_obj_remove_style(arc, nullptr, LV_PART_KNOB);
+    lv_obj_set_pos(arc, x, y);
+    lv_obj_set_size(arc, size, size);
+    lv_arc_set_bg_angles(arc, 135, 45);
+    lv_arc_set_rotation(arc, 0);
+    lv_arc_set_range(arc, 0, 100);
+    lv_arc_set_value(arc, 0);
+    lv_obj_set_style_arc_width(arc, 14, LV_PART_MAIN);
+    lv_obj_set_style_arc_color(arc, lv_color_hex(0x1c2430), LV_PART_MAIN);
+    lv_obj_set_style_arc_rounded(arc, true, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(arc, 14, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(arc, accent, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_rounded(arc, true, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(arc, LV_OPA_TRANSP, 0);
+    gw.arc = arc;
+
+    gw.value_label = add_label(parent, "--", x, y + size / 2 - 34, &lv_font_montserrat_36, lv_color_hex(0xf4efe2));
+    lv_obj_set_width(gw.value_label, size);
+    lv_obj_set_style_text_align(gw.value_label, LV_TEXT_ALIGN_CENTER, 0);
+
+    lv_obj_t* caption_label = add_label(parent, caption, x, y + size / 2 + 8, &lv_font_montserrat_14, lv_color_hex(0x78848b));
+    lv_obj_set_width(caption_label, size);
+    lv_obj_set_style_text_align(caption_label, LV_TEXT_ALIGN_CENTER, 0);
+
+    gw.sub_label = add_label(parent, "--", x - 30, y + size + 8, &lv_font_montserrat_18, lv_color_hex(0x9aa6ac));
+    lv_obj_set_width(gw.sub_label, size + 60);
+    lv_obj_set_style_text_align(gw.sub_label, LV_TEXT_ALIGN_CENTER, 0);
+
+    return gw;
+}
+
+constexpr int32_t kSystemBarWidth = 330;
+
+struct BarWidgets {
+    lv_obj_t* pct_label = nullptr;
+    lv_obj_t* fill = nullptr;
+    lv_obj_t* detail_label = nullptr;
+};
+
+// Thin horizontal usage bar (title + pct on one row, track below, detail underneath).
+BarWidgets create_bar(lv_obj_t* parent, int32_t x, int32_t y, const char* title, lv_color_t accent) {
+    BarWidgets bw;
+    add_label(parent, title, x, y, &lv_font_montserrat_14, lv_color_hex(0x78848b));
+    bw.pct_label = add_label(parent, "--", x, y, &lv_font_montserrat_14, accent);
+    lv_obj_set_width(bw.pct_label, kSystemBarWidth);
+    lv_obj_set_style_text_align(bw.pct_label, LV_TEXT_ALIGN_RIGHT, 0);
+
+    lv_obj_t* track = lv_obj_create(parent);
+    make_static(track);
+    lv_obj_remove_style_all(track);
+    lv_obj_set_pos(track, x, y + 22);
+    lv_obj_set_size(track, kSystemBarWidth, 8);
+    lv_obj_set_style_radius(track, 4, 0);
+    lv_obj_set_style_bg_color(track, lv_color_hex(0x1c2430), 0);
+    lv_obj_set_style_bg_opa(track, LV_OPA_COVER, 0);
+
+    lv_obj_t* fill = lv_obj_create(parent);
+    make_static(fill);
+    lv_obj_remove_style_all(fill);
+    lv_obj_set_pos(fill, x, y + 22);
+    lv_obj_set_size(fill, 0, 8);
+    lv_obj_set_style_radius(fill, 4, 0);
+    lv_obj_set_style_bg_color(fill, accent, 0);
+    lv_obj_set_style_bg_opa(fill, LV_OPA_COVER, 0);
+    bw.fill = fill;
+
+    bw.detail_label = add_label(parent, "--", x, y + 36, &lv_font_montserrat_14, lv_color_hex(0x9aa6ac));
+    lv_obj_set_width(bw.detail_label, kSystemBarWidth);
+    return bw;
+}
+
 bool set_label(lv_obj_t* label, const std::string& value) {
     if (label == nullptr) {
         return false;
@@ -2365,6 +2568,46 @@ bool set_text_color(lv_obj_t* obj, uint32_t color) {
     }
     lv_obj_set_style_text_color(obj, lv_color_hex(color), 0);
     return true;
+}
+
+bool set_network_status_dot(lv_obj_t* dot, bool online) {
+    if (dot == nullptr) {
+        return false;
+    }
+    const lv_color_t bg = lv_color_hex(online ? 0x37e88b : 0x526269);
+    const lv_color_t border = lv_color_hex(online ? 0xcaf9d6 : 0x78848b);
+    const bool changed = !lv_color_eq(lv_obj_get_style_bg_color(dot, LV_PART_MAIN), bg) ||
+                         !lv_color_eq(lv_obj_get_style_border_color(dot, LV_PART_MAIN), border);
+    lv_obj_set_style_bg_color(dot, bg, 0);
+    lv_obj_set_style_border_color(dot, border, 0);
+    return changed;
+}
+
+// Updates a System-page ring gauge: arc sweep + centered value + color staging.
+bool set_gauge(lv_obj_t* arc, lv_obj_t* value_label, int value, const std::string& text, uint32_t color) {
+    bool dirty = false;
+    if (arc != nullptr && lv_arc_get_value(arc) != value) {
+        lv_arc_set_value(arc, value);
+        lv_obj_set_style_arc_color(arc, lv_color_hex(color), LV_PART_INDICATOR);
+        dirty = true;
+    }
+    dirty |= set_label(value_label, text);
+    dirty |= set_text_color(value_label, color);
+    return dirty;
+}
+
+// Updates a System-page horizontal usage bar: fill width + pct label.
+bool set_bar(lv_obj_t* fill, lv_obj_t* pct_label, int pct, const std::string& pct_text) {
+    bool dirty = false;
+    if (fill != nullptr) {
+        const int32_t width = kSystemBarWidth * clamp_int(pct, 0, 100) / 100;
+        if (lv_obj_get_width(fill) != width) {
+            lv_obj_set_width(fill, width);
+            dirty = true;
+        }
+    }
+    dirty |= set_label(pct_label, pct_text);
+    return dirty;
 }
 
 #if 0  // 2026-08-19: 禁用 Stratum 状态点呼吸动画（无限循环动画每 10ms 触发重绘，单核 CPU 高占用热点）
@@ -2438,28 +2681,6 @@ void stop_status_dot_breathing(lv_obj_t* dot, lv_opa_t opa = LV_OPA_COVER) {
     lv_obj_set_style_opa(dot, opa, 0);
     lv_obj_clear_flag(dot, LV_OBJ_FLAG_HIDDEN);
     set_status_dot_anchor(g_tiles.stratum_state_dot_anchor_x, g_tiles.stratum_state_dot_anchor_y);
-}
-
-bool set_network_rssi_visual(const std::string& text, int signal_level) {
-    bool dirty = false;
-    dirty |= set_label(g_tiles.network_rssi, text);
-
-    uint32_t color = 0x78848b;
-    if (signal_level >= 4) {
-        color = 0x59d79b;
-    }
-    else if (signal_level == 3) {
-        color = 0x8fdc6b;
-    }
-    else if (signal_level == 2) {
-        color = 0xf0b44c;
-    }
-    else if (signal_level == 1) {
-        color = 0xff8c64;
-    }
-
-    dirty |= set_text_color(g_tiles.network_rssi, color);
-    return dirty;
 }
 
 bool set_hidden(lv_obj_t* obj, bool hidden) {
@@ -2615,21 +2836,56 @@ bool build_ui_model(UiModel& model) {
     model.stratum.history_ts = data.miners_history_ts;
     model.stratum.miners_snapshot = data.miners_snapshot;
 
-    model.system.cpu_busy = data.load_pct != "-" ? data.load_pct + "%" : "--";
-    model.system.mem = join_value(data.mem_used_display, " / ", data.mem_total_display);
-    model.system.disk = data.disk_size_info;
-    model.system.uptime = data.uptime;
-    model.system.temp = data.temp;
+    model.system.cpu_value = clamp_int(parse_int_or(data.load_pct, 0), 0, 100);
+    model.system.cpu_text = data.load_pct != "-" ? data.load_pct + "%" : "--";
+    model.system.cpu_sub = "1m " + data.load_avg_1 + "  5m " + data.load_avg_5;
 
+    model.system.mem_value = clamp_int(parse_int_or(data.mem_pct, 0), 0, 100);
+    model.system.mem_text = data.mem_pct != "-" ? data.mem_pct + "%" : "--";
+    model.system.mem_sub = join_value(data.mem_used_display, " / ", data.mem_total_display);
+
+    bool temp_ok = false;
+    const double temp_c = parse_temp_celsius(data.temp, &temp_ok);
+    model.system.temp_value = temp_ok
+        ? clamp_int(static_cast<int>(std::lround((temp_c - 20.0) * 100.0 / 70.0)), 0, 100)
+        : 0;
+    model.system.temp_text = temp_ok ? std::to_string(static_cast<int>(std::lround(temp_c))) + "C" : "--";
+    model.system.temp_sub = !temp_ok ? "--" : (temp_c >= 80.0 ? "Hot" : (temp_c >= 65.0 ? "Warm" : "Normal"));
+
+    model.system.disk_value = clamp_int(parse_int_or(data.disk_pct, 0), 0, 100);
+    model.system.disk_pct_text = data.disk_pct != "-" ? data.disk_pct + "%" : "--";
+    model.system.disk_detail = data.disk_size_info;
+
+    model.system.swap_value = clamp_int(parse_int_or(data.swap_pct, 0), 0, 100);
+    model.system.swap_pct_text = data.swap_pct != "-" ? data.swap_pct + "%" : "--";
+    model.system.swap_detail = join_value(data.swap_used_display, " / ", data.swap_total_display);
+
+    model.system.uptime = "Uptime " + data.uptime;
+    model.system.footer_right = "Load 15m " + data.load_avg_15;
+    model.system.version_text = data.product_version != "-" ? data.product_version : "--";
+
+    const bool wired = data.iface.rfind("eth", 0) == 0;
+    model.network.iface_icon = wired ? LV_SYMBOL_USB : LV_SYMBOL_WIFI;
     model.network.ip = data.ip_addr;
-    model.network.ssid = data.wifi_ssid;
-    model.network.rssi = data.rssi_display;
-    model.network.signal_level = data.signal_level;
+    model.network.mac = data.mac_addr;
+    model.network.device_up = data.ip_addr != "-" && !data.ip_addr.empty();
+    model.network.gateway_up = data.gateway_ip != "-" && !data.gateway_ip.empty();
+    model.network.dns_up = data.dns_primary != "-" && !data.dns_primary.empty();
+    model.network.signal_value = wired ? (model.network.device_up ? 100 : 0)
+                                       : clamp_int(parse_int_or(data.rssi_pct, 0), 0, 100);
+    model.network.signal_text = wired ? model.network.iface_icon
+                                      : std::to_string(model.network.signal_value) + "%";
+    model.network.signal_sub = wired
+        ? std::string(LV_SYMBOL_BULLET "  USB Ethernet")
+        : std::string(LV_SYMBOL_BULLET "  ") + data.wifi_ssid +
+              "  " LV_SYMBOL_BULLET "  " + data.rssi_display;
+    model.network.ssid = wired ? "Not active (tap to configure)" : data.wifi_ssid;
+    model.network.rssi = wired ? "WIRED" : data.rssi_display;
+    model.network.signal_level = wired ? (model.network.device_up ? 4 : 0) : data.signal_level;
     model.network.timezone = timezone_label(data.timezone_key);
     model.network.timezone_offset = timezone_offset_label(data.timezone_key);
     model.network.gateway = data.gateway_ip;
     model.network.dns = join_value(data.dns_primary, " / ", data.dns_secondary);
-    model.network.ntp = ntp_label(data.ntp_key);
     return true;
 }
 
@@ -2753,11 +3009,11 @@ void build_bitcoin_tile(lv_obj_t* tv) {
                                          &g_tiles.bitcoin_height_title);
     // DSEG7 digital-tube font for the Bitcoind value cards. Its glyph set
     // has no comma/slash/percent, so those are drawn in montserrat instead,
-    // and font_28 (not _36) is used so the digits fit inside the card
+    // and font_32 (not _36) is used so the digits fit inside the card
     // without clipping/wrapping at the bottom.
-    lv_obj_set_style_text_font(g_tiles.bitcoin_progress, &dseg7c700_font_28, 0);
-    lv_obj_set_style_text_font(g_tiles.bitcoin_peers, &dseg7c700_font_28, 0);
-    lv_obj_set_style_text_font(g_tiles.bitcoin_height, &dseg7c700_font_28, 0);
+    lv_obj_set_style_text_font(g_tiles.bitcoin_progress, &dseg7c700_font_32, 0);
+    lv_obj_set_style_text_font(g_tiles.bitcoin_peers, &dseg7c700_font_32, 0);
+    lv_obj_set_style_text_font(g_tiles.bitcoin_height, &dseg7c700_font_32, 0);
     lv_obj_set_y(g_tiles.bitcoin_progress, 30);
     lv_obj_set_y(g_tiles.bitcoin_peers, 30);
     lv_label_set_long_mode(g_tiles.bitcoin_progress, LV_LABEL_LONG_MODE_CLIP);
@@ -2765,19 +3021,24 @@ void build_bitcoin_tile(lv_obj_t* tv) {
     lv_obj_add_flag(g_tiles.bitcoin_height, LV_OBJ_FLAG_HIDDEN);
 
     lv_point_t progress_num_size {};
-    lv_text_get_size(&progress_num_size, "100", &dseg7c700_font_28, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    lv_text_get_size(&progress_num_size, "100", &dseg7c700_font_32, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    // Bottom-align the "%" with the digits: shift it down by the height
+    // difference so both share the same baseline at the bottom of the card.
+    lv_point_t progress_pct_size {};
+    lv_text_get_size(&progress_pct_size, "%", &lv_font_montserrat_32, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
     g_tiles.bitcoin_progress_unit = add_label(lv_obj_get_parent(g_tiles.bitcoin_progress), "%",
-                                              progress_num_size.x + 4, 30,
+                                              progress_num_size.x + 4,
+                                              34 + (progress_num_size.y - progress_pct_size.y),
                                               &lv_font_montserrat_32, lv_color_hex(0x9aa6ac));
 
     g_tiles.bitcoin_height_current = add_label(lv_obj_get_parent(g_tiles.bitcoin_height), "--", 0, 24,
-                                               &dseg7c700_font_28, lv_color_hex(0x78848b));
+                                               &dseg7c700_font_32, lv_color_hex(0x78848b));
     lv_obj_set_width(g_tiles.bitcoin_height_current, 152);
     lv_label_set_long_mode(g_tiles.bitcoin_height_current, LV_LABEL_LONG_MODE_CLIP);
-    g_tiles.bitcoin_height_sep = add_label(lv_obj_get_parent(g_tiles.bitcoin_height), "/", 156, 22,
+    g_tiles.bitcoin_height_sep = add_label(lv_obj_get_parent(g_tiles.bitcoin_height), "/", 161, 24,
                                            &lv_font_montserrat_32, lv_color_hex(0x9aa6ac));
     g_tiles.bitcoin_height_total = add_label(lv_obj_get_parent(g_tiles.bitcoin_height), "", 184, 24,
-                                             &dseg7c700_font_28, lv_color_hex(0xf4efe2));
+                                             &dseg7c700_font_32, lv_color_hex(0xf4efe2));
     lv_obj_set_width(g_tiles.bitcoin_height_total, 190);
     lv_label_set_long_mode(g_tiles.bitcoin_height_total, LV_LABEL_LONG_MODE_CLIP);
     lv_obj_add_flag(g_tiles.bitcoin_height_sep, LV_OBJ_FLAG_HIDDEN);
@@ -2920,12 +3181,58 @@ void build_system_tile(lv_obj_t* tv) {
     const lv_color_t accent = lv_color_hex(spec.accent);
     lv_obj_t* tile = create_tile_base(tv, 2, spec);
 
-    g_tiles.system_cpu_busy = create_card(tile, 42, 148, 210, 112, "CPU Busy", "--", accent);
-    g_tiles.system_mem = create_card(tile, 294, 148, 210, 112, "Memory", "--", accent);
-    g_tiles.system_disk = create_card(tile, 546, 148, 210, 112, "Block Disk", "--", accent);
-    g_tiles.system_uptime = create_card(tile, 42, 294, 210, 104, "Uptime", "--", accent);
-    g_tiles.system_temp = create_card(tile, 294, 294, 210, 104, "Temp", "--", accent);
-    // Position (546, 294, 210, 104) reserved for future use.
+    g_tiles.system_version_chip = add_label(tile, "--", 620, 38, &lv_font_montserrat_18, lv_color_hex(0x78848b));
+    lv_obj_set_width(g_tiles.system_version_chip, 138);
+    lv_obj_set_style_text_align(g_tiles.system_version_chip, LV_TEXT_ALIGN_RIGHT, 0);
+
+    // Three instrument-cluster gauges: CPU load, memory, thermal.
+    constexpr int32_t kGaugeSize = 168;
+    constexpr int32_t kGaugeY = 116;
+    constexpr int32_t kGaugeX[3] = {46, 316, 586};
+
+    GaugeWidgets cpu = create_gauge(tile, kGaugeX[0], kGaugeY, kGaugeSize, "CPU LOAD", accent);
+    g_tiles.system_cpu_arc = cpu.arc;
+    g_tiles.system_cpu_value = cpu.value_label;
+    g_tiles.system_cpu_sub = cpu.sub_label;
+
+    GaugeWidgets mem = create_gauge(tile, kGaugeX[1], kGaugeY, kGaugeSize, "MEMORY", accent);
+    g_tiles.system_mem_arc = mem.arc;
+    g_tiles.system_mem_value = mem.value_label;
+    g_tiles.system_mem_sub = mem.sub_label;
+
+    GaugeWidgets temp = create_gauge(tile, kGaugeX[2], kGaugeY, kGaugeSize, "THERMAL", accent);
+    g_tiles.system_temp_arc = temp.arc;
+    g_tiles.system_temp_value = temp.value_label;
+    g_tiles.system_temp_sub = temp.sub_label;
+
+    // Storage/swap usage bars below the gauges.
+    constexpr int32_t kBarY = 350;
+    BarWidgets disk_bar = create_bar(tile, 46, kBarY, "BLOCK DISK", accent);
+    g_tiles.system_disk_pct = disk_bar.pct_label;
+    g_tiles.system_disk_fill = disk_bar.fill;
+    g_tiles.system_disk_detail = disk_bar.detail_label;
+
+    BarWidgets swap_bar = create_bar(tile, 424, kBarY, "SWAP", lv_color_hex(0x6f8fae));
+    g_tiles.system_swap_pct = swap_bar.pct_label;
+    g_tiles.system_swap_fill = swap_bar.fill;
+    g_tiles.system_swap_detail = swap_bar.detail_label;
+
+    // Full-page dimming scrim: sits just above the background image (index 0) so the
+    // whole page reads darker and the coin art no longer competes with the data.
+    lv_obj_t* page_scrim = lv_obj_create(tile);
+    make_static(page_scrim);
+    lv_obj_remove_style_all(page_scrim);
+    lv_obj_set_pos(page_scrim, 0, 0);
+    lv_obj_set_size(page_scrim, kUiWidth, kUiHeight);
+    lv_obj_set_style_bg_color(page_scrim, lv_color_hex(0x0a141b), 0);
+    lv_obj_set_style_bg_opa(page_scrim, LV_OPA_50, 0);
+    lv_obj_move_to_index(page_scrim, 1);
+
+    g_tiles.system_uptime = add_label(tile, "--", 46, 420, &lv_font_montserrat_18, lv_color_hex(0xd7e0e6));
+    lv_obj_set_width(g_tiles.system_uptime, 360);
+    g_tiles.system_footer_right = add_label(tile, "--", 394, 420, &lv_font_montserrat_18, lv_color_hex(0xd7e0e6));
+    lv_obj_set_width(g_tiles.system_footer_right, 360);
+    lv_obj_set_style_text_align(g_tiles.system_footer_right, LV_TEXT_ALIGN_RIGHT, 0);
 }
 
 void build_network_tile(lv_obj_t* tv) {
@@ -2933,30 +3240,99 @@ void build_network_tile(lv_obj_t* tv) {
     const lv_color_t accent = lv_color_hex(spec.accent);
     lv_obj_t* tile = create_tile_base(tv, 3, spec);
 
-    lv_obj_t* wifi_card = create_card_frame(tile, 420, 148, 338, 84, "WiFi", accent);
-    lv_obj_t* timezone_card = create_card_frame(tile, 42, 244, 338, 84, "Timezone", accent);
-    g_tiles.network_ip = create_card(tile, 42, 148, 338, 84, "IP", "--", accent);
-    g_tiles.network_ssid = add_label(wifi_card, "--", 0, 30, &lv_font_montserrat_18, lv_color_hex(0xf4efe2));
-    lv_obj_set_width(g_tiles.network_ssid, 222);
-    lv_label_set_long_mode(g_tiles.network_ssid, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_set_style_text_align(g_tiles.network_ssid, LV_TEXT_ALIGN_LEFT, 0);
-    g_tiles.network_rssi = add_label(wifi_card, "--", 0, 30, &lv_font_montserrat_16, lv_color_hex(0xffb16d));
-    lv_obj_set_width(g_tiles.network_rssi, 84);
-    lv_obj_set_style_text_align(g_tiles.network_rssi, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_align(g_tiles.network_rssi, LV_ALIGN_TOP_RIGHT, 0, 30);
+    lv_obj_t* page_scrim = lv_obj_create(tile);
+    make_static(page_scrim);
+    lv_obj_remove_style_all(page_scrim);
+    lv_obj_set_pos(page_scrim, 0, 0);
+    lv_obj_set_size(page_scrim, kUiWidth, kUiHeight);
+    lv_obj_set_style_bg_color(page_scrim, lv_color_hex(0x081416), 0);
+    lv_obj_set_style_bg_opa(page_scrim, LV_OPA_50, 0);
+    lv_obj_move_to_index(page_scrim, 1);
 
-    g_tiles.network_timezone = add_label(timezone_card, "--", 0, 30, &lv_font_montserrat_18, lv_color_hex(0xf4efe2));
-    lv_obj_set_width(g_tiles.network_timezone, 222);
-    lv_label_set_long_mode(g_tiles.network_timezone, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_set_style_text_align(g_tiles.network_timezone, LV_TEXT_ALIGN_LEFT, 0);
-    g_tiles.network_timezone_offset = add_label(timezone_card, "--", 0, 30, &lv_font_montserrat_16, lv_color_hex(0xffb16d));
-    lv_obj_set_width(g_tiles.network_timezone_offset, 84);
-    lv_obj_set_style_text_align(g_tiles.network_timezone_offset, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_align(g_tiles.network_timezone_offset, LV_ALIGN_TOP_RIGHT, 0, 30);
+    lv_obj_t* settings_button = lv_btn_create(tile);
+    lv_obj_clear_flag(settings_button, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(settings_button, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_pos(settings_button, 708, 24);
+    lv_obj_set_size(settings_button, 52, 52);
+    ui_style_primary_button(settings_button);
+    lv_obj_set_style_bg_color(settings_button, lv_color_hex(0xe8784f), 0);
+    lv_obj_set_style_shadow_color(settings_button, lv_color_hex(0xe8784f), 0);
+    lv_obj_set_style_bg_color(settings_button, lv_color_hex(0xb95737), LV_STATE_PRESSED);
+    g_tiles.network_settings_icon = ui_button_label(settings_button, LV_SYMBOL_SETTINGS, 0xffffff);
 
-    g_tiles.network_gateway = create_card(tile, 420, 244, 338, 84, "Gateway", "--", accent);
-    g_tiles.network_dns = create_card(tile, 42, 340, 338, 84, "DNS", "--", accent);
-    g_tiles.network_ntp = create_card(tile, 420, 340, 338, 84, "NTP", "--", accent);
+    GaugeWidgets signal = create_gauge(tile, 322, 128, 156, "CONNECTION", accent);
+    g_tiles.network_signal_arc = signal.arc;
+    g_tiles.network_signal_value = signal.value_label;
+    lv_obj_set_style_text_font(g_tiles.network_signal_value, &lv_font_montserrat_22, 0);
+    lv_obj_set_pos(g_tiles.network_signal_value, 322, 174);
+    lv_obj_del(signal.sub_label);
+
+    lv_obj_t* connection_line = lv_obj_create(tile);
+    make_static(connection_line);
+    lv_obj_remove_style_all(connection_line);
+    lv_obj_set_pos(connection_line, 0, 288);
+    lv_obj_set_size(connection_line, kUiWidth, 34);
+    lv_obj_set_style_pad_column(connection_line, 8, 0);
+    lv_obj_set_flex_flow(connection_line, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(connection_line, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    g_tiles.network_iface_icon = add_label(connection_line, LV_SYMBOL_WIFI, 0, 0,
+                                           &lv_font_montserrat_22, lv_color_hex(0xff9a72));
+    g_tiles.network_signal_sub = add_label(connection_line, "--", 0, 0,
+                                            &lv_font_montserrat_18, lv_color_hex(0x9aa6ac));
+    lv_label_set_long_mode(g_tiles.network_signal_sub, LV_LABEL_LONG_MODE_DOTS);
+
+    constexpr int32_t kNodeY = 366;
+    constexpr int32_t kNodeCenterX[3] = {144, 400, 656};
+    constexpr int32_t kNodeColumnWidth = 220;
+    for (int32_t index = 0; index < 2; ++index) {
+        lv_obj_t* link = lv_obj_create(tile);
+        make_static(link);
+        lv_obj_remove_style_all(link);
+        lv_obj_set_pos(link, kNodeCenterX[index] + 7, kNodeY + 6);
+        lv_obj_set_size(link, kNodeCenterX[index + 1] - kNodeCenterX[index] - 14, 2);
+        lv_obj_set_style_bg_color(link, lv_color_hex(0x526269), 0);
+        lv_obj_set_style_bg_opa(link, LV_OPA_COVER, 0);
+    }
+
+    g_tiles.network_device_dot = create_status_dot(tile, kNodeCenterX[0] - 7, kNodeY, 14);
+    g_tiles.network_gateway_dot = create_status_dot(tile, kNodeCenterX[1] - 7, kNodeY, 14);
+    g_tiles.network_dns_dot = create_status_dot(tile, kNodeCenterX[2] - 7, kNodeY, 14);
+    lv_obj_t* device_title = add_label(tile, "DEVICE", kNodeCenterX[0] - 110, 336,
+                                       &lv_font_montserrat_14, lv_color_hex(0x78848b));
+    lv_obj_t* gateway_title = add_label(tile, "GATEWAY", kNodeCenterX[1] - 110, 336,
+                                        &lv_font_montserrat_14, lv_color_hex(0x78848b));
+    lv_obj_t* dns_title = add_label(tile, "DNS", kNodeCenterX[2] - 110, 336,
+                                    &lv_font_montserrat_14, lv_color_hex(0x78848b));
+    lv_obj_t* node_titles[] = {device_title, gateway_title, dns_title};
+    for (lv_obj_t* title : node_titles) {
+        lv_obj_set_width(title, kNodeColumnWidth);
+        lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
+    }
+    g_tiles.network_device_value = add_label(tile, "--", kNodeCenterX[0] - 110, 387,
+                                              &lv_font_montserrat_18,
+                                              lv_color_hex(0xf4efe2));
+    g_tiles.network_device_mac = add_label(tile, "--", kNodeCenterX[0] - 110, 416,
+                                            &lv_font_montserrat_14,
+                                            lv_color_hex(0x9aa6ac));
+    g_tiles.network_gateway = add_label(tile, "--", kNodeCenterX[1] - 110, 387,
+                                         &lv_font_montserrat_18,
+                                         lv_color_hex(0xf4efe2));
+    g_tiles.network_dns = add_label(tile, "--", kNodeCenterX[2] - 110, 387,
+                                     &lv_font_montserrat_18,
+                                     lv_color_hex(0xf4efe2));
+    lv_obj_t* node_values[] = {
+        g_tiles.network_device_value,
+        g_tiles.network_device_mac,
+        g_tiles.network_gateway,
+        g_tiles.network_dns,
+    };
+    for (lv_obj_t* value : node_values) {
+        lv_obj_set_width(value, kNodeColumnWidth);
+        lv_obj_set_style_text_align(value, LV_TEXT_ALIGN_CENTER, 0);
+    }
+    lv_label_set_long_mode(g_tiles.network_dns, LV_LABEL_LONG_MODE_DOTS);
 }
 
 void set_active_page(uint32_t page) {
@@ -3046,24 +3422,61 @@ uint32_t apply_ui_model(const UiModel& model) {
     }
 
     dirty = false;
-    dirty |= set_label(g_tiles.system_cpu_busy, model.system.cpu_busy);
-    dirty |= set_label(g_tiles.system_mem, model.system.mem);
-    dirty |= set_label(g_tiles.system_disk, model.system.disk);
+    dirty |= set_gauge(g_tiles.system_cpu_arc, g_tiles.system_cpu_value, model.system.cpu_value,
+                       model.system.cpu_text, threshold_color(model.system.cpu_value, 70, 90, 0x8fb7ff));
+    dirty |= set_label(g_tiles.system_cpu_sub, model.system.cpu_sub);
+    dirty |= set_gauge(g_tiles.system_mem_arc, g_tiles.system_mem_value, model.system.mem_value,
+                       model.system.mem_text, threshold_color(model.system.mem_value, 75, 90, 0x8fb7ff));
+    dirty |= set_label(g_tiles.system_mem_sub, model.system.mem_sub);
+    dirty |= set_gauge(g_tiles.system_temp_arc, g_tiles.system_temp_value, model.system.temp_value,
+                       model.system.temp_text, threshold_color(model.system.temp_value, 64, 86, 0x8fb7ff));
+    dirty |= set_label(g_tiles.system_temp_sub, model.system.temp_sub);
+    dirty |= set_bar(g_tiles.system_disk_fill, g_tiles.system_disk_pct, model.system.disk_value,
+                     model.system.disk_pct_text);
+    dirty |= set_label(g_tiles.system_disk_detail, model.system.disk_detail);
+    dirty |= set_bar(g_tiles.system_swap_fill, g_tiles.system_swap_pct, model.system.swap_value,
+                     model.system.swap_pct_text);
+    dirty |= set_label(g_tiles.system_swap_detail, model.system.swap_detail);
     dirty |= set_label(g_tiles.system_uptime, model.system.uptime);
-    dirty |= set_label(g_tiles.system_temp, model.system.temp);
+    dirty |= set_label(g_tiles.system_footer_right, model.system.footer_right);
+    dirty |= set_label(g_tiles.system_version_chip, model.system.version_text);
     if (dirty) {
         dirty_mask |= page_dirty_bit(2);
     }
 
     dirty = false;
-    dirty |= set_label(g_tiles.network_ip, model.network.ip);
-    dirty |= set_label(g_tiles.network_ssid, model.network.ssid);
-    dirty |= set_network_rssi_visual(model.network.rssi, model.network.signal_level);
-    dirty |= set_label(g_tiles.network_timezone, model.network.timezone);
-    dirty |= set_label(g_tiles.network_timezone_offset, model.network.timezone_offset);
+    const uint32_t signal_color = model.network.signal_level >= 4 ? 0x59d79b
+                                : model.network.signal_level >= 2 ? 0xf0b44c
+                                                                 : 0xd65a5a;
+    dirty |= set_label(g_tiles.network_iface_icon, model.network.iface_icon);
+    dirty |= set_text_color(g_tiles.network_iface_icon,
+                            model.network.device_up ? 0xff9a72 : 0x526269);
+    dirty |= set_gauge(g_tiles.network_signal_arc, g_tiles.network_signal_value,
+                       model.network.signal_value, model.network.signal_text, signal_color);
+    dirty |= set_label(g_tiles.network_signal_sub, model.network.signal_sub);
+    g_network_settings_wifi_summary = model.network.device_up
+        ? model.network.ssid + "  " + model.network.rssi
+        : "Not connected";
+    g_network_settings_wifi_enabled = model.network.iface_icon == LV_SYMBOL_WIFI;
+    g_network_settings_timezone_summary = model.network.timezone + "  " +
+                                          model.network.timezone_offset;
+    dirty |= set_label(g_tiles.network_device_value, model.network.ip);
+    dirty |= set_label(g_tiles.network_device_mac, model.network.mac);
     dirty |= set_label(g_tiles.network_gateway, model.network.gateway);
     dirty |= set_label(g_tiles.network_dns, model.network.dns);
-    dirty |= set_label(g_tiles.network_ntp, model.network.ntp);
+    lv_obj_t* network_dots[] = {
+        g_tiles.network_device_dot,
+        g_tiles.network_gateway_dot,
+        g_tiles.network_dns_dot,
+    };
+    const bool network_states[] = {
+        model.network.device_up,
+        model.network.gateway_up,
+        model.network.dns_up,
+    };
+    for (size_t index = 0; index < 3; ++index) {
+        dirty |= set_network_status_dot(network_dots[index], network_states[index]);
+    }
     if (dirty) {
         dirty_mask |= page_dirty_bit(3);
     }
@@ -3317,6 +3730,13 @@ int main() {
     while (!g_stop) {
         const uint32_t now_ms = tick_ms();
         const bool interacting = ui_interacting(now_ms);
+        if (g_network_settings_overlay_open_pending && !g_network_settings_overlay.active()) {
+            g_network_settings_overlay.open(g_network_settings_wifi_summary,
+                                            g_network_settings_timezone_summary,
+                                            g_network_settings_wifi_enabled);
+            g_network_settings_overlay_open_pending = false;
+            g_network_settings_overlay_wait_release = true;
+        }
         if (g_wifi_config_overlay_open_pending && !g_wifi_config_overlay.active()) {
             g_wifi_config_overlay.open();
             g_wifi_config_overlay_open_pending = false;
@@ -3330,8 +3750,29 @@ int main() {
             g_miners_overlay.open();
             g_miners_overlay_open_pending = false;
         }
+        g_network_settings_overlay.update();
+        const NetworkSettingsOverlay::Action settings_action =
+            g_network_settings_overlay.take_action();
+        if (settings_action == NetworkSettingsOverlay::Action::Wifi) {
+            g_network_settings_child = settings_action;
+            g_wifi_config_overlay_open_pending = true;
+        }
+        else if (settings_action == NetworkSettingsOverlay::Action::Timezone) {
+            g_network_settings_child = settings_action;
+            g_timezone_overlay_open_pending = true;
+        }
         g_wifi_config_overlay.update();
         g_timezone_overlay.update();
+        if (g_network_settings_child == NetworkSettingsOverlay::Action::Wifi &&
+            !g_wifi_config_overlay.active() && !g_wifi_config_overlay_open_pending) {
+            g_network_settings_child = NetworkSettingsOverlay::Action::None;
+            g_network_settings_overlay_open_pending = true;
+        }
+        else if (g_network_settings_child == NetworkSettingsOverlay::Action::Timezone &&
+                 !g_timezone_overlay.active() && !g_timezone_overlay_open_pending) {
+            g_network_settings_child = NetworkSettingsOverlay::Action::None;
+            g_network_settings_overlay_open_pending = true;
+        }
         g_miners_overlay.update();
         g_ota_overlay.update();  // self-manages open/close from /run/rockbase/ota-state.json
         // Passive OTA check: periodically runs check-async in the background
@@ -3345,19 +3786,22 @@ int main() {
         refresh_one_dirty_page_if_idle();
 
         bool custom_present = false;
-        if (!g_wifi_config_overlay.active() && !g_timezone_overlay.active() && !g_miners_overlay.active() &&
+        if (!g_network_settings_overlay.active() && !g_wifi_config_overlay.active() &&
+            !g_timezone_overlay.active() && !g_miners_overlay.active() &&
             !g_ota_overlay.active() && !g_firmware_update_overlay.active() && g_touch.down) {
             const int32_t scroll_x = visual_scroll_x_from_touch();
             if (g_swipe_drag_started) {
                 custom_present = present_pager_frame(scroll_x);
             }
         }
-        else if (!g_wifi_config_overlay.active() && !g_timezone_overlay.active() && !g_miners_overlay.active() &&
+        else if (!g_network_settings_overlay.active() && !g_wifi_config_overlay.active() &&
+             !g_timezone_overlay.active() && !g_miners_overlay.active() &&
                  !g_ota_overlay.active() && !g_firmware_update_overlay.active() && g_pager_anim_active) {
             custom_present = present_pager_snap_anim(now_ms);
         }
 
-        g_custom_frame_presenting = !g_wifi_config_overlay.active() && !g_timezone_overlay.active() &&
+        g_custom_frame_presenting = !g_network_settings_overlay.active() &&
+                        !g_wifi_config_overlay.active() && !g_timezone_overlay.active() &&
                                     !g_miners_overlay.active() && !g_ota_overlay.active() &&
                                     !g_firmware_update_overlay.active() &&
                                     (g_touch.down || custom_present);
