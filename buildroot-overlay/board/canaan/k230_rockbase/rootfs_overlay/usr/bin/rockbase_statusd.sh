@@ -760,6 +760,12 @@ render_status_json() {
     if [ -z "${headers}" ] || [ "${headers}" = "-" ]; then
         headers="${log_headers}"
     fi
+    if [ -n "${headers}" ] && [ -n "${log_headers}" ] &&
+       echo "${headers}" | grep -Eq '^[0-9]+$' &&
+       echo "${log_headers}" | grep -Eq '^[0-9]+$' &&
+       [ "${log_headers}" -gt "${headers}" ] 2>/dev/null; then
+        headers="${log_headers}"
+    fi
     if [ -z "${progress}" ] || [ "${progress}" = "-" ]; then
         progress="${log_progress}"
     fi
