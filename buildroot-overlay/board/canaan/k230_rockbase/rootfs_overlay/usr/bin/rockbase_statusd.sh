@@ -251,6 +251,11 @@ latest_peer_blocks_from_log() {
     tail -n 400 "${DEBUG_LOG}" 2>/dev/null | sed -n 's/.*blocks=\([0-9][0-9]*\).*/\1/p' | tail -n1
 }
 
+latest_saw_header_height_from_log() {
+    [ -r "${DEBUG_LOG}" ] || return 0
+    tail -n 400 "${DEBUG_LOG}" 2>/dev/null | sed -n '/Saw new header hash=/s/.*height=\([0-9][0-9]*\).*/\1/p' | tail -n1
+}
+
 load_state_file() {
     [ -r "$1" ] && . "$1"
 }
@@ -607,8 +612,13 @@ collect_bitcoin_log() {
             ;;
     esac
 
+    saw_header_height=$(latest_saw_header_height_from_log)
     peer_headers=$(latest_peer_blocks_from_log)
-    log_headers=$(max_int "${peer_headers}" "${stage_height_num}")
+    # Priority: saw_header (our actual local header) > stage_height (IBD progress) > peer (fallback)
+    log_headers=$(max_int "${saw_header_height}" "${stage_height_num}")
+    if [ -z "${log_headers}" ]; then
+        log_headers="${peer_headers}"
+    fi
 
     {
         state_num updated_at "$(now_epoch)"
