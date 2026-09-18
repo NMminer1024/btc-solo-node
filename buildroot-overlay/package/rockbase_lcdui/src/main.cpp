@@ -2850,9 +2850,10 @@ void build_stratum_tile(lv_obj_t* tv) {
     lv_chart_set_series_values(g_tiles.stratum_chart, g_tiles.stratum_series_1d, zeros.data(), zeros.size());
     lv_chart_refresh(g_tiles.stratum_chart);
 
-    // Unit sits above the topmost Y tick (y=26) so it never overlaps the value.
-    // Brighter than the tick values (0x78848b) so the unit reads as a distinct label.
-    g_tiles.stratum_y_unit = add_label(chart_panel, "GH/s", 8, 6, &lv_font_montserrat_14, lv_color_hex(0xb7c2c8));
+    // Unit sits above the topmost Y tick (1.00 at y=18) so it never overlaps the
+    // value. Brighter than the tick values (0x78848b) so the unit reads as a
+    // distinct label.
+    g_tiles.stratum_y_unit = add_label(chart_panel, "GH/s", 13, 0, &lv_font_montserrat_14, lv_color_hex(0xb7c2c8));
     lv_obj_set_width(g_tiles.stratum_y_unit, 44);
     lv_obj_set_style_text_align(g_tiles.stratum_y_unit, LV_TEXT_ALIGN_LEFT, 0);
     for (size_t i = 0; i < 5; ++i) {
