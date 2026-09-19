@@ -6,7 +6,9 @@ UBOOT_BUILD_DIR=${BUILD_DIR}/uboot-2022.10
 K230_SDK_ROOT=$(dirname $(dirname ${BASE_DIR}))
 GENIMAGE_CFG_SD=$(dirname $(realpath "$0"))/genimage.cfg
 env_dir=$(dirname $(realpath "$0"))
-K230_IMAGE_OUT_DIR=${K230_IMAGE_OUT_DIR:-/mnt/d/code/pony/IoT/k230/img}
+# WSL 默认导出到 Windows（/mnt/d）；纯 Linux 物理机未显式指定时不导出、镜像保留在项目目录。
+# 显式设置 K230_IMAGE_OUT_DIR 时，任何环境都导出到该目录。
+K230_IMAGE_OUT_DIR="${K230_IMAGE_OUT_DIR:-}"
 K230_IMAGE_GZIP=${K230_IMAGE_GZIP:-0}
 BLOCK_SEED_DIR_DEFAULT="${K230_SDK_ROOT}/seed/root-block"
 BLOCK_SEED_DIR="${BLOCK_SEED_DIR:-${ROCKBASE_BLOCK_SEED_DIR:-${BLOCK_SEED_DIR_DEFAULT}}}"
@@ -321,6 +323,18 @@ sync_image_outputs()
 		flavor_sfx="-full"
 	fi
 	local image_prefix="sysimage-sdcard-rockbase${flavor_sfx}${net_sfx}"
+
+	# ---- 导出目录决策：WSL 导出 Windows / 纯 Linux 保留项目目录 ----
+	if [ -z "${K230_IMAGE_OUT_DIR}" ]; then
+		# /proc/version 含 "microsoft" 或存在 WSL_DISTRO_NAME 即视为 WSL
+		if grep -qi microsoft /proc/version 2>/dev/null || [ -n "${WSL_DISTRO_NAME:-}" ]; then
+			K230_IMAGE_OUT_DIR="/mnt/d/code/pony/IoT/k230/img"
+		else
+			echo "non-WSL build: skipping image export, keeping images in ${BINARIES_DIR}"
+			return 0
+		fi
+	fi
+
 	# 从 release_version 中提取首个 YYYYMMDD-HHMMSS 时间戳，保证每次导出落到新目录
 	build_stamp=$(grep -m1 ^sdk: "${TARGET_DIR}/etc/version/release_version" | grep -oE [0-9]{8}-[0-9]{6} | head -n1)
 	[ -z "$build_stamp" ] && build_stamp=$(date +%Y%m%d-%H%M%S)-$$
