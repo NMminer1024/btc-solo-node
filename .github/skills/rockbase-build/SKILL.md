@@ -52,7 +52,7 @@ description: 'Build Rockbase images and export to Windows. Use when: 构建镜�
 **1. 启动后台编译（输出写日志，不丢弃）：**
 
 ```bash
-cd /home/bitpony/Desktop/mining/btc-solo-node
+cd "$(git rev-parse --show-toplevel)"   # 项目根目录（不同服务器路径不同，用此命令自动定位）
 nohup make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
@@ -93,7 +93,7 @@ tail -15 /tmp/rockbase-build.log   # 原始 make 输出末尾
 ### 轮询循环模板（可整段执行）
 
 ```bash
-cd /home/bitpony/Desktop/mining/btc-solo-node
+cd "$(git rev-parse --show-toplevel)"   # 项目根目录
 BT=output/k230_rockbase_defconfig/build/build-time.log
 for i in $(seq 1 40); do
   if pgrep -x make >/dev/null; then
@@ -119,12 +119,32 @@ echo "=== build log 末尾 ==="; tail -15 /tmp/rockbase-build.log
 | 全量编译 | 清理所有编译产物（保留工具链和 `.config`），完全重新编译；详见下方 **全量编译** 章节 |
 | 完整镜像 | 带 seed 的镜像（`K230_BLOCKDATA_SIZE=20G` + 真实 seed 数据）；详见 `rockbase-seed` skill |
 | LVGL UI 重建 | local 包源码改动后顶层 `make buildroot` 会自动 rsync 检测并重编（已根治）；仍可手动 `<pkg>-rebuild` 强制重建 |
-| WSL 导出 | 使用 `post-image.sh` 自动导出到 `/mnt/d/code/pony/IoT/k230/img/` |
+| 镜像导出 | 按运行环境自适应：WSL 自动导出到 `/mnt/d/code/pony/IoT/k230/img/`；纯 Linux 物理机不导出、镜像保留在 `output/<CONF>/images/`；显式设 `K230_IMAGE_OUT_DIR` 时任何环境都导出到该目录 |
 | 构建前准备 | 非 seed 构建需要 `mkdir -p /tmp/rockbase-empty-seed` |
 | 并行编译 | 所有编译（全量/增量）必须显式多核并行：make 命令追加 `-j$(nproc)`；详见下方 **并行编译（强制）** 章节 |
 | Kernel patch 变更 | 只要改了 `buildroot-overlay/board/canaan/k230_rockbase/patches/linux/`，每个目标 defconfig 都必须先执行一次 `linux-dirclean` 再重编 |
 | Overlay 顶层文件内容修改 | 只改 `buildroot-overlay/` 下**顶层/非包目录**文件（如 `package/pkg-generic.mk`、`package/Config.in`、`support/`）的**内容**（非新增/删除）时，`.overlay_sync` 不会自动重跑，必须先 `make sync` 再构建；详见下方 **Overlay 同步陷阱** 章节 |
 | 网络接口 | 统一镜像（USB + SDIO 驱动都在，运行时 `rockbase_netsel.sh` 自动选择）；`K230_NET` 仅作测试开关；详见下方 **网络接口模式（统一镜像，K230_NET）** 章节 |
+
+---
+
+## 改动类型 → 前置动作速查表
+
+> 改了什么，构建前要先做什么。拿不准就对照本表，避免"改了源码但镜像没变"。
+
+| 改动类型 | 构建前必须做 | 原因 |
+|---------|------------|------|
+| `patches/linux/*.patch` 增删改 | `make CONF=... linux-dirclean` | 内核 patch 复用旧产物 |
+| `fragment/linux.fragment`（内核配置） | `make CONF=... linux-dirclean` | 内核配置变更 |
+| `patches/rtl8189fs/*.patch` | `make CONF=... rtl8189fs-dirclean` | WiFi 驱动 patch 复用旧产物 |
+| `buildroot-overlay/` 顶层/非包目录文件**内容**修改（`package/pkg-generic.mk`、`package/Config.in`、`support/` 等） | `make sync` | `.overlay_sync` 只对文件名增删敏感，内容修改不重跑 rsync |
+| `rootfs_overlay/` 下文件**内容**修改（如 `root/web/app.js`、脚本、配置） | `make sync` | 同上，`.overlay_sync` 对内容修改不敏感 |
+| `rootfs_overlay/` 下文件**新增/删除** | 无需额外动作 | 文件名列表变化会触发 `.overlay_sync` 自动 rsync |
+| local 包源码（`package/<pkg>/src/`，如 `rockbase_lcdui`） | 无需额外动作 | 已根治：顶层 `make buildroot` 自动 rsync 检测变化并重编 |
+| 手动 `rm` 过 `output/.../target/` 里的包文件 | 对应包 `<pkg>-dirclean` | Buildroot 依据 install stamp 判断已装，不会重装 |
+| defconfig 大幅变更 / 怀疑产物不一致 | `make CONF=... clean`（或 `rm -rf output/<CONF>/`） | 全量重建 |
+
+> 多个改动叠加时，按"最彻底"的前置动作执行即可（如既改了 kernel patch 又改了 overlay 文件，`linux-dirclean` + `make sync` 都做）。
 
 ---
 
@@ -255,13 +275,17 @@ make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
   K230_IMAGE_GZIP=0
 ```
 
-### 指定导出目录
+### 导出行为（按环境自适应）
 
-在以上命令末尾追加 `K230_IMAGE_OUT_DIR=/your/path`。
+`post-image.sh` 的 `sync_image_outputs()` 按运行环境决定导出：
 
-### 保留 WSL 侧镜像
+| 环境 | `K230_IMAGE_OUT_DIR` 未设置 | 显式设置 `K230_IMAGE_OUT_DIR` |
+|------|---------------------------|-------------------------------|
+| **WSL**（`/proc/version` 含 `microsoft` 或有 `WSL_DISTRO_NAME`） | 导出到 `/mnt/d/code/pony/IoT/k230/img/`，并删除项目目录下的镜像 | 导出到指定目录 |
+| **纯 Linux 物理机** | **跳过导出**，镜像保留在 `output/<CONF>/images/` | 导出到指定目录 |
 
-追加 `K230_KEEP_WSL_IMAGES=1`。
+- 强制导出到自定义目录：在命令末尾追加 `K230_IMAGE_OUT_DIR=/your/path`（任何环境都生效）。
+- 保留 WSL 侧镜像（导出后不删项目目录镜像）：追加 `K230_KEEP_WSL_IMAGES=1`。
 
 ### 手动复制已有镜像到 Windows
 
@@ -289,7 +313,7 @@ make CONF=k230_rockbase_defconfig clean -j$(nproc)
 mkdir -p /tmp/rockbase-empty-seed
 
 # 2) 全量编译（长任务，nohup 后台 + 日志 + 轮询）
-cd /home/bitpony/Desktop/mining/btc-solo-node
+cd "$(git rev-parse --show-toplevel)"   # 项目根目录
 nohup make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
   BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
   K230_BLOCKDATA_SIZE=256M \
@@ -407,6 +431,21 @@ make ARCH=riscv syncconfig
 
 如果本次目标是验证 kernel patch 是否真的进镜像，构建后至少做一项源码侧检查和一项实机侧检查。
 
+### 增量编译：验证 rootfs_overlay 改动真进了镜像
+
+改了 `rootfs_overlay/` 下的文件（web 前端、脚本、配置等）做增量编译后，**不要只看编译成功就认为改动进了镜像**——`.overlay_sync` 陷阱可能导致 buildroot 源码树仍是旧版。用 md5 对比确认：
+
+```bash
+# 源码 vs target 安装产物（md5 相同 = 改动已进 target/镜像）
+md5sum buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/root/web/app.js \
+        output/k230_rockbase_defconfig/target/root/web/app.js
+```
+
+- md5 **相同** → 改动已进镜像 ✅
+- md5 **不同** → buildroot 源码树是旧版，回到 **Overlay 同步陷阱** 章节：`make sync` 后重新 `make buildroot`，再比对。
+
+> 实机侧最终确认：`ssh root@<IP> 'md5sum /root/web/app.js'` 应与源码一致（web 根为 `/root/web`）。
+
 ### 源码侧检查
 
 例如检查构建后的 `sdhci-of-kendryte.c`：
@@ -506,7 +545,12 @@ $(BR_SRC_DIR)/.overlay_sync: $(BR_SRC_DIR)/.download_extract $(BR_OVERLAY_FS)
 - **新增/删除** overlay 文件 → 列表变化 → `.overlay_sync` 重跑 rsync ✅
 - **只改内容**（文件名不变）→ 列表不变 → `.overlay_sync` **不重跑**，buildroot 源码里仍是旧版 ❌
 
-**影响范围**：`buildroot-overlay/` 下所有顶层/非包目录文件，典型如 `package/pkg-generic.mk`、`package/Config.in`、`support/dependencies/*.mk`。包目录（`package/<pkg>/`）的 `.mk` 改动同理——但包 `.mk` 改动通常伴随源码改动，且 local 包源码改动会触发上面 LVGL 章节的 rsync 重编，所以最容易被忽略的是**纯构建系统文件**的内容修改。
+**影响范围**：`buildroot-overlay/` 下**所有**文件的内容修改都受此陷阱影响，典型如：
+- 顶层/非包目录文件：`package/pkg-generic.mk`、`package/Config.in`、`support/dependencies/*.mk`
+- **`rootfs_overlay/` 下的文件内容修改**（如 `root/web/app.js`、`root/usr/bin/*.sh`、`etc/` 配置）——这是最容易被忽略的一类，因为改的是"业务文件"而非"构建系统文件"，但同样只改内容不改文件名，`.overlay_sync` 不会重跑 rsync，buildroot 源码树里仍是旧版。
+- 包目录（`package/<pkg>/`）的 `.mk` 改动同理——但包 `.mk` 改动通常伴随源码改动，且 local 包源码改动会触发上面 LVGL 章节的 rsync 重编。
+
+**唯一例外**：`rootfs_overlay/` 下文件的**新增/删除**（文件名列表变化）会自动触发 `.overlay_sync` 重跑，无需手动 `make sync`。
 
 **正确做法**：改了这类文件内容后，先手动 sync 再构建：
 
@@ -516,13 +560,16 @@ make CONF=k230_rockbase_defconfig buildroot -j$(nproc)
 ```
 
 > 本次 `pkg-generic.mk` 是**新增文件**，所以首次构建会自动 sync 生效；但**以后若只改它的内容**，必须手动 `make sync`。
+>
+> 同理，改 `rootfs_overlay/.../app.js` 等**内容**后也必须先 `make sync`（本次 web 前端 chart 修复即踩此坑：源码树 app.js 停留在旧 md5，`make sync` 后才更新）。
 
 ## 镜像产物说明
 
 | 产物 | 路径 |
 |------|------|
-| 构建中间文件 | `output/<CONF>/images/blockdata.ext4`、`sysimage-sdcard.img` |
-| Windows 导出 | `/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-{min\|full}-{net}-<timestamp>/sysimage-sdcard.img` |
+| 构建中间文件（任何环境都生成） | `output/<CONF>/images/blockdata.ext4`、`sysimage-sdcard.img` |
+| WSL 导出（仅 WSL 且未设 `K230_IMAGE_OUT_DIR` 时） | `/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-{min\|full}-{net}-<timestamp>/sysimage-sdcard.img` |
+| 纯 Linux 物理机 | 不导出，镜像保留在 `output/<CONF>/images/sysimage-sdcard.img` |
 
 非 seed 镜像预期大小：`~5.2G ~ 5.4G`（slot_a 2G + slot_b 2G + config 1G + blockdata 256M + 分区开销）。
 
