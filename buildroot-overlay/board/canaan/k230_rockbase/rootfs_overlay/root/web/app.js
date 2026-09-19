@@ -907,12 +907,14 @@
       return '<path class="miners-history-grid" d="M' + left + ' ' + y.toFixed(1) + 'H' + (width - right) + '"></path>' +
         '<text class="miners-history-y-label" x="' + (left - 10) + '" y="' + (y + 4).toFixed(1) + '" text-anchor="end">' + escapeHtml(formatAxis(value)) + '</text>';
     }).join("");
-    var labels = points.map(function (row, index) {
-      if (index !== 0 && index !== points.length - 1 && index % Math.max(1, Math.floor(points.length / 3)) !== 0) return "";
-      var x = left + (width - left - right) * index / span;
-      var text = formatChartTime(row.ts);
-      return '<text x="' + x.toFixed(1) + '" y="' + (height - 9) + '" text-anchor="middle">' + escapeHtml(text) + '</text>';
-    }).join("");
+    var labelCount = 4;
+    var labelParts = [];
+    for (var li = 0; li < labelCount; li += 1) {
+      var lIndex = Math.round(li * span / (labelCount - 1));
+      var lx = left + (width - left - right) * lIndex / span;
+      labelParts.push('<text x="' + lx.toFixed(1) + '" y="' + (height - 9) + '" text-anchor="middle">' + escapeHtml(formatChartTime(points[lIndex].ts)) + '</text>');
+    }
+    var labels = labelParts.join("");
     var lines = series.map(function (item) {
       var coords = points.map(function (row, index) {
         var x = left + (width - left - right) * index / span;
