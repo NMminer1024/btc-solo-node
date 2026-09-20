@@ -1349,6 +1349,49 @@
     }
   }
 
+  /* ── Wi-Fi credential history (localStorage) ─────────────
+   * Remember previously entered SSID + password pairs so the user can pick
+   * one back from the SSID datalist and have the password auto-filled.
+   * Stored as a JSON array of {ssid, pass} objects, newest first, capped at
+   * 8 entries. This is a local-only convenience; the board itself keeps the
+   * active profile in /root/config/rockbase-wifi.conf. */
+  var WIFI_HISTORY_KEY = "nmWifiHistory";
+  var WIFI_HISTORY_MAX = 8;
+
+  function loadWifiHistory() {
+    try {
+      var raw = window.localStorage.getItem(WIFI_HISTORY_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveWifiHistory(entry) {
+    if (!entry || !entry.ssid) return;
+    var list = loadWifiHistory().filter(function (item) {
+      return item && item.ssid !== entry.ssid;
+    });
+    list.unshift({ ssid: entry.ssid, pass: entry.pass || "" });
+    if (list.length > WIFI_HISTORY_MAX) list.length = WIFI_HISTORY_MAX;
+    try {
+      window.localStorage.setItem(WIFI_HISTORY_KEY, JSON.stringify(list));
+    } catch (e) {}
+  }
+
+  function renderWifiSsidHistory() {
+    var dl = document.getElementById("wifiSsidHistory");
+    if (!dl) return;
+    dl.innerHTML = "";
+    loadWifiHistory().forEach(function (item) {
+      if (!item || !item.ssid) return;
+      var opt = document.createElement("option");
+      opt.value = item.ssid;
+      dl.appendChild(opt);
+    });
+  }
+
   function setWifiMessage(text) {
     setText("wifiMessage", text || "Enter your Wi-Fi SSID and password, then tap Apply. The device will reconnect automatically.");
   }
@@ -1375,6 +1418,7 @@
     if (ssidInput && data.savedSsid && data.savedSsid !== "-" && !ssidInput.value) {
       ssidInput.value = data.savedSsid;
     }
+    renderWifiSsidHistory();
     setWifiControlsDisabled(data.applyState === "applying");
   }
 
@@ -1486,6 +1530,9 @@
         setWifiMessage((payload && payload.error) ? payload.error : "Failed to start Wi-Fi apply.");
         return null;
       }
+      // Remember this credential pair for next time (best-effort).
+      saveWifiHistory({ ssid: ssid, pass: pass });
+      renderWifiSsidHistory();
       startWifiApplyPolling();
       return payload;
     }).catch(function () {
@@ -1740,6 +1787,37 @@
     if (applyBtn) {
       applyBtn.addEventListener("click", function () {
         applyWifiProfile();
+      });
+    }
+
+    // Password show/hide toggle.
+    var passInput = document.getElementById("wifiPassword");
+    var toggleBtn = document.getElementById("wifiPasswordToggle");
+    if (passInput && toggleBtn) {
+      var eyeOn = toggleBtn.querySelector(".eye-icon");
+      var eyeOff = toggleBtn.querySelector(".eye-off-icon");
+      toggleBtn.addEventListener("click", function () {
+        var showing = passInput.type === "text";
+        passInput.type = showing ? "password" : "text";
+        toggleBtn.classList.toggle("is-visible", !showing);
+        toggleBtn.setAttribute("aria-label", showing ? "Show password" : "Hide password");
+        if (eyeOn) eyeOn.style.display = showing ? "" : "none";
+        if (eyeOff) eyeOff.style.display = showing ? "none" : "";
+      });
+    }
+
+    // Auto-fill the password when a remembered SSID is picked from the datalist.
+    var ssidInput = document.getElementById("wifiSsid");
+    if (ssidInput && passInput) {
+      ssidInput.addEventListener("change", function () {
+        var chosen = ssidInput.value.trim();
+        if (!chosen) return;
+        var match = loadWifiHistory().filter(function (item) {
+          return item && item.ssid === chosen;
+        })[0];
+        if (match && match.pass) {
+          passInput.value = match.pass;
+        }
       });
     }
   }

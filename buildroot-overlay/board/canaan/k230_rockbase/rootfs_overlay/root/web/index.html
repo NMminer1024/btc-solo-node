@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NM Bitcoin Node Monitor</title>
-<link rel="stylesheet" href="/style.css?v=20260920-dash10">
+<link rel="stylesheet" href="/style.css?v=20260920-dash11">
 </head>
 <body>
 <div class="site-shell">
@@ -386,11 +386,24 @@
           <div class="wifi-form">
             <div class="wifi-field">
               <label for="wifiSsid">SSID</label>
-              <input id="wifiSsid" type="text" maxlength="32" autocomplete="off" placeholder="Network name (1-32 chars)">
+              <input id="wifiSsid" type="text" maxlength="32" autocomplete="off" list="wifiSsidHistory" placeholder="Network name (1-32 chars)">
+              <datalist id="wifiSsidHistory"></datalist>
             </div>
             <div class="wifi-field">
               <label for="wifiPassword">Password</label>
-              <input id="wifiPassword" type="password" autocomplete="new-password" placeholder="Wi-Fi password (8-63 chars, blank for open)">
+              <div class="wifi-password-wrap">
+                <input id="wifiPassword" type="password" autocomplete="new-password" placeholder="Wi-Fi password (8-63 chars, blank for open)">
+                <button class="wifi-password-toggle" id="wifiPasswordToggle" type="button" aria-label="Show password" title="Show / hide password">
+                  <svg class="eye-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                  <svg class="eye-off-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                  </svg>
+                </button>
+              </div>
             </div>
           </div>
           <div class="wifi-actions">
@@ -513,6 +526,6 @@
   </div>
 </div>
 
-<script src="/app.js?v=20260916-ota1"></script>
+<script src="/app.js?v=20260920-wifi1"></script>
 </body>
 </html>

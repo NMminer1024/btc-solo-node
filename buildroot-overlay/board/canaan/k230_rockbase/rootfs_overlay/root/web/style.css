@@ -1091,6 +1091,44 @@ textarea {
   color: var(--muted);
 }
 
+.wifi-password-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.wifi-password-wrap input {
+  padding-right: 40px;
+}
+
+.wifi-password-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.wifi-password-toggle:hover {
+  color: var(--text);
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.wifi-password-toggle.is-visible {
+  color: var(--accent);
+}
+
 .wifi-actions {
   display: flex;
   flex-wrap: wrap;
