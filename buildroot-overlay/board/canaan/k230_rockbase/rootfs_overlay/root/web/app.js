@@ -1663,7 +1663,6 @@
     setProgress("memOrb", data.system.memPct);
     setProgress("swapOrb", data.system.swapPct);
 
-    setBadgeState("pruneBadge", data.bitcoin.pruneBadge, data.bitcoin.pruneClass);
     setIbdStage("ibdStage", data.bitcoin.ibdStageKey, data.bitcoin.syncDetail, data.bitcoin.bestBlockDate);
     setRollingValue("ibdPct", formatIbdPercent(data.bitcoin.progressPct));
     if (isIbdStage && stageHeight) {
@@ -1692,9 +1691,6 @@
     }
 
     setText("stratumUrl", data.stratum.url);
-    setText("stratumUser", data.stratum.user);
-    setText("stratumPass", data.stratum.pass);
-    setText("stratumMode", data.stratum.mode);
 
     /* card title badges — version + status inline in card headers */
     setBadgeState("cardBitcoindBadge", data.bitcoin.syncBadge, data.bitcoin.syncClass);
