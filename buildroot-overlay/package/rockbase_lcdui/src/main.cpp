@@ -136,7 +136,7 @@ struct TileRuntime {
     lv_chart_series_t* stratum_series_5m = nullptr;
     lv_chart_series_t* stratum_series_6h = nullptr;
     lv_chart_series_t* stratum_series_1d = nullptr;
-    lv_obj_t* system_version_chip = nullptr;
+    lv_obj_t* page_version_label[kTileCount] {};
     lv_obj_t* system_cpu_arc = nullptr;
     lv_obj_t* system_cpu_value = nullptr;
     lv_obj_t* system_cpu_sub = nullptr;
@@ -153,7 +153,6 @@ struct TileRuntime {
     lv_obj_t* system_swap_fill = nullptr;
     lv_obj_t* system_swap_detail = nullptr;
     lv_obj_t* system_uptime = nullptr;
-    lv_obj_t* system_footer_right = nullptr;
     lv_obj_t* network_iface_icon = nullptr;
     lv_obj_t* network_settings_icon = nullptr;
     lv_obj_t* network_signal_arc = nullptr;
@@ -210,7 +209,6 @@ struct DashboardData {
     std::string swap_pct = "-";
     std::string load_avg_1 = "-";
     std::string load_avg_5 = "-";
-    std::string load_avg_15 = "-";
     std::string product_version = "-";
     std::string temp = "-";
     std::string uptime = "-";
@@ -286,8 +284,6 @@ struct SystemPageModel {
     std::string swap_pct_text = "--";
     std::string swap_detail = "--";
     std::string uptime = "--";
-    std::string footer_right = "--";
-    std::string version_text = "--";
 };
 
 struct NetworkPageModel {
@@ -1901,7 +1897,6 @@ bool load_dashboard_data(DashboardData& data) {
     data.swap_pct = json_value(system, "swap_pct");
     data.load_avg_1 = json_value(system, "load_avg_1");
     data.load_avg_5 = json_value(system, "load_avg_5");
-    data.load_avg_15 = json_value(system, "load_avg_15");
     data.product_version = json_value(system, "product_version");
     data.temp = json_value(system, "temp");
     data.uptime = json_value(system, "uptime");
@@ -2861,8 +2856,6 @@ bool build_ui_model(UiModel& model) {
     model.system.swap_detail = join_value(data.swap_used_display, " / ", data.swap_total_display);
 
     model.system.uptime = "Uptime " + data.uptime;
-    model.system.footer_right = "Load 15m " + data.load_avg_15;
-    model.system.version_text = data.product_version != "-" ? data.product_version : "--";
 
     const bool wired = data.iface.rfind("eth", 0) == 0;
     model.network.iface_icon = wired ? LV_SYMBOL_USB : LV_SYMBOL_WIFI;
@@ -2974,6 +2967,18 @@ lv_obj_t* create_tile_base(lv_obj_t* tv, uint8_t col, const TileSpec& spec) {
         add_dashboard_background(tile, col);
     }
     add_page_header(tile, spec.title, spec.subtitle, accent);
+
+    // Fixed product-version tag at the bottom-right of every page. Baseline is
+    // aligned with the page-indicator dots: dot center y = 438 + 10/2 = 443,
+    // montserrat_16 line_height 18 / base_line 3 -> text baseline sits 15px
+    // below the label top, so label top y = 443 - 15 = 428.
+    std::string ver = read_product_version();
+    lv_obj_t* ver_label = add_label(tile, ver.empty() ? "--" : ver.c_str(), 620, 428,
+                                    &lv_font_montserrat_16, lv_color_hex(0xb7c2c8));
+    lv_obj_set_width(ver_label, 138);
+    lv_obj_set_style_text_align(ver_label, LV_TEXT_ALIGN_RIGHT, 0);
+    g_tiles.page_version_label[col] = ver_label;
+
     g_tiles.page[col] = tile;
     return tile;
 }
@@ -3005,7 +3010,7 @@ void build_bitcoin_tile(lv_obj_t* tv) {
 
     g_tiles.bitcoin_progress = create_card(tile, 300, 142, 216, 96, "Progress", "--", accent);
     g_tiles.bitcoin_peers = create_card(tile, 540, 142, 216, 96, "Peers", "--", accent);
-    g_tiles.bitcoin_height = create_card(tile, 300, 262, 456, 88, "Blocks / Header", "--", accent,
+    g_tiles.bitcoin_height = create_card(tile, 300, 256, 456, 88, "Blocks / Header", "--", accent,
                                          &g_tiles.bitcoin_height_title);
     // DSEG7 digital-tube font for the Bitcoind value cards. Its glyph set
     // has no comma/slash/percent, so those are drawn in montserrat instead,
@@ -3043,7 +3048,7 @@ void build_bitcoin_tile(lv_obj_t* tv) {
     lv_label_set_long_mode(g_tiles.bitcoin_height_total, LV_LABEL_LONG_MODE_CLIP);
     lv_obj_add_flag(g_tiles.bitcoin_height_sep, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(g_tiles.bitcoin_height_total, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_t* block_time_card = create_card_frame(tile, 300, 372, 456, 58, "Block Time", accent,
+    lv_obj_t* block_time_card = create_card_frame(tile, 300, 362, 456, 58, "Block Time", accent,
                                                   &g_tiles.bitcoin_block_date_title);
     lv_obj_align(g_tiles.bitcoin_block_date_title, LV_ALIGN_LEFT_MID, 0, 0);
     g_tiles.bitcoin_block_date = add_label(block_time_card, "--", 0, 0, &lv_font_montserrat_18,
@@ -3181,10 +3186,6 @@ void build_system_tile(lv_obj_t* tv) {
     const lv_color_t accent = lv_color_hex(spec.accent);
     lv_obj_t* tile = create_tile_base(tv, 2, spec);
 
-    g_tiles.system_version_chip = add_label(tile, "--", 620, 38, &lv_font_montserrat_18, lv_color_hex(0x78848b));
-    lv_obj_set_width(g_tiles.system_version_chip, 138);
-    lv_obj_set_style_text_align(g_tiles.system_version_chip, LV_TEXT_ALIGN_RIGHT, 0);
-
     // Three instrument-cluster gauges: CPU load, memory, thermal.
     constexpr int32_t kGaugeSize = 168;
     constexpr int32_t kGaugeY = 116;
@@ -3230,9 +3231,6 @@ void build_system_tile(lv_obj_t* tv) {
 
     g_tiles.system_uptime = add_label(tile, "--", 46, 420, &lv_font_montserrat_18, lv_color_hex(0xd7e0e6));
     lv_obj_set_width(g_tiles.system_uptime, 360);
-    g_tiles.system_footer_right = add_label(tile, "--", 394, 420, &lv_font_montserrat_18, lv_color_hex(0xd7e0e6));
-    lv_obj_set_width(g_tiles.system_footer_right, 360);
-    lv_obj_set_style_text_align(g_tiles.system_footer_right, LV_TEXT_ALIGN_RIGHT, 0);
 }
 
 void build_network_tile(lv_obj_t* tv) {
@@ -3438,8 +3436,6 @@ uint32_t apply_ui_model(const UiModel& model) {
                      model.system.swap_pct_text);
     dirty |= set_label(g_tiles.system_swap_detail, model.system.swap_detail);
     dirty |= set_label(g_tiles.system_uptime, model.system.uptime);
-    dirty |= set_label(g_tiles.system_footer_right, model.system.footer_right);
-    dirty |= set_label(g_tiles.system_version_chip, model.system.version_text);
     if (dirty) {
         dirty_mask |= page_dirty_bit(2);
     }
