@@ -1873,6 +1873,111 @@ html[data-theme="light"] .miners-history-grid {
   to { transform: rotate(360deg); }
 }
 
+/* ── Clean block data (Bitcoind card button + confirm dialog) ── */
+
+.clean-block-btn {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.clean-block-btn:hover {
+  border-color: var(--red);
+  color: var(--red);
+  background: rgba(248, 81, 73, 0.08);
+}
+
+.action-button-danger {
+  background: rgba(248, 81, 73, 0.12);
+  border-color: rgba(248, 81, 73, 0.4);
+  color: var(--red);
+}
+
+.action-button-danger:hover {
+  background: rgba(248, 81, 73, 0.2);
+  color: var(--red);
+}
+
+.cleanblock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+  padding: 20px;
+}
+
+.cleanblock-overlay[hidden] {
+  display: none;
+}
+
+.cleanblock-modal {
+  width: 420px;
+  max-width: 100%;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.cleanblock-modal h3 {
+  margin: 0 0 14px;
+  font-size: 17px;
+}
+
+.cleanblock-note {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.cleanblock-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.cleanblock-phase {
+  margin: 0 0 10px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cleanblock-progress {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.cleanblock-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.cleanblock-progress-fill.is-indeterminate {
+  width: 35%;
+  animation: ota-slide 1.2s ease-in-out infinite;
+}
+
 /* ── Dashboard footer (copyright + product version) ──────── */
 
 .dashboard-footer {

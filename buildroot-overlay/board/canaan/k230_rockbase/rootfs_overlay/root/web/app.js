@@ -2551,6 +2551,207 @@
     otaShowView("confirm");
   }
 
+  /* ── i18n ───────────────────────────────────────────────
+   * Wires the existing (previously inert) #langSelect. Default is English;
+   * choice persists in localStorage. Only the strings tagged with [data-i18n]
+   * are translated; everything else stays as authored. */
+  var I18N = {
+    en: {
+      "cleanBlock.btn": "Clean Block Data",
+      "cleanBlock.title": "Clean Block Data",
+      "cleanBlock.warn": "This will completely delete the block data already synced on this device. After deletion the node re-syncs all blocks from scratch, which is expected to take more than 1 month. Mining pauses during the operation. Do not power off.",
+      "cleanBlock.cancel": "Cancel",
+      "cleanBlock.confirm": "Clean Now",
+      "cleanBlock.progressTitle": "Cleaning Block Data",
+      "cleanBlock.progressNote": "Do not power off the node.",
+      "cleanBlock.close": "Close",
+      "cleanBlock.phase.stopping": "Stopping bitcoind...",
+      "cleanBlock.phase.cleaning": "Wiping block data...",
+      "cleanBlock.phase.restarting": "Restarting bitcoind...",
+      "cleanBlock.phase.done": "Done. Re-syncing all blocks (expected more than 1 month).",
+      "cleanBlock.phase.error": "Clean finished with an error. Check the logs."
+    },
+    zh: {
+      "cleanBlock.btn": "清理区块数据",
+      "cleanBlock.title": "清理区块数据",
+      "cleanBlock.warn": "这将完全删除设备上已同步的区块数据。删除后节点将从零重新同步所有区块，预计耗时 1 个月以上。期间挖矿暂停，请勿断电。",
+      "cleanBlock.cancel": "取消",
+      "cleanBlock.confirm": "立即清理",
+      "cleanBlock.progressTitle": "正在清理区块数据",
+      "cleanBlock.progressNote": "请勿断电。",
+      "cleanBlock.close": "关闭",
+      "cleanBlock.phase.stopping": "正在停止 bitcoind...",
+      "cleanBlock.phase.cleaning": "正在清空区块数据...",
+      "cleanBlock.phase.restarting": "正在重启 bitcoind...",
+      "cleanBlock.phase.done": "清理完成，正在重新同步所有区块（预计 1 个月以上）。",
+      "cleanBlock.phase.error": "清理出现错误，请查看日志。"
+    }
+  };
+
+  function getStoredLang() {
+    try {
+      return window.localStorage.getItem("nmLang") === "zh" ? "zh" : "en";
+    } catch (e) {
+      return "en";
+    }
+  }
+
+  var currentLang = getStoredLang();
+
+  function t(key) {
+    var dict = I18N[currentLang] || I18N.en;
+    if (dict[key] != null) return dict[key];
+    if (I18N.en[key] != null) return I18N.en[key];
+    return key;
+  }
+
+  function applyI18n() {
+    var nodes = document.querySelectorAll("[data-i18n]");
+    nodes.forEach(function (n) {
+      var key = n.getAttribute("data-i18n");
+      var val = t(key);
+      if (val != null) n.textContent = val;
+    });
+    document.documentElement.setAttribute("lang", currentLang);
+  }
+
+  function setLang(lang) {
+    currentLang = lang === "zh" ? "zh" : "en";
+    try {
+      window.localStorage.setItem("nmLang", currentLang);
+    } catch (e) {}
+    applyI18n();
+    if (cleanBlockActive) updateCleanBlockPhaseLabel();
+  }
+
+  function bindLangSelect() {
+    var sel = document.getElementById("langSelect");
+    if (!sel) return;
+    sel.value = currentLang;
+    sel.addEventListener("change", function () {
+      setLang(sel.value);
+    });
+  }
+
+  /* ── Clean block data ───────────────────────────────────
+   * Button on the Bitcoind card -> confirm dialog -> POST /api/cleanblock.cgi
+   * -> poll state until done/error. The heavy work runs server-side async. */
+  var cleanBlockActive = false;
+  var cleanBlockPollTimer = null;
+
+  function cleanBlockShowView(view) {
+    var overlay = document.getElementById("cleanBlockOverlay");
+    var confirm = document.getElementById("cleanBlockConfirmView");
+    var progress = document.getElementById("cleanBlockProgressView");
+    if (!overlay || !confirm || !progress) return;
+    overlay.hidden = view === null;
+    confirm.hidden = view !== "confirm";
+    progress.hidden = view !== "progress";
+  }
+
+  function updateCleanBlockPhaseLabel(phase) {
+    var el = document.getElementById("cleanBlockPhaseLabel");
+    if (!el) return;
+    el.textContent = t("cleanBlock.phase." + phase) || phase;
+  }
+
+  function stopCleanBlockPolling() {
+    if (cleanBlockPollTimer) {
+      window.clearInterval(cleanBlockPollTimer);
+      cleanBlockPollTimer = null;
+    }
+  }
+
+  function cleanBlockPollState() {
+    return window.fetch("/api/cleanblock.cgi?action=state&_ts=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (st) {
+        if (!st || !st.phase) return;
+        var phase = st.phase;
+        updateCleanBlockPhaseLabel(phase);
+        if (phase === "done" || phase === "error") {
+          stopCleanBlockPolling();
+          var doneActions = document.getElementById("cleanBlockDoneActions");
+          if (doneActions) doneActions.hidden = false;
+          var fill = document.getElementById("cleanBlockProgressFill");
+          if (fill) fill.classList.remove("is-indeterminate");
+        }
+      })
+      .catch(function () {});
+  }
+
+  function cleanBlockStartPolling() {
+    stopCleanBlockPolling();
+    cleanBlockPollTimer = window.setInterval(cleanBlockPollState, 3000);
+    cleanBlockPollState();
+  }
+
+  function cleanBlockTrigger() {
+    var confirmBtn = document.getElementById("cleanBlockConfirmBtn");
+    if (confirmBtn) confirmBtn.disabled = true;
+    cleanBlockActive = true;
+    cleanBlockShowView("progress");
+    updateCleanBlockPhaseLabel("stopping");
+    var doneActions = document.getElementById("cleanBlockDoneActions");
+    if (doneActions) doneActions.hidden = true;
+    var fill = document.getElementById("cleanBlockProgressFill");
+    if (fill) fill.classList.add("is-indeterminate");
+    window.fetch("/api/cleanblock.cgi?action=clean", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: ""
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (res && res.ok) {
+          cleanBlockStartPolling();
+        } else {
+          cleanBlockFailStart();
+        }
+      })
+      .catch(function () {
+        cleanBlockFailStart();
+      });
+  }
+
+  function cleanBlockFailStart() {
+    updateCleanBlockPhaseLabel("error");
+    var doneActions = document.getElementById("cleanBlockDoneActions");
+    if (doneActions) doneActions.hidden = false;
+    var confirmBtn = document.getElementById("cleanBlockConfirmBtn");
+    if (confirmBtn) confirmBtn.disabled = false;
+  }
+
+  function bindCleanBlockControls() {
+    var btn = document.getElementById("cleanBlockBtn");
+    if (btn) {
+      btn.addEventListener("click", function () {
+        cleanBlockShowView("confirm");
+      });
+    }
+    var cancel = document.getElementById("cleanBlockCancelBtn");
+    if (cancel) {
+      cancel.addEventListener("click", function () {
+        cleanBlockShowView(null);
+      });
+    }
+    var confirm = document.getElementById("cleanBlockConfirmBtn");
+    if (confirm) {
+      confirm.addEventListener("click", function () {
+        cleanBlockTrigger();
+      });
+    }
+    var close = document.getElementById("cleanBlockCloseBtn");
+    if (close) {
+      close.addEventListener("click", function () {
+        cleanBlockActive = false;
+        cleanBlockShowView(null);
+        var c = document.getElementById("cleanBlockConfirmBtn");
+        if (c) c.disabled = false;
+      });
+    }
+  }
+
   function init() {
     renderDashboard(mock);
     setRefreshCountdown(DASHBOARD_REFRESH_SECONDS);
@@ -2561,6 +2762,9 @@
     bindTzControls();
     bindOtaControls();
     bindThemeToggle();
+    bindLangSelect();
+    applyI18n();
+    bindCleanBlockControls();
     setTheme(getStoredTheme());
     fetchDashboardData();
     /* prefetch miners cache so the Stratum card pool stats and hero Miners badge fill on first load */

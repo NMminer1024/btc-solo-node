@@ -62,6 +62,7 @@
                   <span id="bitcoinRefreshCountdown">10s</span>
                 </div>
               </div>
+              <button class="clean-block-btn" id="cleanBlockBtn" type="button" data-i18n="cleanBlock.btn">Clean Block Data</button>
             </div>
           </div>
 
@@ -527,6 +528,30 @@
   </div>
 </div>
 
-<script src="/app.js?v=20260920-tz2"></script>
+<div class="cleanblock-overlay" id="cleanBlockOverlay" hidden>
+  <div class="cleanblock-modal" role="dialog" aria-modal="true" aria-label="Clean block data">
+    <div class="cleanblock-view" id="cleanBlockConfirmView">
+      <h3 data-i18n="cleanBlock.title">Clean Block Data</h3>
+      <p class="cleanblock-note" data-i18n="cleanBlock.warn">This will completely delete the block data already synced on this device. After deletion the node re-syncs all blocks from scratch, which is expected to take more than 1 month. Mining pauses during the operation. Do not power off.</p>
+      <div class="cleanblock-actions">
+        <button class="action-button" id="cleanBlockCancelBtn" type="button" data-i18n="cleanBlock.cancel">Cancel</button>
+        <button class="action-button action-button-danger" id="cleanBlockConfirmBtn" type="button" data-i18n="cleanBlock.confirm">Clean Now</button>
+      </div>
+    </div>
+    <div class="cleanblock-view" id="cleanBlockProgressView" hidden>
+      <h3 data-i18n="cleanBlock.progressTitle">Cleaning Block Data</h3>
+      <p class="cleanblock-phase" id="cleanBlockPhaseLabel">Stopping bitcoind...</p>
+      <div class="cleanblock-progress">
+        <div class="cleanblock-progress-fill is-indeterminate" id="cleanBlockProgressFill"></div>
+      </div>
+      <p class="cleanblock-note" data-i18n="cleanBlock.progressNote">Do not power off the node.</p>
+      <div class="cleanblock-actions" id="cleanBlockDoneActions" hidden>
+        <button class="action-button action-button-primary" id="cleanBlockCloseBtn" type="button" data-i18n="cleanBlock.close">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js?v=20260920-cleanblock1"></script>
 </body>
 </html>
