@@ -884,10 +884,19 @@ textarea {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease,
+              background 0.15s ease, transform 0.1s ease;
 }
 
 .copy-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(88, 166, 255, 0.08);
+}
+
+.copy-btn:active {
+  transform: scale(0.88);
+  background: rgba(88, 166, 255, 0.2);
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -895,6 +904,7 @@ textarea {
 .copy-btn.is-copied {
   border-color: var(--green);
   color: var(--green);
+  background: rgba(63, 185, 80, 0.12);
 }
 
 .stratum-endpoint {
