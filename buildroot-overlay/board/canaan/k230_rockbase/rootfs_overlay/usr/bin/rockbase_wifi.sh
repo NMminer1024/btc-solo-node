@@ -16,6 +16,7 @@ WIFI_WATCHDOG_ENABLE=${WIFI_WATCHDOG_ENABLE:-1}
 WIFI_WATCHDOG_INTERVAL=${WIFI_WATCHDOG_INTERVAL:-20}
 WIFI_WATCHDOG_FAIL_THRESHOLD=${WIFI_WATCHDOG_FAIL_THRESHOLD:-3}
 WIFI_WATCHDOG_PIDFILE=${WIFI_WATCHDOG_PIDFILE:-/var/run/rockbase-wifi-watchdog.pid}
+WIFI_APPLY_LOCK=${WIFI_APPLY_LOCK:-/tmp/rockbase-wifi-apply.lock}
 
 wifi_shell_quote() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
@@ -596,6 +597,8 @@ wifi_apply_async() {
   next_pass=$2
   next_hidden=${3:-0}
   (
+    # Remove the apply lock on any exit path (success, failure, or signal).
+    trap 'rm -f "$WIFI_APPLY_LOCK" 2>/dev/null' EXIT
     wifi_apply_worker "$next_ssid" "$next_pass" "$next_hidden"
   ) >/dev/null 2>&1 &
   printf '%s\n' $!
