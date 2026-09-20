@@ -31,7 +31,7 @@ diff --git a/core/rtw_cmd.c b/core/rtw_cmd.c
 -		return;
 +		return false;
  
- 	pr_warn("[rb8189-diag] rtw_cmd_thread cmd start "CMD_FMT" pid=%d comm=%s issued=%u done=%u seq=%u\n",
+ 	if (0) printk("[rb8189-diag] rtw_cmd_thread cmd start "CMD_FMT" pid=%d comm=%s issued=%u done=%u seq=%u\n",
  		 CMD_ARG(pcmd), current->pid, current->comm,
 -		 pcmdpriv->cmd_issued_cnt, pcmdpriv->cmd_done_cnt, pcmdpriv->cmd_seq);
 +		 pcmdpriv->cmd_issued_cnt, pcmdpriv->cmd_done_cnt, diag_seq);
@@ -44,7 +44,7 @@ diff --git a/core/rtw_cmd.c b/core/rtw_cmd.c
 +	if (!traced && cmd_process_time <= 1000)
 +		return;
 +
-+	pr_warn("[rb8189-diag] rtw_cmd_thread cmd done "ADPT_FMT" "CMD_FMT" ret=%u process_time=%d issued=%u done=%u seq=%u traced=%u\n",
++	if (0) printk("[rb8189-diag] rtw_cmd_thread cmd done "ADPT_FMT" "CMD_FMT" ret=%u process_time=%d issued=%u done=%u seq=%u traced=%u\n",
 +		ADPT_ARG(pcmd->padapter), CMD_ARG(pcmd), pcmd->res, cmd_process_time,
 +		pcmdpriv->cmd_issued_cnt, pcmdpriv->cmd_done_cnt, diag_seq,
 +		traced ? 1 : 0);
@@ -83,7 +83,7 @@ diff --git a/core/rtw_cmd.c b/core/rtw_cmd.c
  
  		cmd_process_time = rtw_get_passing_time_ms(cmd_start_time);
 -		if (cmd_process_time > 1000) {
--			pr_warn("[rb8189-diag] rtw_cmd_thread cmd done "ADPT_FMT" "CMD_FMT" ret=%u process_time=%d issued=%u done=%u seq=%u\n",
+-			if (0) printk("[rb8189-diag] rtw_cmd_thread cmd done "ADPT_FMT" "CMD_FMT" ret=%u process_time=%d issued=%u done=%u seq=%u\n",
 -				ADPT_ARG(pcmd->padapter), CMD_ARG(pcmd), pcmd->res, cmd_process_time,
 -				pcmdpriv->cmd_issued_cnt, pcmdpriv->cmd_done_cnt, pcmdpriv->cmd_seq);
 +		if (diag_cmd_traced || cmd_process_time > 1000) {
@@ -101,7 +101,7 @@ diff --git a/os_dep/linux/sdio_intf.c b/os_dep/linux/sdio_intf.c
  	elapsed = rtw_get_passing_time_ms(start);
 -	if (elapsed >= 300)
 +	if (trace || elapsed >= 300)
- 		pr_warn("[rb8189-diag] sd_sync_int_hdl done seq=%u pid=%d comm=%s func=%p elapsed_ms=%u\n",
+ 		if (0) printk("[rb8189-diag] sd_sync_int_hdl done seq=%u pid=%d comm=%s func=%p elapsed_ms=%u\n",
  			 seq, current->pid, current->comm, func, elapsed);
  }
 diff --git a/os_dep/linux/sdio_ops_linux.c b/os_dep/linux/sdio_ops_linux.c
@@ -120,7 +120,7 @@ diff --git a/os_dep/linux/sdio_ops_linux.c b/os_dep/linux/sdio_ops_linux.c
 +	if (!trace && elapsed < RB8189_DIAG_SLOW_SDIO_MS && !err)
  		return;
  
- 	pr_warn("[rb8189-diag] %s done seq=%u pid=%d comm=%s addr=0x%05x cnt=%u claim=%u err=%d elapsed_ms=%u\n",
+ 	if (0) printk("[rb8189-diag] %s done seq=%u pid=%d comm=%s addr=0x%05x cnt=%u claim=%u err=%d elapsed_ms=%u\n",
 @@ -762,7 +762,7 @@
  		}
  		if (trace)

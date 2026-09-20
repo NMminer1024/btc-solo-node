@@ -36,7 +36,7 @@ index b3fd670..2f7ea63 100644
  
 +static void rb8189_diag_irq_mark(const char *stage, u32 seq, u32 hisr, u32 himr)
 +{
-+	pr_warn("[rb8189-diag] sd_int_hdl %s seq=%u pid=%d comm=%s hisr=0x%08x himr=0x%08x\n",
++	if (0) printk("[rb8189-diag] sd_int_hdl %s seq=%u pid=%d comm=%s hisr=0x%08x himr=0x%08x\n",
 +		 stage, seq, current->pid, current->comm, hisr, himr);
 +}
 +
@@ -56,7 +56,7 @@ index b3fd670..2f7ea63 100644
  	phal = GET_HAL_DATA(padapter);
  	start = rtw_get_current_time();
 -	if (rb8189_diag_ratelimit(&last_enter, RB8189_DIAG_PERIOD_MS))
--		pr_warn("[rb8189-diag] sd_int_hdl enter pid=%d comm=%s\n",
+-		if (0) printk("[rb8189-diag] sd_int_hdl enter pid=%d comm=%s\n",
 -			 current->pid, current->comm);
 +	seq = ++rb8189_diag_irq_seq;
 +	trace = rb8189_diag_ratelimit(&last_enter, RB8189_DIAG_PERIOD_MS);
@@ -112,9 +112,9 @@ index b3fd670..2f7ea63 100644
  
  	elapsed = rtw_get_passing_time_ms(start);
  	if (elapsed >= RB8189_DIAG_SLOW_PORT_MS)
--		pr_warn("[rb8189-diag] sd_int_hdl done pid=%d comm=%s hisr=0x%08x himr=0x%08x elapsed_ms=%u\n",
+-		if (0) printk("[rb8189-diag] sd_int_hdl done pid=%d comm=%s hisr=0x%08x himr=0x%08x elapsed_ms=%u\n",
 -			 current->pid, current->comm, phal->sdio_hisr, phal->sdio_himr, elapsed);
-+		pr_warn("[rb8189-diag] sd_int_hdl done seq=%u pid=%d comm=%s hisr=0x%08x himr=0x%08x elapsed_ms=%u\n",
++		if (0) printk("[rb8189-diag] sd_int_hdl done seq=%u pid=%d comm=%s hisr=0x%08x himr=0x%08x elapsed_ms=%u\n",
 +			 seq, current->pid, current->comm, phal->sdio_hisr, phal->sdio_himr, elapsed);
  }
  
@@ -145,29 +145,29 @@ index 0b7fed6..7250138 100644
  
  	start = rtw_get_current_time();
 -	if (rb8189_diag_irq_ratelimit(&last_enter, 30000))
--		pr_warn("[rb8189-diag] sd_sync_int_hdl enter pid=%d comm=%s func=%p\n",
+-		if (0) printk("[rb8189-diag] sd_sync_int_hdl enter pid=%d comm=%s func=%p\n",
 -			 current->pid, current->comm, func);
 +	seq = ++rb8189_diag_sync_irq_seq;
 +	trace = rb8189_diag_irq_ratelimit(&last_enter, 30000);
 +	if (trace)
-+		pr_warn("[rb8189-diag] sd_sync_int_hdl enter seq=%u pid=%d comm=%s func=%p\n",
++		if (0) printk("[rb8189-diag] sd_sync_int_hdl enter seq=%u pid=%d comm=%s func=%p\n",
 +			 seq, current->pid, current->comm, func);
  
  	rtw_sdio_set_irq_thd(psdpriv, current);
 +	if (trace)
-+		pr_warn("[rb8189-diag] sd_sync_int_hdl before_sd_int seq=%u pid=%d comm=%s func=%p\n",
++		if (0) printk("[rb8189-diag] sd_sync_int_hdl before_sd_int seq=%u pid=%d comm=%s func=%p\n",
 +			 seq, current->pid, current->comm, func);
  	sd_int_hdl(dvobj_get_primary_adapter(psdpriv));
 +	if (trace)
-+		pr_warn("[rb8189-diag] sd_sync_int_hdl after_sd_int seq=%u pid=%d comm=%s func=%p\n",
++		if (0) printk("[rb8189-diag] sd_sync_int_hdl after_sd_int seq=%u pid=%d comm=%s func=%p\n",
 +			 seq, current->pid, current->comm, func);
  	rtw_sdio_set_irq_thd(psdpriv, NULL);
  
  	elapsed = rtw_get_passing_time_ms(start);
  	if (elapsed >= 300)
--		pr_warn("[rb8189-diag] sd_sync_int_hdl done pid=%d comm=%s func=%p elapsed_ms=%u\n",
+-		if (0) printk("[rb8189-diag] sd_sync_int_hdl done pid=%d comm=%s func=%p elapsed_ms=%u\n",
 -			 current->pid, current->comm, func, elapsed);
-+		pr_warn("[rb8189-diag] sd_sync_int_hdl done seq=%u pid=%d comm=%s func=%p elapsed_ms=%u\n",
++		if (0) printk("[rb8189-diag] sd_sync_int_hdl done seq=%u pid=%d comm=%s func=%p elapsed_ms=%u\n",
 +			 seq, current->pid, current->comm, func, elapsed);
  }
  
@@ -202,17 +202,17 @@ index a8ad9e0..efc9bdf 100644
 -		return;
 +		return false;
 +
-+	pr_warn("[rb8189-diag] %s enter seq=%u pid=%d comm=%s addr=0x%05x cnt=%u claim=%u\n",
++	if (0) printk("[rb8189-diag] %s enter seq=%u pid=%d comm=%s addr=0x%05x cnt=%u claim=%u\n",
 +		 op, *seq, current->pid, current->comm, addr, cnt, claim ? 1 : 0);
 +	return true;
 +}
  
--	pr_warn("[rb8189-diag] %s enter pid=%d comm=%s addr=0x%05x cnt=%u claim=%u\n",
+-	if (0) printk("[rb8189-diag] %s enter pid=%d comm=%s addr=0x%05x cnt=%u claim=%u\n",
 -		 op, current->pid, current->comm, addr, cnt, claim ? 1 : 0);
 +static void rb8189_diag_sdio_mark(const char *op, const char *stage, u32 seq,
 +				  u32 addr, u32 cnt, bool claim)
 +{
-+	pr_warn("[rb8189-diag] %s %s seq=%u pid=%d comm=%s addr=0x%05x cnt=%u claim=%u\n",
++	if (0) printk("[rb8189-diag] %s %s seq=%u pid=%d comm=%s addr=0x%05x cnt=%u claim=%u\n",
 +		 op, stage, seq, current->pid, current->comm, addr, cnt,
 +		 claim ? 1 : 0);
  }
@@ -226,9 +226,9 @@ index a8ad9e0..efc9bdf 100644
  	if (elapsed < RB8189_DIAG_SLOW_SDIO_MS && !err)
  		return;
  
--	pr_warn("[rb8189-diag] %s done pid=%d comm=%s addr=0x%05x cnt=%u claim=%u err=%d elapsed_ms=%u\n",
+-	if (0) printk("[rb8189-diag] %s done pid=%d comm=%s addr=0x%05x cnt=%u claim=%u err=%d elapsed_ms=%u\n",
 -		 op, current->pid, current->comm, addr, cnt, claim ? 1 : 0, err, elapsed);
-+	pr_warn("[rb8189-diag] %s done seq=%u pid=%d comm=%s addr=0x%05x cnt=%u claim=%u err=%d elapsed_ms=%u\n",
++	if (0) printk("[rb8189-diag] %s done seq=%u pid=%d comm=%s addr=0x%05x cnt=%u claim=%u err=%d elapsed_ms=%u\n",
 +		 op, seq, current->pid, current->comm, addr, cnt,
 +		 claim ? 1 : 0, err, elapsed);
  }
