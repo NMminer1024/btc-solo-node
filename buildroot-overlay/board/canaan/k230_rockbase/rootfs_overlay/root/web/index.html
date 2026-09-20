@@ -47,29 +47,14 @@
     </header>
 
     <section class="panel-view is-visible" data-view-panel="dashboard">
-      <section class="hero-strip" aria-label="Core status">
-        <div class="hero-item">
-          <span class="hero-title">
-            <span class="hero-label">Bitcoind</span>
-            <span class="hero-version mono" id="heroBitcoindVersion"></span>
-          </span>
-          <span class="status-badge status-soft" id="heroBitcoindBadge">--</span>
-        </div>
-        <div class="hero-item">
-          <span class="hero-label">Stratum</span>
-          <span class="status-badge status-soft" id="heroStratumBadge">--</span>
-        </div>
-        <div class="hero-item">
-          <span class="hero-label">Miners</span>
-          <span class="status-badge status-soft" id="heroMinersBadge">--</span>
-        </div>
-      </section>
-
       <section class="dashboard-grid">
         <article class="surface-card surface-card-primary">
           <div class="surface-head">
-            <div>
+            <div class="card-title-group">
               <h3>Bitcoind</h3>
+              <span class="card-title-sep">|</span>
+              <span class="card-title-ver mono" id="cardBitcoindVersion">--</span>
+              <span class="status-badge status-soft" id="cardBitcoindBadge">--</span>
             </div>
             <div class="status-pair">
               <div class="refresh-orb-chip" title="Next dashboard refresh">
@@ -85,6 +70,7 @@
             <div class="progress-orb">
               <div class="progress-orb-ring" id="ibdOrb">
                 <span id="ibdPct">--</span>
+                <img id="ibdCheck" src="img/green_check_500.png" alt="synced" />
               </div>
             </div>
             <div class="sync-copy">
@@ -115,8 +101,10 @@
 
         <article class="surface-card surface-card-primary">
           <div class="surface-head">
-            <div>
+            <div class="card-title-group">
               <h3>Stratum</h3>
+              <span class="card-title-sep">|</span>
+              <span class="status-badge status-soft" id="cardStratumBadge">--</span>
             </div>
           </div>
 
@@ -141,7 +129,7 @@
                 <strong class="stack-yellow" id="minerBestShare">--</strong>
               </div>
               <div class="stack-row">
-                <span>Workers</span>
+                <span>Workers / Miners</span>
                 <strong id="minerWorkers">--</strong>
               </div>
             </div>

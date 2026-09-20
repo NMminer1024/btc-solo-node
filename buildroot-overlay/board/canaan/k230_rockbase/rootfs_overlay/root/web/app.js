@@ -1265,7 +1265,8 @@
     var workers = Number(pool.workers);
 
     setText("minerUsers", Number.isFinite(users) ? formatCount(users) : formatCount(miners.length));
-    setText("minerWorkers", Number.isFinite(workers) ? formatCount(workers) : "--");
+    var onlineMiners = miners.filter(function (m) { return m.online; }).length;
+    setText("minerWorkers", miners.length ? onlineMiners + " / " + miners.length + " online" : "--");
     setText("minerHash5m", toText(pool.hashrate5m, "--"));
     setText("minerBestShare", formatShare(pool.bestshare));
     /* redesign: Miners view summary mirrors of the dashboard KPI cards */
@@ -1275,11 +1276,6 @@
     setText("minersUpdated", formatApiAge(payload.generated_at) + " · next cache refresh " + toText(payload.next_refresh_seconds, "60") + "s");
     setText("minersSource", toText(payload.source && payload.source.users_dir, "/root/config/ckpool/logs/users"));
 
-    /* redesign: hero miners badge — render-only, reuses the cached miners.cgi payload above */
-    var onlineMiners = miners.filter(function (miner) { return miner.online; }).length;
-    setBadgeState("heroMinersBadge",
-      miners.length ? onlineMiners + " / " + miners.length + " online" : "No miners",
-      onlineMiners > 0 ? "status-ok" : "status-soft");
     renderNodeHashrateHistory(pool, history);
 
     lastMinersPayload = payload;
@@ -1688,18 +1684,23 @@
     setRollingValue("nodeUptime", data.bitcoin.uptime);
 
     var orb = document.getElementById("ibdOrb");
-    if (orb) orb.style.setProperty("--pct", data.bitcoin.progressPct);
+    if (orb) {
+      orb.style.setProperty("--pct", data.bitcoin.progressPct);
+      // Show the check mark instead of the percentage once fully synced.
+      var complete = Number(data.bitcoin.progressPct) >= 100;
+      orb.classList.toggle("is-complete", complete);
+    }
 
     setText("stratumUrl", data.stratum.url);
     setText("stratumUser", data.stratum.user);
     setText("stratumPass", data.stratum.pass);
     setText("stratumMode", data.stratum.mode);
 
-    /* redesign: hero status strip — render-only, reuses the normalized status.cgi data above */
-    setBadgeState("heroBitcoindBadge", data.bitcoin.syncBadge, data.bitcoin.syncClass);
-    setBadgeState("heroStratumBadge", data.stratum.badge, data.stratum.badgeClass);
-    var heroVer = String(data.bitcoin.version || "").replace(/^Satoshi:/i, "").replace(/\//g, "").trim();
-    setText("heroBitcoindVersion", heroVer && heroVer !== "--" ? "| " + heroVer : "");
+    /* card title badges — version + status inline in card headers */
+    setBadgeState("cardBitcoindBadge", data.bitcoin.syncBadge, data.bitcoin.syncClass);
+    setBadgeState("cardStratumBadge", data.stratum.badge, data.stratum.badgeClass);
+    var cardVer = String(data.bitcoin.version || "").replace(/^Satoshi:/i, "").replace(/\//g, "").trim();
+    setText("cardBitcoindVersion", cardVer && cardVer !== "--" ? cardVer : "");
 
     setText("sysCpu", "Canaan K230 \u00b7 RISC-V");
     setText("sysTemp", data.system.temperature);
