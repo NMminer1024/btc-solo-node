@@ -2,6 +2,7 @@
 #include "miners_overlay.h"
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <cmath>
 #include <csignal>
@@ -43,6 +44,9 @@ namespace {
 
 constexpr uint32_t kUiWidth = 800;
 constexpr uint32_t kUiHeight = 480;
+constexpr uint32_t kRollingDigitAnimMs = 620;
+constexpr uint32_t kRollingDigitStaggerMs = 38;
+constexpr size_t kRollingDigitCapacity = 8;
 constexpr uint32_t kSwipeDragStartThresholdPx = 40;
 constexpr uint32_t kPageSwitchThresholdPx = kUiWidth / 10U;
 constexpr uint32_t kFramePixels = kUiWidth * kUiHeight;
@@ -163,6 +167,23 @@ struct TileRuntime {
     lv_obj_t* network_gateway = nullptr;
     lv_obj_t* network_dns_dot = nullptr;
     lv_obj_t* network_dns = nullptr;
+};
+
+struct RollingDigitSlot {
+    lv_obj_t* clip = nullptr;
+    lv_obj_t* track = nullptr;
+    lv_obj_t* old_label = nullptr;
+    lv_obj_t* new_label = nullptr;
+};
+
+struct RollingNumber {
+    lv_obj_t* root = nullptr;
+    std::array<RollingDigitSlot, kRollingDigitCapacity> slots {};
+    size_t capacity = 0;
+    int32_t digit_width = 0;
+    int32_t decimal_width = 0;
+    int32_t line_height = 0;
+    std::string value;
 };
 
 struct TileSpec {
@@ -341,6 +362,12 @@ constexpr const char* kBitcoinStageLabels[kBitcoinStageCount] = {
 
 TouchInput g_touch;
 TileRuntime g_tiles;
+RollingNumber g_bitcoin_progress_roll;
+RollingNumber g_bitcoin_peers_roll;
+RollingNumber g_bitcoin_height_current_roll;
+RollingNumber g_bitcoin_height_total_roll;
+uint32_t g_bitcoin_roll_pending = 0;
+bool g_bitcoin_roll_active = false;
 RawImage g_boot_logo;
 RawImage g_page_bg[kTileCount];
 static uint32_t* g_tile_cache[kTileCount] = {};  // pre-rendered physical frames per tile
@@ -388,6 +415,7 @@ void refresh_clock_cb(lv_timer_t*);
 void refresh_status_cb(lv_timer_t*);
 int present_display_buffer();
 void request_status_refresh();
+void set_page_source_visible(uint32_t index, bool visible);
 
 uint32_t tick_ms() {
     timespec ts {};
@@ -744,6 +772,34 @@ bool is_live_page_overlay(uint32_t index, lv_obj_t* child) {
     return index == 1 && child != nullptr && child == g_tiles.stratum_state_dot;
 }
 
+void set_page_source_visible(uint32_t index, bool visible) {
+    if (index >= kTileCount || g_tiles.page[index] == nullptr ||
+        g_tiles.page_image[index] == nullptr) {
+        return;
+    }
+    lv_obj_t* page = g_tiles.page[index];
+    lv_obj_t* image = g_tiles.page_image[index];
+    const uint32_t child_count = lv_obj_get_child_count(page);
+    for (uint32_t child_index = 0; child_index < child_count; ++child_index) {
+        lv_obj_t* child = lv_obj_get_child(page, child_index);
+        if (child == image || is_live_page_overlay(index, child)) {
+            continue;
+        }
+        if (visible) {
+            lv_obj_clear_flag(child, LV_OBJ_FLAG_HIDDEN);
+        }
+        else {
+            lv_obj_add_flag(child, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (visible) {
+        lv_obj_add_flag(image, LV_OBJ_FLAG_HIDDEN);
+    }
+    else {
+        lv_obj_clear_flag(image, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
 void set_live_page_overlays_hidden(uint32_t index, bool hidden) {
     if (index >= kTileCount) {
         return;
@@ -830,6 +886,9 @@ void refresh_one_dirty_page_if_idle() {
                 break;
             }
         }
+    }
+    if (page == 0 && g_bitcoin_roll_active) {
+        return;
     }
     if (!g_page_cache_dirty[page]) {
         return;
@@ -1708,9 +1767,27 @@ bool is_all_digits(const std::string& value) {
     return true;
 }
 
-// DSEG7 has no '%' glyph, so the value label only ever holds the integer
-// digits; the '%' suffix is rendered separately in a regular font.
-std::string format_progress_int(const std::string& value) {
+bool is_rolling_number(const std::string& value) {
+    if (value.empty()) {
+        return false;
+    }
+    bool has_decimal = false;
+    for (char ch : value) {
+        if (ch >= '0' && ch <= '9') {
+            continue;
+        }
+        if (ch == '.' && !has_decimal) {
+            has_decimal = true;
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+// Keep the status API's millipercent precision while syncing. At completion,
+// the compact integer "100" reads better and matches the finalized state.
+std::string format_progress(const std::string& value) {
     if (!has_value(value)) {
         return "--";
     }
@@ -1721,8 +1798,13 @@ std::string format_progress_int(const std::string& value) {
         return "--";
     }
 
-    char buf[16];
-    std::snprintf(buf, sizeof(buf), "%.0f", pct);
+    char buf[24];
+    if (pct >= 100.0) {
+        std::snprintf(buf, sizeof(buf), "100");
+    }
+    else {
+        std::snprintf(buf, sizeof(buf), "%.3f", std::max(0.0, pct));
+    }
     return buf;
 }
 
@@ -2236,6 +2318,148 @@ lv_obj_t* add_label(lv_obj_t* parent, const char* text, int32_t x, int32_t y,
 void make_static(lv_obj_t* obj) {
     lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_clear_flag(obj, LV_OBJ_FLAG_CLICKABLE);
+}
+
+void rolling_track_set_y(void* obj, int32_t value) {
+    lv_obj_set_y(static_cast<lv_obj_t*>(obj), value);
+}
+
+void finish_bitcoin_roll_if_idle() {
+    if (g_bitcoin_roll_pending != 0) {
+        return;
+    }
+    g_bitcoin_roll_active = false;
+    g_page_cache_dirty[0] = true;
+}
+
+void rolling_digit_completed(lv_anim_t* anim) {
+    auto* slot = static_cast<RollingDigitSlot*>(lv_anim_get_user_data(anim));
+    if (slot != nullptr) {
+        lv_label_set_text(slot->old_label, lv_label_get_text(slot->new_label));
+        lv_label_set_text(slot->new_label, "");
+        lv_obj_set_y(slot->track, 0);
+    }
+    if (g_bitcoin_roll_pending > 0) {
+        --g_bitcoin_roll_pending;
+    }
+    finish_bitcoin_roll_if_idle();
+}
+
+RollingNumber create_rolling_number(lv_obj_t* parent, int32_t x, int32_t y,
+                                    int32_t width, size_t capacity,
+                                    const lv_font_t* font, lv_color_t color) {
+    RollingNumber number;
+    number.capacity = std::min(capacity, kRollingDigitCapacity);
+    number.digit_width = static_cast<int32_t>(lv_font_get_glyph_width(font, '0', 0));
+    number.decimal_width = std::max<int32_t>(8, static_cast<int32_t>(lv_font_get_glyph_width(font, '.', 0)));
+    number.line_height = lv_font_get_line_height(font);
+    number.root = lv_obj_create(parent);
+    make_static(number.root);
+    lv_obj_remove_style_all(number.root);
+    lv_obj_set_pos(number.root, x, y);
+    lv_obj_set_size(number.root, width, number.line_height);
+
+    for (size_t index = 0; index < number.capacity; ++index) {
+        RollingDigitSlot& slot = number.slots[index];
+        slot.clip = lv_obj_create(number.root);
+        make_static(slot.clip);
+        lv_obj_remove_style_all(slot.clip);
+        lv_obj_set_pos(slot.clip, static_cast<int32_t>(index) * number.digit_width, 0);
+        lv_obj_set_size(slot.clip, number.digit_width, number.line_height);
+
+        slot.track = lv_obj_create(slot.clip);
+        make_static(slot.track);
+        lv_obj_remove_style_all(slot.track);
+        lv_obj_set_pos(slot.track, 0, 0);
+        lv_obj_set_size(slot.track, number.digit_width, number.line_height * 2);
+
+        slot.old_label = add_label(slot.track, "", 0, 0, font, color);
+        slot.new_label = add_label(slot.track, "", 0, number.line_height, font, color);
+        lv_obj_set_width(slot.old_label, number.digit_width);
+        lv_obj_set_width(slot.new_label, number.digit_width);
+        lv_obj_set_style_text_align(slot.old_label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_align(slot.new_label, LV_TEXT_ALIGN_CENTER, 0);
+    }
+    return number;
+}
+
+void set_rolling_number_immediate(RollingNumber& number, const std::string& value) {
+    int32_t x = 0;
+    for (size_t index = 0; index < number.capacity; ++index) {
+        RollingDigitSlot& slot = number.slots[index];
+        const char text[2] = {index < value.size() ? value[index] : '\0', '\0'};
+        const int32_t width = index < value.size() && value[index] == '.'
+                                  ? number.decimal_width
+                                  : number.digit_width;
+        lv_obj_set_x(slot.clip, x);
+        lv_obj_set_width(slot.clip, width);
+        lv_obj_set_width(slot.track, width);
+        lv_obj_set_width(slot.old_label, width);
+        lv_obj_set_width(slot.new_label, width);
+        lv_label_set_text(slot.old_label, text);
+        lv_label_set_text(slot.new_label, "");
+        lv_obj_set_y(slot.track, 0);
+        x += index < value.size() ? width : 0;
+    }
+    number.value = value;
+}
+
+int32_t rolling_number_width(const RollingNumber& number, const std::string& value) {
+    int32_t width = 0;
+    for (char ch : value) {
+        width += ch == '.' ? number.decimal_width : number.digit_width;
+    }
+    return width;
+}
+
+bool set_rolling_number(RollingNumber& number, const std::string& value) {
+    if (number.root == nullptr || number.value == value) {
+        return false;
+    }
+    const bool can_animate = g_active_page == 0 && !ui_interacting() &&
+                             is_rolling_number(number.value) && is_rolling_number(value) &&
+                             number.value.size() == value.size() &&
+                             value.size() <= number.capacity;
+    if (!can_animate) {
+        set_rolling_number_immediate(number, value);
+        return true;
+    }
+
+    if (!g_bitcoin_roll_active) {
+        g_bitcoin_roll_active = true;
+        set_page_source_visible(0, true);
+    }
+    for (size_t index = 0; index < value.size(); ++index) {
+        RollingDigitSlot& slot = number.slots[index];
+        if (number.value[index] == value[index]) {
+            continue;
+        }
+        if (number.value[index] == '.' || value[index] == '.') {
+            set_rolling_number_immediate(number, value);
+            return true;
+        }
+        const char old_text[2] = {number.value[index], '\0'};
+        const char new_text[2] = {value[index], '\0'};
+        lv_label_set_text(slot.old_label, old_text);
+        lv_label_set_text(slot.new_label, new_text);
+        lv_obj_set_y(slot.track, 0);
+
+        lv_anim_t anim;
+        lv_anim_init(&anim);
+        lv_anim_set_var(&anim, slot.track);
+        lv_anim_set_exec_cb(&anim, rolling_track_set_y);
+        lv_anim_set_values(&anim, 0, -number.line_height);
+        lv_anim_set_duration(&anim, kRollingDigitAnimMs);
+        lv_anim_set_delay(&anim, static_cast<uint32_t>(index) * kRollingDigitStaggerMs);
+        lv_anim_set_path_cb(&anim, lv_anim_path_ease_out);
+        lv_anim_set_user_data(&anim, &slot);
+        lv_anim_set_completed_cb(&anim, rolling_digit_completed);
+        ++g_bitcoin_roll_pending;
+        lv_anim_start(&anim);
+    }
+    number.value = value;
+    finish_bitcoin_roll_if_idle();
+    return true;
 }
 
 lv_obj_t* create_stage_dot(lv_obj_t* parent, int32_t x, int32_t y) {
@@ -2804,7 +3028,7 @@ bool build_ui_model(UiModel& model) {
 
     model.status_available = true;
     model.bitcoin.stage_index = bitcoin_stage_index(data);
-    model.bitcoin.progress = format_progress_int(data.progress_ring);
+    model.bitcoin.progress = format_progress(data.progress_ring);
     model.bitcoin.height = make_height_card_model(data, blocks);
     model.bitcoin.peers = data.connections;
     model.bitcoin.block_date = block_date;
@@ -3005,22 +3229,20 @@ void build_bitcoin_tile(lv_obj_t* tv) {
     }
     update_bitcoin_stage_list(0);
 
-    g_tiles.bitcoin_progress = create_card(tile, 300, 142, 216, 96, "Progress", "--", accent);
-    g_tiles.bitcoin_peers = create_card(tile, 540, 142, 216, 96, "Peers", "--", accent);
-    g_tiles.bitcoin_height = create_card(tile, 300, 256, 456, 88, "Blocks / Header", "--", accent,
-                                         &g_tiles.bitcoin_height_title);
+    lv_obj_t* progress_card = create_card_frame(tile, 300, 142, 216, 96, "Progress", accent);
+    lv_obj_t* peers_card = create_card_frame(tile, 540, 142, 216, 96, "Peers", accent);
+    g_tiles.bitcoin_height = create_card_frame(tile, 300, 256, 456, 88, "Blocks / Header", accent,
+                                               &g_tiles.bitcoin_height_title);
     // DSEG7 digital-tube font for the Bitcoind value cards. Its glyph set
     // has no comma/slash/percent, so those are drawn in montserrat instead,
     // and font_32 (not _36) is used so the digits fit inside the card
     // without clipping/wrapping at the bottom.
-    lv_obj_set_style_text_font(g_tiles.bitcoin_progress, &dseg7c700_font_32, 0);
-    lv_obj_set_style_text_font(g_tiles.bitcoin_peers, &dseg7c700_font_32, 0);
-    lv_obj_set_style_text_font(g_tiles.bitcoin_height, &dseg7c700_font_32, 0);
-    lv_obj_set_y(g_tiles.bitcoin_progress, 30);
-    lv_obj_set_y(g_tiles.bitcoin_peers, 30);
-    lv_label_set_long_mode(g_tiles.bitcoin_progress, LV_LABEL_LONG_MODE_CLIP);
-    lv_label_set_long_mode(g_tiles.bitcoin_peers, LV_LABEL_LONG_MODE_CLIP);
-    lv_obj_add_flag(g_tiles.bitcoin_height, LV_OBJ_FLAG_HIDDEN);
+    g_bitcoin_progress_roll = create_rolling_number(progress_card, 0, 30, 184, 8,
+                                                    &dseg7c700_font_32, lv_color_hex(0xf4efe2));
+    g_bitcoin_peers_roll = create_rolling_number(peers_card, 0, 30, 184, 7,
+                                                 &dseg7c700_font_32, lv_color_hex(0xf4efe2));
+    set_rolling_number_immediate(g_bitcoin_progress_roll, "--");
+    set_rolling_number_immediate(g_bitcoin_peers_roll, "--");
 
     lv_point_t progress_num_size {};
     lv_text_get_size(&progress_num_size, "100", &dseg7c700_font_32, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
@@ -3028,23 +3250,21 @@ void build_bitcoin_tile(lv_obj_t* tv) {
     // difference so both share the same baseline at the bottom of the card.
     lv_point_t progress_pct_size {};
     lv_text_get_size(&progress_pct_size, "%", &lv_font_montserrat_32, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-    g_tiles.bitcoin_progress_unit = add_label(lv_obj_get_parent(g_tiles.bitcoin_progress), "%",
+    g_tiles.bitcoin_progress_unit = add_label(progress_card, "%",
                                               progress_num_size.x + 4,
                                               34 + (progress_num_size.y - progress_pct_size.y),
                                               &lv_font_montserrat_32, lv_color_hex(0x9aa6ac));
 
-    g_tiles.bitcoin_height_current = add_label(lv_obj_get_parent(g_tiles.bitcoin_height), "--", 0, 24,
-                                               &dseg7c700_font_32, lv_color_hex(0x78848b));
-    lv_obj_set_width(g_tiles.bitcoin_height_current, 152);
-    lv_label_set_long_mode(g_tiles.bitcoin_height_current, LV_LABEL_LONG_MODE_CLIP);
-    g_tiles.bitcoin_height_sep = add_label(lv_obj_get_parent(g_tiles.bitcoin_height), "/", 161, 24,
+    g_bitcoin_height_current_roll = create_rolling_number(g_tiles.bitcoin_height, 0, 24, 156, 6,
+                                                          &dseg7c700_font_32, lv_color_hex(0x78848b));
+    set_rolling_number_immediate(g_bitcoin_height_current_roll, "--");
+    g_tiles.bitcoin_height_sep = add_label(g_tiles.bitcoin_height, "/", 161, 24,
                                            &lv_font_montserrat_32, lv_color_hex(0x9aa6ac));
-    g_tiles.bitcoin_height_total = add_label(lv_obj_get_parent(g_tiles.bitcoin_height), "", 184, 24,
-                                             &dseg7c700_font_32, lv_color_hex(0xf4efe2));
-    lv_obj_set_width(g_tiles.bitcoin_height_total, 190);
-    lv_label_set_long_mode(g_tiles.bitcoin_height_total, LV_LABEL_LONG_MODE_CLIP);
+    g_bitcoin_height_total_roll = create_rolling_number(g_tiles.bitcoin_height, 184, 24, 190, 7,
+                                                        &dseg7c700_font_32, lv_color_hex(0xf4efe2));
+    set_rolling_number_immediate(g_bitcoin_height_total_roll, "");
     lv_obj_add_flag(g_tiles.bitcoin_height_sep, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(g_tiles.bitcoin_height_total, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(g_bitcoin_height_total_roll.root, LV_OBJ_FLAG_HIDDEN);
     lv_obj_t* block_time_card = create_card_frame(tile, 300, 362, 456, 58, "Block Time", accent,
                                                   &g_tiles.bitcoin_block_date_title);
     lv_obj_align(g_tiles.bitcoin_block_date_title, LV_ALIGN_LEFT_MID, 0, 0);
@@ -3368,22 +3588,22 @@ bool update_height_card(const HeightCardModel& card) {
     right_value = strip_commas(right_value);
     const bool show_total = !right_value.empty();
 
-    dirty |= set_label(g_tiles.bitcoin_height_current, left_value);
+    dirty |= set_rolling_number(g_bitcoin_height_current_roll, left_value);
     dirty |= set_label(g_tiles.bitcoin_height_sep, show_total ? "/" : "");
-    dirty |= set_label(g_tiles.bitcoin_height_total, right_value);
+    dirty |= set_rolling_number(g_bitcoin_height_total_roll, right_value);
     dirty |= set_hidden(g_tiles.bitcoin_height_sep, !show_total);
-    dirty |= set_hidden(g_tiles.bitcoin_height_total, !show_total);
+    dirty |= set_hidden(g_bitcoin_height_total_roll.root, !show_total);
     return dirty;
 }
 
 uint32_t apply_status_unavailable_model() {
     bool dirty = false;
-    dirty |= set_label(g_tiles.bitcoin_progress, "No status");
+    dirty |= set_rolling_number(g_bitcoin_progress_roll, "--");
     dirty |= set_hidden(g_tiles.bitcoin_progress_unit, true);
     dirty |= set_label(g_tiles.bitcoin_height_title, "Blocks / Header");
-    dirty |= set_label(g_tiles.bitcoin_height_current, "--");
+    dirty |= set_rolling_number(g_bitcoin_height_current_roll, "--");
     dirty |= set_hidden(g_tiles.bitcoin_height_sep, true);
-    dirty |= set_hidden(g_tiles.bitcoin_height_total, true);
+    dirty |= set_hidden(g_bitcoin_height_total_roll.root, true);
     dirty |= set_label(g_tiles.bitcoin_block_date_title, "Block Time");
     dirty |= set_label(g_tiles.bitcoin_block_date, "--");
     dirty |= set_label(g_tiles.bitcoin_block_time, "");
@@ -3395,10 +3615,12 @@ uint32_t apply_ui_model(const UiModel& model) {
     bool dirty = false;
 
     dirty |= update_bitcoin_stage_list(model.bitcoin.stage_index);
-    dirty |= set_label(g_tiles.bitcoin_progress, model.bitcoin.progress);
-    dirty |= set_hidden(g_tiles.bitcoin_progress_unit, !is_all_digits(model.bitcoin.progress));
+    dirty |= set_rolling_number(g_bitcoin_progress_roll, model.bitcoin.progress);
+    lv_obj_set_x(g_tiles.bitcoin_progress_unit,
+                 rolling_number_width(g_bitcoin_progress_roll, model.bitcoin.progress) + 4);
+    dirty |= set_hidden(g_tiles.bitcoin_progress_unit, !is_rolling_number(model.bitcoin.progress));
     dirty |= update_height_card(model.bitcoin.height);
-    dirty |= set_label(g_tiles.bitcoin_peers, model.bitcoin.peers);
+    dirty |= set_rolling_number(g_bitcoin_peers_roll, model.bitcoin.peers);
     dirty |= set_label(g_tiles.bitcoin_block_date_title, "Block Time");
     dirty |= set_label(g_tiles.bitcoin_block_date, model.bitcoin.block_date);
     dirty |= set_label(g_tiles.bitcoin_block_time, model.bitcoin.block_time);
