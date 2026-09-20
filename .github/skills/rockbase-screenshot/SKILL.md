@@ -10,35 +10,26 @@ description: 'Capture Rockbase board LCD screen via DRM framebuffer for closed-l
 
 ## 工具
 
-- 源码：`tools/drmshot.c`（交叉编译，~15KB 静态小工具）
+- 源码：`buildroot-overlay/package/rockbase_lcdui/src/drmshot.c`
+- **已内置镜像**：随 `rockbase_lcdui` 包编译安装到板子 `/usr/bin/drmshot`，
+  新镜像直接 `ssh root@$BOARD '/usr/bin/drmshot /tmp/screen.ppm'` 即可，无需交叉编译/scp。
 - 依赖：板子已有 libdrm（lcdui 本身就链它），无需额外部署库
+- 旧镜像（无 /usr/bin/drmshot）回退方案：交叉编译 + scp（见文末附录）
 
 ## 标准流程
 
-### Step 1: 交叉编译（本地，一次即可，除非改 drmshot.c）
-
-```bash
-cd /home/bitpony/k230_linux_sdk
-CC=output/k230_rockbase_defconfig/host/bin/riscv64-unknown-linux-gnu-gcc
-SYSROOT=output/k230_rockbase_defconfig/host/riscv64-buildroot-linux-gnu/sysroot
-$CC -mcpu=c908v -mabi=lp64d -O2 -I$SYSROOT/usr/include/libdrm \
-    tools/drmshot.c -o /tmp/drmshot -ldrm
-```
-
-⚠️ 必须加 `-I$SYSROOT/usr/include/libdrm`：sysroot 顶层的 `xf86drm.h`
-`#include <drm.h>`，而 `drm.h` 在 `libdrm/` 子目录里。
-
-### Step 2: 部署 + 截屏
+### Step 1: 截屏（新镜像，工具已内置）
 
 ```bash
 BOARD=192.168.124.9   # 目标板
-scp -o StrictHostKeyChecking=no -o ConnectTimeout=5 /tmp/drmshot root@$BOARD:/tmp/drmshot
-ssh -o ConnectTimeout=5 root@$BOARD 'chmod +x /tmp/drmshot && /tmp/drmshot /tmp/screen.ppm'
+ssh -o ConnectTimeout=5 root@$BOARD '/usr/bin/drmshot /tmp/screen.ppm'
 ```
+
+若报 `not found`（旧镜像），用文末附录的回退流程。
 
 输出 `fb: 480x800 stride=1920` 即成功（~1.1MB PPM）。
 
-### Step 3: 拉回本地 + 旋转成横屏
+### Step 2: 拉回本地 + 旋转成横屏
 
 framebuffer 是 **480x800 竖屏**，UI 是 **800x480 横屏**（显示时旋转）。
 正方向 = `rotate(-90, expand=True)` 再 `rotate(180)`：
@@ -55,7 +46,7 @@ print('OK', im.size)
 
 然后用 `view_image` 查看 `/tmp/screen_final.png`。
 
-### Step 4: 目视验证
+### Step 3: 目视验证
 
 对照改动点检查：字体/颜色/布局/裁切/闪烁痕迹。
 发现问题 → 回 `rockbase-hotfix` 流程改代码重部署，再截屏，直到满意。
@@ -63,13 +54,8 @@ print('OK', im.size)
 ## 一键脚本（可整段复制）
 
 ```bash
-cd /home/bitpony/k230_linux_sdk
 BOARD=192.168.124.9
-CC=output/k230_rockbase_defconfig/host/bin/riscv64-unknown-linux-gnu-gcc
-SYSROOT=output/k230_rockbase_defconfig/host/riscv64-buildroot-linux-gnu/sysroot
-$CC -mcpu=c908v -mabi=lp64d -O2 -I$SYSROOT/usr/include/libdrm tools/drmshot.c -o /tmp/drmshot -ldrm \
-  && scp -o StrictHostKeyChecking=no /tmp/drmshot root@$BOARD:/tmp/drmshot \
-  && ssh -o ConnectTimeout=5 root@$BOARD 'chmod +x /tmp/drmshot && /tmp/drmshot /tmp/screen.ppm' \
+ssh -o ConnectTimeout=5 root@$BOARD '/usr/bin/drmshot /tmp/screen.ppm' \
   && scp -o StrictHostKeyChecking=no root@$BOARD:/tmp/screen.ppm /tmp/screen_raw.ppm \
   && python3 -c "
 from PIL import Image
@@ -77,6 +63,21 @@ Image.open('/tmp/screen_raw.ppm').rotate(-90, expand=True).rotate(180).save('/tm
 print('OK -> /tmp/screen_final.png')
 "
 ```
+
+## 附录：旧镜像回退（无 /usr/bin/drmshot 时）
+
+```bash
+cd /home/bitpony/k230_linux_sdk
+CC=output/k230_rockbase_defconfig/host/bin/riscv64-unknown-linux-gnu-gcc
+SYSROOT=output/k230_rockbase_defconfig/host/riscv64-buildroot-linux-gnu/sysroot
+$CC -mcpu=c908v -mabi=lp64d -O2 -I$SYSROOT/usr/include/drm \
+    buildroot-overlay/package/rockbase_lcdui/src/drmshot.c -o /tmp/drmshot -ldrm \
+  && scp -o StrictHostKeyChecking=no /tmp/drmshot root@$BOARD:/tmp/drmshot \
+  && ssh -o ConnectTimeout=5 root@$BOARD 'chmod +x /tmp/drmshot'
+```
+
+⚠️ 必须加 `-I$SYSROOT/usr/include/drm`：sysroot 顶层的 `xf86drm.h`
+`#include <drm.h>`，而 `drm.h` 在 `drm/` 子目录里。
 
 ## ⚠️ 陷阱（踩坑记录）
 

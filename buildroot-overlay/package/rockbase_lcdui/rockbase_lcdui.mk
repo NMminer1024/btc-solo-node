@@ -9,6 +9,9 @@ endef
 define ROCKBASE_LCDUI_INSTALL_TARGET_CMDS
 	$(INSTALL) -D -m 0755 $(@D)/rockbase-lcdui $(TARGET_DIR)/usr/bin/rockbase-lcdui
 	$(INSTALL) -D -m 0755 $(@D)/calibd $(TARGET_DIR)/usr/bin/calibd
+	# Debug tools for closed-loop UI verification (screenshot / swipe).
+	$(INSTALL) -D -m 0755 $(@D)/drmshot $(TARGET_DIR)/usr/bin/drmshot
+	$(INSTALL) -D -m 0755 $(@D)/touchswipe $(TARGET_DIR)/usr/bin/touchswipe
 endef
 
 $(eval $(generic-package))

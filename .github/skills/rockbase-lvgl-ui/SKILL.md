@@ -62,7 +62,8 @@ description: 'Develop and debug Rockbase LVGL LCD UI. Covers tileview, swipe, DR
 改 UI（字体/布局/颜色）后，用 **`rockbase-screenshot` skill** 抓屏目视验证，
 形成闭环：**改代码 → 交叉编译 → scp 部署 → 截屏 → 目视验证 → 满意后固化**。
 
-- 工具：`tools/drmshot.c`（DRM framebuffer 抓屏，交叉编译后 scp 到板子）
+- 工具：`drmshot` / `touchswipe`（已随 `rockbase_lcdui` 包内置镜像 `/usr/bin/`，
+  源码在 `buildroot-overlay/package/rockbase_lcdui/src/`，新镜像无需交叉编译/scp）
 - framebuffer 480x800 竖屏 → 本地 PIL 旋转成 800x480 横屏
 - 完整命令与陷阱见 skill: `rockbase-screenshot`
 - 要验证**非首页**（Stratum/System/Network）或点按钮关弹窗 → 用

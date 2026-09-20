@@ -1,5 +1,9 @@
 BIN = rockbase-lcdui
 CALIB = calibd
+# Debug tools shipped in the image for closed-loop UI verification
+# (DRM framebuffer screenshot + touch swipe injection). See skills:
+# rockbase-screenshot / rockbase-swipe.
+DEBUG_TOOLS = drmshot touchswipe
 
 INCS += -I$(STAGING_DIR)/usr/include
 INCS += -I$(STAGING_DIR)/usr/include/lvgl
@@ -18,7 +22,7 @@ OBJS := $(SRCS:.cpp=.o)
 FONT_SRCS := $(wildcard font/dseg7c*.c)
 FONT_OBJS := $(FONT_SRCS:.c=.o)
 
-all: $(BIN) $(CALIB)
+all: $(BIN) $(CALIB) $(DEBUG_TOOLS)
 
 $(OBJS): %.o: %.cpp *.h
 	$(CXX) -c $(CXXFLAGS) $< -o $@ $(INCS)
@@ -32,5 +36,13 @@ $(BIN): $(OBJS) $(FONT_OBJS)
 $(CALIB): calibd.c
 	$(CXX) $(CXXFLAGS) -O2 -s -o $@ $<
 
+# Plain C debug tools. touchswipe is libc-only; drmshot needs libdrm and the
+# kernel DRM headers (xf86drm.h pulls in <drm.h> from include/drm).
+touchswipe: touchswipe.c
+	$(CC) $(CFLAGS) -O2 -s -o $@ $<
+
+drmshot: drmshot.c
+	$(CC) $(CFLAGS) -O2 -s -o $@ $< -I$(STAGING_DIR)/usr/include/drm $(LIBPATH) -ldrm
+
 clean:
-	rm -f $(BIN) $(CALIB) $(OBJS) $(FONT_OBJS)
+	rm -f $(BIN) $(CALIB) $(DEBUG_TOOLS) $(OBJS) $(FONT_OBJS)

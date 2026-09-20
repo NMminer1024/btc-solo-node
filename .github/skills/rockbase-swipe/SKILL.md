@@ -10,7 +10,10 @@ description: 'Inject touch swipe gestures into Rockbase board to navigate the LV
 
 ## 工具
 
-- 源码：`tools/touchswipe.c`（交叉编译，~14KB 静态小工具）
+- 源码：`buildroot-overlay/package/rockbase_lcdui/src/touchswipe.c`
+- **已内置镜像**：随 `rockbase_lcdui` 包编译安装到板子 `/usr/bin/touchswipe`，
+  新镜像直接 `ssh root@$BOARD '/usr/bin/touchswipe ...'` 即可，无需交叉编译/scp。
+  旧镜像回退：交叉编译 + scp（见 Step 1 附录）。
 - 用法：`touchswipe <x0> <y0> <x1> <y1> [steps]`
   - 坐标是 **ft5x06 物理面板坐标**（480x800 竖屏），不是 UI 横屏坐标
   - `steps` 是移动步数，步数越少速度越快（默认 10）
@@ -55,29 +58,31 @@ lcdui 启动 60s 后（`kFirstCheckDelayMs`）若检测到新版本会弹 "Updat
 
 ## 标准流程
 
-### Step 1: 交叉编译（本地，一次即可，除非改 touchswipe.c）
+### Step 1: 确认工具可用（新镜像已内置 /usr/bin/touchswipe）
+
+```bash
+BOARD=192.168.124.9
+ssh -o ConnectTimeout=5 root@$BOARD 'command -v touchswipe || ls /usr/bin/touchswipe'
+```
+
+旧镜像没有时回退：
 
 ```bash
 cd /home/bitpony/k230_linux_sdk
 CC=output/k230_rockbase_defconfig/host/bin/riscv64-unknown-linux-gnu-gcc
-$CC -mcpu=c908v -mabi=lp64d -O2 tools/touchswipe.c -o /tmp/touchswipe
-```
-
-### Step 2: 部署
-
-```bash
-BOARD=192.168.124.9
-scp -o StrictHostKeyChecking=no -o ConnectTimeout=5 /tmp/touchswipe root@$BOARD:/tmp/touchswipe
+$CC -mcpu=c908v -mabi=lp64d -O2 \
+    buildroot-overlay/package/rockbase_lcdui/src/touchswipe.c -o /tmp/touchswipe
+scp -o StrictHostKeyChecking=no /tmp/touchswipe root@$BOARD:/tmp/touchswipe
 ssh -o ConnectTimeout=5 root@$BOARD 'chmod +x /tmp/touchswipe'
 ```
 
-### Step 3: 滑动切页 + 截屏（配合 rockbase-screenshot）
+### Step 2: 滑动切页 + 截屏（配合 rockbase-screenshot）
 
 从 Bitcoind(col0) 切到 Stratum(col1)：物理 Y 减小（下一页）
 
 ```bash
 BOARD=192.168.124.9
-ssh -o ConnectTimeout=5 root@$BOARD '/tmp/touchswipe 240 700 240 100 10; sleep 2; /tmp/drmshot /tmp/screen.ppm'
+ssh -o ConnectTimeout=5 root@$BOARD '/usr/bin/touchswipe 240 700 240 100 10; sleep 2; /usr/bin/drmshot /tmp/screen.ppm'
 scp -o StrictHostKeyChecking=no root@$BOARD:/tmp/screen.ppm /tmp/screen.ppm
 python3 -c "
 from PIL import Image
@@ -89,12 +94,12 @@ print('OK')
 切到 System(col2)：从 Bitcoind 连续两次「下一页」，或从 Stratum 再滑一次。
 切回上一页：物理 Y 增大（如 `240 100 240 700 10`）。
 
-### Step 4: 点按钮（如关弹窗）
+### Step 3: 点按钮（如关弹窗）
 
 点按 = 起点终点相同。"Not Now" 按钮在 UI 约 (184, 280) 物理坐标：
 
 ```bash
-ssh -o ConnectTimeout=5 root@$BOARD '/tmp/touchswipe 184 280 184 280 1; sleep 1'
+ssh -o ConnectTimeout=5 root@$BOARD '/usr/bin/touchswipe 184 280 184 280 1; sleep 1'
 ```
 
 > 按钮物理坐标需先用截屏 + 目视估算，点不准就微调 x/y 再试。
@@ -107,7 +112,7 @@ BOARD=192.168.124.9
 PID=$(ssh -o ConnectTimeout=5 root@$BOARD 'for d in /proc/[0-9]*; do exe=$(readlink $d/exe 2>/dev/null); case "$exe" in *lcdui*) basename $d;; esac; done')
 ssh -o ConnectTimeout=5 root@$BOARD "kill $PID; sleep 1; rm -f /run/rockbase/ota-check-state.json; /usr/bin/rockbase-lcdui >/tmp/lcdui.log 2>&1 &"
 sleep 12
-ssh -o ConnectTimeout=5 root@$BOARD '/tmp/touchswipe 240 700 240 100 10; sleep 2; /tmp/drmshot /tmp/screen.ppm'
+ssh -o ConnectTimeout=5 root@$BOARD '/usr/bin/touchswipe 240 700 240 100 10; sleep 2; /usr/bin/drmshot /tmp/screen.ppm'
 scp -o StrictHostKeyChecking=no root@$BOARD:/tmp/screen.ppm /tmp/screen.ppm
 python3 -c "
 from PIL import Image
