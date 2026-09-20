@@ -1091,6 +1091,118 @@ textarea {
   color: var(--muted);
 }
 
+/* ── Timezone custom select ─────────────────────────────── */
+.tz-select {
+  position: relative;
+  width: 100%;
+}
+
+.tz-select-btn {
+  width: 100%;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text);
+  padding: 0 12px;
+  cursor: pointer;
+  outline: 0;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tz-select-btn:focus,
+.tz-select-btn:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+}
+
+.tz-select-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.tz-select-name {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tz-select-offset {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.tz-select-caret {
+  color: var(--muted);
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.tz-select-btn[aria-expanded="true"] .tz-select-caret {
+  transform: rotate(180deg);
+}
+
+.tz-select-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  display: none;
+}
+
+.tz-select-list.is-open {
+  display: block;
+}
+
+.tz-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.tz-select-option:hover {
+  background: var(--bg3);
+}
+
+.tz-select-option.is-selected {
+  background: rgba(88, 166, 255, 0.15);
+}
+
+.tz-opt-name {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tz-opt-offset {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .wifi-password-wrap {
   position: relative;
   display: flex;

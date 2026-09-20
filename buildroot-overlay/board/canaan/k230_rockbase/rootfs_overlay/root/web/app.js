@@ -1815,7 +1815,7 @@
     ["UTC", "+0"]
   ];
 
-  var tzState = { loading: false, applying: false, current: "" };
+  var tzState = { loading: false, applying: false, current: "", open: false };
 
   function tzRequest(action, options) {
     var opt = options || {};
@@ -1833,23 +1833,85 @@
       });
   }
 
-  function buildTzOptions(selected) {
-    var select = document.getElementById("tzSelect");
-    if (!select) return;
-    select.innerHTML = "";
+  function tzOffsetLabel(offset) {
+    return "UTC" + offset;
+  }
+
+  function buildTzList(selected) {
+    var list = document.getElementById("tzSelectList");
+    if (!list) return;
+    list.innerHTML = "";
     TZ_ZONES.forEach(function (zone) {
-      var opt = document.createElement("option");
-      opt.value = zone[0];
-      opt.textContent = zone[0] + "  (UTC" + zone[1] + ")";
-      select.appendChild(opt);
+      var li = document.createElement("li");
+      li.className = "tz-select-option";
+      li.setAttribute("role", "option");
+      li.setAttribute("data-zone", zone[0]);
+      if (zone[0] === selected) li.classList.add("is-selected");
+      var name = document.createElement("span");
+      name.className = "tz-opt-name";
+      name.textContent = zone[0];
+      var off = document.createElement("span");
+      off.className = "tz-opt-offset";
+      off.textContent = tzOffsetLabel(zone[1]);
+      li.appendChild(name);
+      li.appendChild(off);
+      li.addEventListener("click", function () {
+        selectTzZone(zone[0]);
+      });
+      list.appendChild(li);
     });
-    if (selected) select.value = selected;
+  }
+
+  function setTzButtonLabel(zone) {
+    var nameEl = document.getElementById("tzSelectName");
+    var offEl = document.getElementById("tzSelectOffset");
+    if (!nameEl) return;
+    var off = "";
+    for (var i = 0; i < TZ_ZONES.length; i++) {
+      if (TZ_ZONES[i][0] === zone) {
+        off = tzOffsetLabel(TZ_ZONES[i][1]);
+        break;
+      }
+    }
+    nameEl.textContent = zone || "--";
+    if (offEl) offEl.textContent = off;
+  }
+
+  function selectTzZone(zone) {
+    tzState.current = zone;
+    setTzButtonLabel(zone);
+    var list = document.getElementById("tzSelectList");
+    if (list) {
+      Array.prototype.forEach.call(list.children, function (li) {
+        li.classList.toggle("is-selected", li.getAttribute("data-zone") === zone);
+      });
+    }
+    closeTzList();
+  }
+
+  function openTzList() {
+    var list = document.getElementById("tzSelectList");
+    var btn = document.getElementById("tzSelectBtn");
+    if (!list) return;
+    list.classList.add("is-open");
+    if (btn) btn.setAttribute("aria-expanded", "true");
+    tzState.open = true;
+  }
+
+  function closeTzList() {
+    var list = document.getElementById("tzSelectList");
+    var btn = document.getElementById("tzSelectBtn");
+    if (!list) return;
+    list.classList.remove("is-open");
+    if (btn) btn.setAttribute("aria-expanded", "false");
+    tzState.open = false;
   }
 
   function renderTzView(data) {
     var current = toText(data && data.timezone, "");
     tzState.current = current;
-    buildTzOptions(current);
+    buildTzList(current);
+    setTzButtonLabel(current);
     setBadgeState("tzStatusBadge", current || "--", current ? "status-ok" : "status-soft");
     setTzMessage((data && data.message) || "Select a timezone and tap Apply. Takes effect immediately.");
     setTzControlsDisabled(tzState.applying);
@@ -1860,7 +1922,7 @@
   }
 
   function setTzControlsDisabled(disabled) {
-    var ids = ["tzApplyBtn", "tzSelect"];
+    var ids = ["tzApplyBtn", "tzSelectBtn"];
     ids.forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.disabled = !!disabled;
@@ -1887,8 +1949,7 @@
   }
 
   function applyTimezone() {
-    var select = document.getElementById("tzSelect");
-    var zone = select ? select.value : "";
+    var zone = tzState.current;
     if (!zone) {
       setTzMessage("Please choose a timezone.");
       return Promise.resolve(null);
@@ -1924,6 +1985,18 @@
         applyTimezone();
       });
     }
+    var btn = document.getElementById("tzSelectBtn");
+    if (btn) {
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (tzState.open) closeTzList();
+        else openTzList();
+      });
+    }
+    document.addEventListener("click", function (e) {
+      var wrap = document.getElementById("tzSelectWrap");
+      if (wrap && tzState.open && !wrap.contains(e.target)) closeTzList();
+    });
   }
 
   function bindWifiControls() {

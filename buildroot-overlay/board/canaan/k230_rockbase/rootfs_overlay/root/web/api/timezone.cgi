@@ -51,7 +51,7 @@ json_str() {
 tz_get_endpoint() {
   current=""
   if [ -n "$TZ_LIB" ]; then
-    current=$("$TZ_LIB" status 2>/dev/null | head -n1)
+    current=$(sh "$TZ_LIB" status 2>/dev/null | head -n1)
   fi
   [ -n "$current" ] || current="UTC"
   printf '{'
@@ -61,7 +61,6 @@ tz_get_endpoint() {
 }
 
 tz_apply_endpoint() {
-  get_params
   zone=$(get_param timezone 2>/dev/null || true)
   [ -n "$zone" ] || zone=$(get_param tz 2>/dev/null || true)
 
@@ -88,8 +87,8 @@ tz_apply_endpoint() {
 
   # apply_tz writes /etc/localtime + /etc/TZ and exports TZ in its own shell;
   # the running daemons pick it up on their next clock read.
-  if "$TZ_LIB" apply "$zone" >/dev/null 2>&1; then
-    new_tz=$("$TZ_LIB" status 2>/dev/null | head -n1)
+  if sh "$TZ_LIB" apply "$zone" >/dev/null 2>&1; then
+    new_tz=$(sh "$TZ_LIB" status 2>/dev/null | head -n1)
     [ -n "$new_tz" ] || new_tz="$zone"
     printf '{'
     printf '"ok":true,'

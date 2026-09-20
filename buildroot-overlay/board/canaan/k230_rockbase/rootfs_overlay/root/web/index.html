@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NM Bitcoin Node Monitor</title>
-<link rel="stylesheet" href="/style.css?v=20260920-dash11">
+<link rel="stylesheet" href="/style.css?v=20260920-tz2">
 </head>
 <body>
 <div class="site-shell">
@@ -369,9 +369,6 @@
     </section>
 
     <section class="panel-view" data-view-panel="settings">
-      <section class="subpage-hero">
-        <p>Service and network configuration pages are grouped here. The first frontend build keeps this read-only until the API write path is ready.</p>
-      </section>
       <section class="section-heading">
         <h3>Network</h3>
       </section>
@@ -420,8 +417,15 @@
           </div>
           <div class="wifi-form">
             <div class="wifi-field">
-              <label for="tzSelect">Timezone</label>
-              <select id="tzSelect" aria-label="Timezone"></select>
+              <label>Timezone</label>
+              <div class="tz-select" id="tzSelectWrap">
+                <button type="button" class="tz-select-btn" id="tzSelectBtn" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="tz-select-name" id="tzSelectName">--</span>
+                  <span class="tz-select-offset" id="tzSelectOffset"></span>
+                  <span class="tz-select-caret" aria-hidden="true">&#9662;</span>
+                </button>
+                <ul class="tz-select-list" id="tzSelectList" role="listbox" aria-label="Timezone"></ul>
+              </div>
             </div>
           </div>
           <div class="wifi-actions">
@@ -523,6 +527,6 @@
   </div>
 </div>
 
-<script src="/app.js?v=20260920-tz1"></script>
+<script src="/app.js?v=20260920-tz2"></script>
 </body>
 </html>
