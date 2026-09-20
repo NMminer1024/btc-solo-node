@@ -100,8 +100,23 @@ start_clean() {
     done
     set_state restarting
     "$INIT" start >/dev/null 2>&1
-    sleep 3
-    if pidof bitcoind >/dev/null 2>&1; then
+    # wait for bitcoind RPC to come back so the status cache can be re-sampled
+    # fresh (a just-restarted node may take a few seconds to answer RPC)
+    rpc_ok=0
+    i=0
+    while [ "$i" -lt 60 ]; do
+      if bitcoin-cli -rpcclienttimeout=5 -conf=/root/config/bitcoin.conf -datadir=/root/block getblockchaininfo >/dev/null 2>&1; then
+        rpc_ok=1
+        break
+      fi
+      i=$((i + 1))
+      sleep 1
+    done
+    # force an immediate full re-sample + re-render of /tmp/status-api.json so the
+    # web UI and LCD pick up the post-clean state right away instead of waiting
+    # for the next scheduled shard interval (chain shard is 60s IBD / 600s synced)
+    /usr/bin/rockbase_statusd.sh refresh-now >/dev/null 2>&1
+    if [ "$rpc_ok" = "1" ] || pidof bitcoind >/dev/null 2>&1; then
       set_state done
     else
       set_state error
