@@ -1408,10 +1408,6 @@
     var data = wifi || mock.wifi;
     wifiState.current = data;
     setBadgeState("wifiStatusBadge", data.statusBadge, data.statusClass);
-    setText("wifiSavedSsid", data.savedSsid);
-    setText("wifiConnectedSsid", data.connectedSsid);
-    setText("wifiConnectedIp", data.connectedIp);
-    setText("wifiApplyState", data.applyState);
     setWifiMessage(data.applyMessage || "Enter your Wi-Fi SSID and password, then tap Apply. The device will reconnect automatically.");
 
     var ssidInput = document.getElementById("wifiSsid");
@@ -1710,8 +1706,10 @@
     else stopLogPolling();
     if (view === "miners" || view === "miner") startMinersPolling();
     else stopMinersPolling();
-    if (view === "settings") loadWifiSettings();
-    else if (!wifiState.applying) stopWifiPolling();
+    if (view === "settings") {
+      loadWifiSettings();
+      loadTimezone();
+    } else if (!wifiState.applying) stopWifiPolling();
 
     window.location.hash = view === "miner" && activeMinerAddress ? "miner/" + activeMinerAddress : view;
   }
@@ -1780,6 +1778,152 @@
         }, 1200);
       });
     });
+  }
+
+  /* ── Timezone ────────────────────────────────────────────
+   * The zone list mirrors package/rockbase_lcdui/src/timezone_overlay.h
+   * kZones[] (the single source of truth for the LCD UI). Keep them in sync. */
+  var TZ_ZONES = [
+    ["Africa/Cairo", "+2"],
+    ["America/Anchorage", "-9"],
+    ["America/Chicago", "-6"],
+    ["America/Denver", "-7"],
+    ["America/Los_Angeles", "-8"],
+    ["America/New_York", "-5"],
+    ["America/Santiago", "-4"],
+    ["America/Sao_Paulo", "-3"],
+    ["Asia/Bangkok", "+7"],
+    ["Asia/Dhaka", "+6"],
+    ["Asia/Dubai", "+4"],
+    ["Asia/Kabul", "+4:30"],
+    ["Asia/Karachi", "+5"],
+    ["Asia/Kolkata", "+5:30"],
+    ["Asia/Shanghai", "+8"],
+    ["Asia/Tehran", "+3:30"],
+    ["Asia/Tokyo", "+9"],
+    ["Asia/Yangon", "+6:30"],
+    ["Atlantic/Azores", "-1"],
+    ["Australia/Adelaide", "+9:30"],
+    ["Australia/Perth", "+8"],
+    ["Australia/Sydney", "+10"],
+    ["Europe/Berlin", "+1"],
+    ["Europe/Moscow", "+3"],
+    ["Pacific/Auckland", "+12"],
+    ["Pacific/Honolulu", "-10"],
+    ["Pacific/Noumea", "+11"],
+    ["Pacific/Pago_Pago", "-11"],
+    ["UTC", "+0"]
+  ];
+
+  var tzState = { loading: false, applying: false, current: "" };
+
+  function tzRequest(action, options) {
+    var opt = options || {};
+    var fetchOptions = { cache: "no-store" };
+    var url = "/api/timezone.cgi?action=" + encodeURIComponent(action) + "&_ts=" + Date.now();
+    if (opt.method === "POST") {
+      fetchOptions.method = "POST";
+      fetchOptions.headers = { "Content-Type": "application/x-www-form-urlencoded" };
+      fetchOptions.body = opt.body || "";
+    }
+    return window.fetch(url, fetchOptions)
+      .then(function (response) {
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        return response.json();
+      });
+  }
+
+  function buildTzOptions(selected) {
+    var select = document.getElementById("tzSelect");
+    if (!select) return;
+    select.innerHTML = "";
+    TZ_ZONES.forEach(function (zone) {
+      var opt = document.createElement("option");
+      opt.value = zone[0];
+      opt.textContent = zone[0] + "  (UTC" + zone[1] + ")";
+      select.appendChild(opt);
+    });
+    if (selected) select.value = selected;
+  }
+
+  function renderTzView(data) {
+    var current = toText(data && data.timezone, "");
+    tzState.current = current;
+    buildTzOptions(current);
+    setBadgeState("tzStatusBadge", current || "--", current ? "status-ok" : "status-soft");
+    setTzMessage((data && data.message) || "Select a timezone and tap Apply. Takes effect immediately.");
+    setTzControlsDisabled(tzState.applying);
+  }
+
+  function setTzMessage(text) {
+    setText("tzMessage", text || "Select a timezone and tap Apply. Takes effect immediately.");
+  }
+
+  function setTzControlsDisabled(disabled) {
+    var ids = ["tzApplyBtn", "tzSelect"];
+    ids.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.disabled = !!disabled;
+    });
+  }
+
+  function loadTimezone() {
+    if (tzState.loading) return Promise.resolve(null);
+    tzState.loading = true;
+    return tzRequest("get")
+      .then(function (payload) {
+        renderTzView(payload || {});
+        return payload;
+      })
+      .catch(function () {
+        renderTzView({});
+        setTzMessage("Timezone settings are unavailable right now.");
+        return null;
+      })
+      .then(function (result) {
+        tzState.loading = false;
+        return result;
+      });
+  }
+
+  function applyTimezone() {
+    var select = document.getElementById("tzSelect");
+    var zone = select ? select.value : "";
+    if (!zone) {
+      setTzMessage("Please choose a timezone.");
+      return Promise.resolve(null);
+    }
+    tzState.applying = true;
+    setTzControlsDisabled(true);
+    setTzMessage("Applying timezone...");
+    return tzRequest("apply", { method: "POST", body: "timezone=" + encodeURIComponent(zone) })
+      .then(function (payload) {
+        tzState.applying = false;
+        setTzControlsDisabled(false);
+        if (!payload || payload.ok === false) {
+          setTzMessage((payload && payload.error) ? payload.error : "Failed to apply timezone.");
+          return null;
+        }
+        tzState.current = toText(payload.timezone, zone);
+        setBadgeState("tzStatusBadge", tzState.current, "status-ok");
+        setTzMessage("Timezone updated to " + tzState.current + ".");
+        return payload;
+      })
+      .catch(function () {
+        tzState.applying = false;
+        setTzControlsDisabled(false);
+        setTzMessage("Failed to apply timezone.");
+        return null;
+      });
+  }
+
+  function bindTzControls() {
+    var applyBtn = document.getElementById("tzApplyBtn");
+    if (applyBtn) {
+      applyBtn.addEventListener("click", function () {
+        applyTimezone();
+      });
+    }
   }
 
   function bindWifiControls() {
@@ -2341,6 +2485,7 @@
     bindLogTabs();
     bindStratumCopy();
     bindWifiControls();
+    bindTzControls();
     bindOtaControls();
     bindThemeToggle();
     setTheme(getStoredTheme());

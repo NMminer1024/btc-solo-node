@@ -412,25 +412,22 @@
           <p class="wifi-note" id="wifiMessage" aria-live="polite">Enter your Wi-Fi SSID and password, then tap Apply. The device will reconnect automatically.</p>
         </article>
         <article class="surface-card">
-          <h3>Current Link</h3>
-          <div class="stack-list">
-            <div class="stack-row"><span>Saved SSID</span><strong id="wifiSavedSsid">-</strong></div>
-            <div class="stack-row"><span>Connected SSID</span><strong id="wifiConnectedSsid">-</strong></div>
-            <div class="stack-row"><span>IP</span><strong id="wifiConnectedIp">-</strong></div>
-            <div class="stack-row"><span>Apply State</span><strong id="wifiApplyState">idle</strong></div>
+          <div class="surface-head">
+            <div>
+              <h3>Timezone</h3>
+            </div>
+            <span class="status-badge status-soft" id="tzStatusBadge">--</span>
           </div>
-        </article>
-      </section>
-      <section class="section-heading">
-        <h3>UI</h3>
-      </section>
-      <section class="subpage-grid">
-        <article class="surface-card">
-          <h3>Preferences</h3>
-          <div class="stack-list">
-            <div class="stack-row"><span>Theme</span><strong>GitHub Dark (default) / GitHub Light</strong></div>
-            <div class="stack-row"><span>Language</span><strong>English / Chinese</strong></div>
+          <div class="wifi-form">
+            <div class="wifi-field">
+              <label for="tzSelect">Timezone</label>
+              <select id="tzSelect" aria-label="Timezone"></select>
+            </div>
           </div>
+          <div class="wifi-actions">
+            <button class="action-button action-button-primary" id="tzApplyBtn" type="button">Apply</button>
+          </div>
+          <p class="wifi-note" id="tzMessage" aria-live="polite">Select a timezone and tap Apply. Takes effect immediately.</p>
         </article>
       </section>
     </section>
@@ -526,6 +523,6 @@
   </div>
 </div>
 
-<script src="/app.js?v=20260920-wifi1"></script>
+<script src="/app.js?v=20260920-tz1"></script>
 </body>
 </html>
