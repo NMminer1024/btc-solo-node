@@ -99,8 +99,6 @@ struct TileRuntime {
     lv_draw_buf_t* page_snapshot[kTileCount] {};
     lv_obj_t* page_image[kTileCount] {};
     lv_obj_t* clock_time_label = nullptr;
-    lv_obj_t* clock_date_label = nullptr;
-    lv_obj_t* bitcoin_ip_label = nullptr;
     lv_obj_t* bitcoin_stage_dot[kBitcoinStageCount] {};
     lv_obj_t* bitcoin_stage_label[kBitcoinStageCount] {};
     lv_obj_t* bitcoin_progress = nullptr;
@@ -2855,7 +2853,7 @@ bool build_ui_model(UiModel& model) {
     model.system.swap_pct_text = data.swap_pct != "-" ? data.swap_pct + "%" : "--";
     model.system.swap_detail = join_value(data.swap_used_display, " / ", data.swap_total_display);
 
-    model.system.uptime = "Uptime " + data.uptime;
+    model.system.uptime = data.uptime;
 
     const bool wired = data.iface.rfind("eth", 0) == 0;
     model.network.iface_icon = wired ? LV_SYMBOL_USB : LV_SYMBOL_WIFI;
@@ -2988,15 +2986,14 @@ void build_bitcoin_tile(lv_obj_t* tv) {
     const lv_color_t accent = lv_color_hex(spec.accent);
     lv_obj_t* tile = create_tile_base(tv, 0, spec);
 
-    g_tiles.clock_time_label = add_label(tile, "--:--:--", 538, 26, &lv_font_montserrat_36, lv_color_hex(0xf4efe2));
-    lv_obj_set_width(g_tiles.clock_time_label, 220);
+    // Bottom-left live clock, same baseline as the page-indicator dots
+    // (center y=443) and the bottom-right version tag. montserrat_18:
+    // line_height 21 / base_line 4 -> baseline 17px below top -> y = 443 - 17
+    // = 426. Left-aligned so the left edge stays pinned at x=42.
+    g_tiles.clock_time_label = add_label(tile, "--:--:--", 42, 426,
+                                         &lv_font_montserrat_18, lv_color_hex(0xf4efe2));
+    lv_obj_set_width(g_tiles.clock_time_label, 120);
     lv_obj_set_style_text_align(g_tiles.clock_time_label, LV_TEXT_ALIGN_LEFT, 0);
-    g_tiles.clock_date_label = add_label(tile, "----/--/--", 540, 72, &lv_font_montserrat_16, lv_color_hex(0x9aa6ac));
-    lv_obj_set_width(g_tiles.clock_date_label, 180);
-    lv_obj_set_style_text_align(g_tiles.clock_date_label, LV_TEXT_ALIGN_LEFT, 0);
-    g_tiles.bitcoin_ip_label = add_label(tile, "--", 42, 438, &lv_font_montserrat_16, lv_color_hex(0xb7c2c8));
-    lv_obj_set_width(g_tiles.bitcoin_ip_label, 260);
-    lv_label_set_long_mode(g_tiles.bitcoin_ip_label, LV_LABEL_LONG_MODE_DOTS);
 
     add_label(tile, "Sync Flow", 42, 130, &lv_font_montserrat_18, lv_color_hex(0xf0b44c));
     for (uint32_t index = 0; index < kBitcoinStageCount; ++index) {
@@ -3229,7 +3226,10 @@ void build_system_tile(lv_obj_t* tv) {
     lv_obj_set_style_bg_opa(page_scrim, LV_OPA_50, 0);
     lv_obj_move_to_index(page_scrim, 1);
 
-    g_tiles.system_uptime = add_label(tile, "--", 46, 420, &lv_font_montserrat_18, lv_color_hex(0xd7e0e6));
+    // Bottom-left uptime, styled identically to the bottom-right version tag
+    // (montserrat_16, 0xb7c2c8, baseline y=428) so the footer reads as a
+    // symmetric status strip: uptime (left) / dots (center) / version (right).
+    g_tiles.system_uptime = add_label(tile, "--", 42, 428, &lv_font_montserrat_16, lv_color_hex(0xb7c2c8));
     lv_obj_set_width(g_tiles.system_uptime, 360);
 }
 
@@ -3347,11 +3347,8 @@ void refresh_clock_cb(lv_timer_t*) {
     }
 
     sync_process_timezone();
-    const std::string time_text = current_time_text("%H:%M:%S");
-    const std::string date_text = current_time_text("%Y-%m-%d");
     bool dirty = false;
-    dirty |= set_label(g_tiles.clock_time_label, time_text);
-    dirty |= set_label(g_tiles.clock_date_label, date_text);
+    dirty |= set_label(g_tiles.clock_time_label, current_time_text("%H:%M:%S"));
     if (dirty) {
         g_page_cache_dirty[0] = true;
     }
@@ -3405,7 +3402,6 @@ uint32_t apply_ui_model(const UiModel& model) {
     dirty |= set_label(g_tiles.bitcoin_block_date_title, "Block Time");
     dirty |= set_label(g_tiles.bitcoin_block_date, model.bitcoin.block_date);
     dirty |= set_label(g_tiles.bitcoin_block_time, model.bitcoin.block_time);
-    dirty |= set_label(g_tiles.bitcoin_ip_label, model.bitcoin.ip_addr);
     if (dirty) {
         dirty_mask |= page_dirty_bit(0);
     }
