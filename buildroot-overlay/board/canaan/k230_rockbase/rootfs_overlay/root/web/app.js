@@ -4353,11 +4353,16 @@
   var peerMapAnimId = null; // requestAnimationFrame handle
 
   function peerMapProject(lat, lon, w, h) {
-    // equirectangular using the map's actual lat range (85..-60)
+    // equirectangular using the map's actual lat range (85..-60) and the
+    // map's visual center longitude (105E, China centered). The world is
+    // wrapped so the seam sits at lonCenter-180.
     var wm = window.WORLD_MAP;
     var latMax = wm && wm.latMax != null ? wm.latMax : 85;
     var latMin = wm && wm.latMin != null ? wm.latMin : -60;
-    var x = ((lon + 180) / 360) * w;
+    var lonCenter = wm && wm.lonCenter != null ? wm.lonCenter : 0;
+    var lo = lonCenter - 180;
+    var nlon = ((lon - lo) % 360 + 360) % 360 + lo;
+    var x = ((nlon - lo) / 360) * w;
     var y = ((latMax - lat) / (latMax - latMin)) * h;
     return { x: x, y: y };
   }
@@ -4433,7 +4438,7 @@
     // this node's own location: solid green star
     if (selfPos) {
       peerMapMarkers.push({ x: selfPos.x, y: selfPos.y, ip: "", city: selfGeo.city, country: selfGeo.country, self: true });
-      peerMapDrawStar(ctx, selfPos.x, selfPos.y, 9, "#3fb950", "rgba(255, 255, 255, 0.9)");
+      peerMapDrawStar(ctx, selfPos.x, selfPos.y, 9, "#ff3b30", "rgba(255, 255, 255, 0.9)");
     }
   }
 
