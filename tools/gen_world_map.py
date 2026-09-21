@@ -1,96 +1,83 @@
 #!/usr/bin/env python3
-"""Generate the dot-grid world map embedded in web/world-map.js.
+"""Generate web/world-map.js: Natural Earth 110m country boundaries as
+pre-projected SVG paths (equirectangular, cropped to lat 85..-60).
 
-Source: Natural Earth 110m land (public domain).
-Output: a base64 bitfield, one bit per 1-degree cell, MSB-first,
-        45 bytes per row (360 cols / 8), 171 rows (lat 85..-85).
-Bit set = land.
-
-Usage:
-    curl -sL -o /tmp/ne110_land.json \
-      https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_land.geojson
-    python3 tools/gen_world_map.py /tmp/ne110_land.json buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/root/web/world-map.js
+Usage: gen_world_map.py [countries.geojson] [out.js]
+Default input: /tmp/ne_110m_countries.geojson
+  (download: curl -sL -o /tmp/ne_110m_countries.geojson
+   https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson)
 """
-import sys
 import json
-import base64
+import sys
 
-GEO_PATH = sys.argv[1] if len(sys.argv) > 1 else "/tmp/ne110_land.json"
-OUT_JS = sys.argv[2] if len(sys.argv) > 2 else None
+W, H = 1200, 533
+LAT_MAX, LAT_MIN = 85, -60
 
 
-def point_in_ring(x, y, ring):
-    """Ray-casting point-in-polygon test."""
-    n = len(ring)
-    inside = False
-    j = n - 1
-    for i in range(n):
-        xi, yi = ring[i]
-        xj, yj = ring[j]
-        if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
-            inside = not inside
-        j = i
-    return inside
+def px(lon):
+    return (lon + 180) / 360 * W
+
+
+def py(lat):
+    return (LAT_MAX - lat) / (LAT_MAX - LAT_MIN) * H
+
+
+def ring_to_path(coords):
+    """Closed ring [[lon,lat],...] -> SVG path; split at antimeridian and
+    drop points outside the lat crop."""
+    segs, cur, prev_lon = [], [], None
+    for c in coords:
+        lon, lat = c[0], c[1]
+        if lat > LAT_MAX + 1 or lat < LAT_MIN - 1:
+            if len(cur) > 2:
+                segs.append(cur)
+            cur, prev_lon = [], None
+            continue
+        if prev_lon is not None and abs(lon - prev_lon) > 180:
+            if len(cur) > 2:
+                segs.append(cur)
+            cur = []
+        cur.append((px(lon), py(lat)))
+        prev_lon = lon
+    if len(cur) > 2:
+        segs.append(cur)
+    return "".join("M" + "L".join(f"{x:.0f} {y:.0f}" for x, y in s) + "Z" for s in segs)
 
 
 def main():
-    geo = json.load(open(GEO_PATH))
-    polys = []  # (outer_ring, [hole_rings])
-    for f in geo["features"]:
-        g = f["geometry"]
-        if g["type"] == "Polygon":
-            polys.append((g["coordinates"][0], g["coordinates"][1:]))
-        elif g["type"] == "MultiPolygon":
-            for mp in g["coordinates"]:
-                polys.append((mp[0], mp[1:]))
-
-    def on_land(lon, lat):
-        for outer, holes in polys:
-            if point_in_ring(lon, lat, outer):
-                if any(point_in_ring(lon, lat, h) for h in holes):
-                    continue
-                return True
-        return False
-
-    W = 360  # lon -180..179
-    LAT_MAX, LAT_MIN = 85, -60  # Antarctica cropped
-    H = LAT_MAX - LAT_MIN + 1
-    bits = []
-    for lat in range(LAT_MAX, LAT_MIN - 1, -1):
-        row = 0
-        for lon in range(-180, 180):
-            if on_land(lon + 0.5, lat + 0.5):
-                row |= (1 << (W - 1 - (lon + 180)))
-        bits.append(row)
-
-    row_bytes = (W + 7) // 8  # 45
-    data = bytearray()
-    for row in bits:
-        data += row.to_bytes(row_bytes, "big")
-    b64 = base64.b64encode(bytes(data)).decode()
-
-    total = sum(bin(r).count("1") for r in bits)
-    print(f"rows={H} cols={W} bytes={len(data)} (expect {H*row_bytes}) "
-          f"b64_len={len(b64)} land_cells={total}")
-
-    if OUT_JS:
-        js = (
-            "/* Auto-generated dot-grid world map (1-degree resolution).\n"
-            " * Source: Natural Earth 110m land (public domain).\n"
-            " * Regenerate: python3 tools/gen_world_map.py\n"
-            f" * Layout: {H} rows (lat {LAT_MAX}..{LAT_MIN}, Antarctica cropped) x {W} cols (lon -180..179),\n"
-            " * one bit per cell, MSB-first, 45 bytes per row, base64-encoded.\n"
-            " * Bit set = land. Markers must project with the same lat range. */\n"
-            "window.WORLD_MAP = {\n"
-            f"  rows: {H},\n"
-            f"  cols: {W},\n" f"  latMax: {LAT_MAX},\n" f"  latMin: {LAT_MIN},\n"
-            f'  data: "{b64}"\n'
-            "};\n"
-        )
-        open(OUT_JS, "w").write(js)
-        print(f"wrote {OUT_JS}")
-    else:
-        print(b64)
+    src = sys.argv[1] if len(sys.argv) > 1 else "/tmp/ne_110m_countries.geojson"
+    out = sys.argv[2] if len(sys.argv) > 2 else "buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/root/web/world-map.js"
+    d = json.load(open(src))
+    paths = []
+    for f in d["features"]:
+        if f["properties"].get("ADM0_A3") == "ATA":
+            continue  # Antarctica cropped out
+        geom = f["geometry"]
+        polys = [geom["coordinates"]] if geom["type"] == "Polygon" else geom["coordinates"]
+        for poly in polys:
+            p = "".join(ring_to_path(ring) for ring in poly)
+            if p:
+                paths.append(p)
+    g = []
+    for lon in range(-180, 181, 30):
+        g.append(f"M{px(lon):.0f} 0V{H}")
+    for lat in range(LAT_MIN, LAT_MAX + 1, 30):
+        if lat in (LAT_MAX, LAT_MIN):
+            continue
+        g.append(f"M0 {py(lat):.0f}H{W}")
+    js = (
+        "/* Auto-generated by tools/gen_world_map.py — do not edit.\n"
+        " * Natural Earth 110m country boundaries, equirectangular projection,\n"
+        " * cropped to lat 85..-60 (Antarctica excluded). Canvas 1200x533.\n"
+        " * land: one path per country (fill + stroke gives visible borders).\n"
+        " * Markers must project with the same lat range (latMax/latMin). */\n"
+        "window.WORLD_MAP = "
+        + json.dumps({"w": W, "h": H, "latMax": LAT_MAX, "latMin": LAT_MIN,
+                      "land": paths, "graticule": "".join(g)}, separators=(",", ":"))
+        + ";\n"
+    )
+    open(out, "w").write(js)
+    print(f"countries={len(paths)} js_bytes={len(js)}")
 
 
 if __name__ == "__main__":

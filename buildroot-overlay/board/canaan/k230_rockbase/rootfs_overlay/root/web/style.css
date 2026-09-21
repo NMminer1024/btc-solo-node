@@ -2214,7 +2214,7 @@ html[data-theme="light"] .miners-history-grid {
   display: none;
 }
 .peermap-modal {
-  width: 760px;
+  width: 1040px;
   max-width: 100%;
   max-height: 92vh;
   overflow-y: auto;

@@ -4335,6 +4335,8 @@
   }
 
   var peerMapMarkers = []; // {x, y, ip, city, country} in canvas coords
+  var peerMapLandPath = null; // cached Path2D (land + borders)
+  var peerMapGratPath = null; // cached Path2D (graticule)
 
   function peerMapProject(lat, lon, w, h) {
     // equirectangular using the map's actual lat range (85..-60)
@@ -4355,27 +4357,20 @@
     ctx.fillStyle = "#0b0e14";
     ctx.fillRect(0, 0, w, h);
 
-    // dot-grid landmass from embedded WORLD_MAP (1-degree cells)
+    // vector landmass from embedded WORLD_MAP (Natural Earth 110m country
+    // boundaries as SVG paths, pre-projected to the canvas size)
     var wm = window.WORLD_MAP;
-    if (wm && wm.data) {
-      var bytes = atob(wm.data);
-      var cellW = w / wm.cols, cellH = h / wm.rows;
-      // small squares (not sub-pixel arcs) so the landmass reads clearly
-      var dot = Math.max(1.2, Math.min(cellW, cellH) * 0.62);
-      var rowBytes = Math.ceil(wm.cols / 8); // 45 bytes per row
-      ctx.fillStyle = "rgba(130, 140, 160, 0.9)";
-      for (var row = 0; row < wm.rows; row++) {
-        var rowBase = row * rowBytes;
-        var cy = (row + 0.5) * cellH;
-        for (var col = 0; col < wm.cols; col++) {
-          var byteIdx = rowBase + (col >> 3);
-          var bit = 7 - (col & 7);
-          if (bytes.charCodeAt(byteIdx) & (1 << bit)) {
-            var cx = (col + 0.5) * cellW;
-            ctx.fillRect(cx - dot / 2, cy - dot / 2, dot, dot);
-          }
-        }
-      }
+    if (wm && wm.land) {
+      if (!peerMapLandPath) peerMapLandPath = new Path2D(wm.land.join(""));
+      if (!peerMapGratPath) peerMapGratPath = new Path2D(wm.graticule);
+      ctx.strokeStyle = "rgba(120, 130, 150, 0.35)";
+      ctx.lineWidth = 1;
+      ctx.stroke(peerMapGratPath);
+      ctx.fillStyle = "rgba(130, 140, 160, 0.55)";
+      ctx.fill(peerMapLandPath);
+      ctx.strokeStyle = "rgba(170, 180, 200, 0.8)";
+      ctx.lineWidth = 1;
+      ctx.stroke(peerMapLandPath);
     }
 
     // peer markers (store positions for hover hit-testing)
@@ -4385,7 +4380,7 @@
       var pos = peerMapProject(p.lat, p.lon, w, h);
       peerMapMarkers.push({ x: pos.x, y: pos.y, ip: p.ip, city: p.city, country: p.country });
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
+      ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
       ctx.fillStyle = "#f7931a";
       ctx.fill();
       ctx.lineWidth = 1.5;
@@ -4407,7 +4402,7 @@
     for (var i = 0; i < peerMapMarkers.length; i++) {
       var m = peerMapMarkers[i];
       var dx = mx - m.x, dy = my - m.y;
-      if (dx * dx + dy * dy <= 120) { hit = m; break; }
+      if (dx * dx + dy * dy <= 160) { hit = m; break; } // ~13px in canvas coords
     }
     if (hit) {
       tooltip.hidden = false;
