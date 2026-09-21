@@ -81,6 +81,21 @@ make CONF=k230_rockbase_defconfig buildroot -j$(nproc)
 
 （如确需强制全量重建，仍可 `make CONF=k230_rockbase_defconfig rockbase_lcdui-rebuild -j$(nproc)`。详见 `rockbase-build` skill。）
 
+### ⚠️ 热部署后增量构建报 `cannot stat calibd` → 先 `rockbase_lcdui-rebuild`
+
+- **症状**：热部署时用手工交叉编译只产出了 `rockbase-lcdui` 主二进制（没走包内 Makefile 的
+  `all` 目标），随后 `make buildroot` 在 `rockbase_lcdui Installing to target` 阶段报
+  `install: cannot stat '.../build/rockbase_lcdui/calibd'`（`drmshot`/`touchswipe` 同样缺失）。
+  日志特征是：rsync 报了 `>>> ROCKBASE_LCDUI: source changed, forcing rebuild`，但**中间没有
+  `>>> rockbase_lcdui Building` 阶段**就直接跳到 Installing。
+- **根因**：`rockbase_lcdui` 的 install 要装 4 个二进制，手工编译只编了主二进制，build 目录
+  缺 debug 工具；增量构建的 rsync 钩子删 stamp 后 "Building" 没真正重跑，形成「stamp 与产物
+  不一致」的脏增量状态，install 一装 `calibd` 就炸。
+- **修复**：先 `make CONF=k230_rockbase_defconfig rockbase_lcdui-rebuild -j$(nproc)` 强制重建
+  完整 `all` 目标（含 `calibd`/`drmshot`/`touchswipe`），再跑 `make buildroot`。
+- **预防**：热部署 lcdui 二进制时，要么在独立临时目录编译、不要污染 `output/.../build/rockbase_lcdui`，
+  要么固化时统一走 `rockbase_lcdui-rebuild`，别依赖「只编主二进制 + 增量 buildroot」。
+
 构建后校验 build 目录拷贝是否等于最新源码（md5 相同 = 已同步）：
 
 ```bash
