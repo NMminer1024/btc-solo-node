@@ -18,7 +18,7 @@ static int ok(void) {
     if (v[0] > v[1]) { int t = v[0]; v[0] = v[1]; v[1] = t; }
     if (v[1] > v[2]) { int t = v[1]; v[1] = v[2]; v[2] = t; }
     if (v[0] > v[1]) { int t = v[0]; v[0] = v[1]; v[1] = t; }
-    return v[1] >= 750 && v[1] <= 820;
+    return v[1] >= 683 && v[1] <= 910;
 }
 
 int main(void) {

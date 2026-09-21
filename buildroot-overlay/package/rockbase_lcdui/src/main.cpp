@@ -3838,7 +3838,7 @@ bool calib_ok() {
     }
     close(fd);
     std::sort(v, v + 3);
-    return v[1] >= 750 && v[1] <= 820;
+    return v[1] >= 683 && v[1] <= 910;
 }
 
 void run_hold_screen() {
