@@ -1256,8 +1256,7 @@
     var workers = Number(pool.workers);
 
     setText("minerUsers", Number.isFinite(users) ? formatCount(users) : formatCount(miners.length));
-    var onlineMiners = miners.filter(function (m) { return m.online; }).length;
-    setText("minerWorkers", miners.length ? onlineMiners + " / " + miners.length + " online" : "--");
+    setText("minerWorkers", miners.length ? formatCount(workers) + " / " + formatCount(miners.length) : "--");
     setText("minerHash5m", toText(pool.hashrate5m, "--"));
     setText("minerBestShare", formatShare(pool.bestshare));
     /* redesign: Miners view summary mirrors of the dashboard KPI cards */
