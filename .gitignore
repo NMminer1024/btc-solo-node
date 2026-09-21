@@ -26,3 +26,6 @@ df/
 __pycache__/
 /seed/
 *-private.pem
+
+# GeoLite2-City.mmdb is licensed MaxMind data, never commit it
+buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/usr/share/GeoLite2-City.mmdb

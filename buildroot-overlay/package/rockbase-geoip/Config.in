@@ -1,0 +1,9 @@
+config BR2_PACKAGE_ROCKBASE_GEOIP
+	bool "rockbase-geoip"
+	select BR2_PACKAGE_LIBMAXMINDDB
+	help
+	  Offline GeoLite2-City IP geolocation lookup tool for Rockbase.
+	  Reads IPs from stdin and prints one JSON object per line with
+	  lat/lon/city/country. Used by rockbase_statusd (self geo) and
+	  /api/geoip.cgi (peer map). The GeoLite2-City.mmdb data file is
+	  provisioned separately due to MaxMind licensing.

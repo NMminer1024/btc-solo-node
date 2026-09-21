@@ -4333,7 +4333,8 @@
   /* ── Peer map ───────────────────────────────────────────
    * Click the Peers count on the Bitcoind card -> overlay with a dot-grid
    * world map. The board only reports peer IPs (status API "peers");
-   * geolocation is resolved in the browser via ip-api.com (batch, free tier). */
+   * geolocation is resolved on the board via /api/geoip.cgi (offline
+   * GeoLite2-City.mmdb lookup, no external network needed). */
   var peerMapGeoCache = {}; // ip -> {lat, lon, country, city} | {unknown: true}
 
   function peerMapGetIps() {
@@ -4476,20 +4477,19 @@
       setText("peerMapStatus", t("peerMap.status").replace("{n}", String(located)).replace("{total}", String(ips.length)));
     };
     if (!pending.length) { done(); return; }
-    // ip-api.com batch: up to 100 IPs per request, free tier 45 req/min
-    var CHUNK = 50;
+    // Local offline lookup via /api/geoip.cgi (GeoLite2-City.mmdb on the
+    // board). No external network needed; works fully offline.
+    var CHUNK = 200; // CGI caps at 200 IPs per request
     var allDone = 0;
     for (var i = 0; i < pending.length; i += CHUNK) {
       (function (chunk) {
-        fetch("http://ip-api.com/batch?fields=status,country,city,lat,lon", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(chunk)
-        }).then(function (r) { return r.json(); })
-          .then(function (rows) {
-            chunk.forEach(function (ip, idx) {
-              var row = rows[idx];
-              if (row && row.status === "success" && row.lat != null) {
+        fetch("/api/geoip.cgi?ips=" + encodeURIComponent(chunk.join(",")))
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            var results = (data && data.ok) ? (data.results || {}) : {};
+            chunk.forEach(function (ip) {
+              var row = results[ip];
+              if (row && row.lat != null) {
                 peerMapGeoCache[ip] = { lat: row.lat, lon: row.lon, country: row.country, city: row.city };
               } else {
                 peerMapGeoCache[ip] = { unknown: true };

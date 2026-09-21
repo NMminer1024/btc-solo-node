@@ -645,7 +645,8 @@ collect_bitcoin_conn() {
 }
 
 # Board's own public location for the frontend peer-map (green star).
-# Cached for 6h; a single ip-api.com lookup per refresh window.
+# Cached for 6h. Public IP via ifconfig.me, geolocation via the local
+# GeoLite2-City.mmdb (rockbase-geoip) so no geo API is needed.
 collect_self_geo() {
     ensure_state_dir
 
@@ -656,8 +657,16 @@ collect_self_geo() {
         [ "${age}" -lt "${SELF_GEO_INTERVAL}" ] && return 0
     fi
 
-    local resp lat lon city country
-    resp=$(curl -s -m 8 "http://ip-api.com/json/?fields=status,lat,lon,city,country" 2>/dev/null)
+    command -v rockbase-geoip >/dev/null 2>&1 || return 0
+
+    local pub_ip resp lat lon city country
+    # ifconfig.me may answer with IPv4 or IPv6; rockbase-geoip handles both.
+    pub_ip=$(curl -s -m 8 "https://ifconfig.me" 2>/dev/null | tr -d '[:space:]')
+    case "${pub_ip}" in
+        ""|*[!0-9a-fA-F:.]*) return 0 ;;
+    esac
+
+    resp=$(printf '%s\n' "${pub_ip}" | rockbase-geoip 2>/dev/null | head -n1)
     [ -n "${resp}" ] || return 0
     lat=$(printf '%s' "${resp}" | sed -nE 's/.*"lat":(-?[0-9]+(\.[0-9]+)?).*/\1/p')
     lon=$(printf '%s' "${resp}" | sed -nE 's/.*"lon":(-?[0-9]+(\.[0-9]+)?).*/\1/p')
