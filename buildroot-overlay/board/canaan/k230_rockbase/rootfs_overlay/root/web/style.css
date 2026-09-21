@@ -2173,3 +2173,129 @@ html[data-theme="light"] .miners-history-grid {
     font-size: 12px;
   }
 }
+
+/* ── Peer map ─────────────────────────────────────────── */
+/* Clickable metric value (GitHub/Grafana convention): accent color +
+   solid underline at rest, background highlight on hover/focus.
+   Specificity must beat `.stack-row > strong`. */
+.stack-row > strong.peer-link {
+  cursor: pointer;
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  border-radius: 4px;
+  transition: background-color 0.12s ease;
+}
+.stack-row > strong.peer-link:hover,
+.stack-row > strong.peer-link:focus {
+  outline: none;
+  background-color: rgba(88, 166, 255, 0.14); /* fallback */
+  background-color: color-mix(in srgb, var(--accent) 14%, transparent);
+  text-decoration-thickness: 2px;
+}
+.stack-row > strong.peer-link:active {
+  background-color: rgba(88, 166, 255, 0.24); /* fallback */
+  background-color: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.peermap-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+  padding: 20px;
+}
+.peermap-overlay[hidden] {
+  display: none;
+}
+.peermap-modal {
+  width: 760px;
+  max-width: 100%;
+  max-height: 92vh;
+  overflow-y: auto;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+.peermap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.peermap-header h3 {
+  margin: 0;
+  font-size: 17px;
+}
+.peermap-close {
+  background: none;
+  border: none;
+  color: var(--text-dim, #888);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.peermap-close:hover {
+  color: var(--text, #ddd);
+}
+.peermap-canvas-wrap {
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0b0e14;
+}
+#peerMapCanvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.peermap-status {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-dim, #888);
+  min-height: 16px;
+}
+.peermap-list {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 6px;
+}
+.peermap-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg, #111);
+}
+.peermap-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: #f7931a;
+}
+.peermap-dot.is-unknown {
+  background: #666;
+}
+.peermap-item .ip {
+  font-family: var(--mono, monospace);
+  color: var(--text, #ddd);
+}
+.peermap-item .loc {
+  color: var(--text-dim, #888);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

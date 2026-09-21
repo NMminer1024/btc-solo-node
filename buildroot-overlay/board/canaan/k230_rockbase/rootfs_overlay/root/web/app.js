@@ -2675,6 +2675,12 @@
       "about.upToDateLatest": "You are running the latest firmware version.",
       "about.error": "Error",
       "about.checkFailed": "Failed to check for updates.",
+      /* peer map */
+      "peerMap.title": "Peer Map",
+      "peerMap.loading": "Locating peers…",
+      "peerMap.status": "{n} of {total} peers located",
+      "peerMap.empty": "No peers connected.",
+      "peerMap.unknown": "Unknown location",
       /* ota */
       "ota.available": "Firmware Update Available",
       "ota.note": "The update is downloaded, verified and written to the standby system slot. Syncing and mining pause during the upgrade. When writing finishes the node reboots automatically. Do not power off.",
@@ -2849,6 +2855,11 @@
       "about.upToDateLatest": "你正在运行最新的固件版本。",
       "about.error": "错误",
       "about.checkFailed": "检查更新失败。",
+      "peerMap.title": "节点地图",
+      "peerMap.loading": "正在定位节点…",
+      "peerMap.status": "已定位 {n}/{total} 个节点",
+      "peerMap.empty": "当前没有已连接的节点。",
+      "peerMap.unknown": "位置未知",
       /* ota */
       "ota.available": "有可用固件更新",
       "ota.note": "更新包将被下载、校验并写入备用系统槽位。升级期间同步和挖矿会暂停。写入完成后节点会自动重启。请勿断电。",
@@ -3014,6 +3025,11 @@
       "about.upToDateLatest": "Estás usando la versión de firmware más reciente.",
       "about.error": "Error",
       "about.checkFailed": "No se pudieron comprobar las actualizaciones.",
+      "peerMap.title": "Mapa de pares",
+      "peerMap.loading": "Localizando pares…",
+      "peerMap.status": "{n} de {total} pares localizados",
+      "peerMap.empty": "No hay pares conectados.",
+      "peerMap.unknown": "Ubicación desconocida",
       "ota.available": "Actualización de firmware disponible",
       "ota.note": "La actualización se descarga, se verifica y se escribe en la ranura de sistema en espera. La sincronización y el minado se pausan durante la actualización. Al terminar, el nodo se reinicia automáticamente. No apagues el equipo.",
       "ota.remindTomorrow": "Recordármelo mañana",
@@ -3175,6 +3191,11 @@
       "about.upToDateLatest": "Vous utilisez la version de firmware la plus récente.",
       "about.error": "Erreur",
       "about.checkFailed": "Échec de la vérification des mises à jour.",
+      "peerMap.title": "Carte des pairs",
+      "peerMap.loading": "Localisation des pairs…",
+      "peerMap.status": "{n} pairs localisés sur {total}",
+      "peerMap.empty": "Aucun pair connecté.",
+      "peerMap.unknown": "Emplacement inconnu",
       "ota.available": "Mise à jour du firmware disponible",
       "ota.note": "La mise à jour est téléchargée, vérifiée et écrite dans la baie système en attente. La synchronisation et le minage sont en pause pendant la mise à jour. À la fin, le nœud redémarre automatiquement. Ne coupez pas le courant.",
       "ota.remindTomorrow": "Me le rappeler demain",
@@ -3336,6 +3357,11 @@
       "about.upToDateLatest": "Du nutzt die neueste Firmware-Version.",
       "about.error": "Fehler",
       "about.checkFailed": "Updates konnten nicht geprüft werden.",
+      "peerMap.title": "Peer-Karte",
+      "peerMap.loading": "Peers werden lokalisiert…",
+      "peerMap.status": "{n} von {total} Peers lokalisiert",
+      "peerMap.empty": "Keine verbundenen Peers.",
+      "peerMap.unknown": "Unbekannter Standort",
       "ota.available": "Firmware-Update verfügbar",
       "ota.note": "Das Update wird heruntergeladen, geprüft und in den Standby-Systemslot geschrieben. Synchronisation und Mining werden während des Updates pausiert. Nach Abschluss startet der Knoten automatisch neu. Nicht ausschalten.",
       "ota.remindTomorrow": "Morgen daran erinnern",
@@ -3497,6 +3523,11 @@
       "about.upToDateLatest": "Você está usando a versão de firmware mais recente.",
       "about.error": "Erro",
       "about.checkFailed": "Falha ao verificar atualizações.",
+      "peerMap.title": "Mapa de pares",
+      "peerMap.loading": "Localizando pares…",
+      "peerMap.status": "{n} de {total} pares localizados",
+      "peerMap.empty": "Nenhum par conectado.",
+      "peerMap.unknown": "Localização desconhecida",
       "ota.available": "Atualização de firmware disponível",
       "ota.note": "A atualização é baixada, verificada e gravada no slot de sistema em espera. A sincronização e a mineração ficam em pausa durante a atualização. Ao terminar, o nó reinicia automaticamente. Não desligue.",
       "ota.remindTomorrow": "Lembrar-me amanhã",
@@ -3658,6 +3689,11 @@
       "about.upToDateLatest": "Вы используете последнюю версию прошивки.",
       "about.error": "Ошибка",
       "about.checkFailed": "Не удалось проверить обновления.",
+      "peerMap.title": "Карта узлов",
+      "peerMap.loading": "Определение местоположения узлов…",
+      "peerMap.status": "Определено местоположение {n} из {total} узлов",
+      "peerMap.empty": "Нет подключённых узлов.",
+      "peerMap.unknown": "Неизвестное местоположение",
       "ota.available": "Доступно обновление прошивки",
       "ota.note": "Обновление скачивается, проверяется и записывается в резервный системный слот. Синхронизация и майнинг приостанавливаются во время обновления. После записи узел автоматически перезагрузится. Не отключайте питание.",
       "ota.remindTomorrow": "Напомнить завтра",
@@ -3819,6 +3855,11 @@
       "about.upToDateLatest": "最新のファームウェアバージョンを使用しています。",
       "about.error": "エラー",
       "about.checkFailed": "更新の確認に失敗しました。",
+      "peerMap.title": "ピアマップ",
+      "peerMap.loading": "ピアの位置を特定中…",
+      "peerMap.status": "ピア {total} 件中 {n} 件の位置を特定",
+      "peerMap.empty": "接続中のピアがありません。",
+      "peerMap.unknown": "位置不明",
       "ota.available": "ファームウェア更新があります",
       "ota.note": "更新はダウンロードされ、検証されて、スタンバイのシステムスロットに書き込まれます。アップグレード中は同期とマイニングが一時停止されます。書き込みが完了するとノードは自動的に再起動します。電源を切らないでください。",
       "ota.remindTomorrow": "明日リマインド",
@@ -3980,6 +4021,11 @@
       "about.upToDateLatest": "최신 펌웨어 버전을 사용 중입니다.",
       "about.error": "오류",
       "about.checkFailed": "업데이트 확인에 실패했습니다.",
+      "peerMap.title": "피어 맵",
+      "peerMap.loading": "피어 위치를 확인하는 중…",
+      "peerMap.status": "피어 {total}개 중 {n}개 위치 확인",
+      "peerMap.empty": "연결된 피어가 없습니다.",
+      "peerMap.unknown": "위치 미상",
       "ota.available": "펌웨어 업데이트가 있습니다",
       "ota.note": "업데이트는 다운로드되고 검증된 뒤 대기 시스템 슬롯에 기록됩니다. 업그레이드 동안 동기화 및 채굴이 일시 중지됩니다. 기록이 끝나면 노드가 자동으로 재부팅됩니다. 전원을 끄지 마세요.",
       "ota.remindTomorrow": "내일 알림",
@@ -4141,6 +4187,11 @@
       "about.upToDateLatest": "تستخدم أحدث إصدار من البرنامج الثابت.",
       "about.error": "خطأ",
       "about.checkFailed": "فشل التحقق من التحديثات.",
+      "peerMap.title": "خريطة الأقران",
+      "peerMap.loading": "جارٍ تحديد مواقع الأقران…",
+      "peerMap.status": "تم تحديد موقع {n} من أصل {total} أقران",
+      "peerMap.empty": "لا يوجد أقران متصلون.",
+      "peerMap.unknown": "موقع غير معروف",
       "ota.available": "تحديث البرنامج الثابت متاح",
       "ota.note": "يتم تنزيل التحديث وتحققه وكتابته في فتحة النظام الاحتياطية. يتوقف المزامنة والتعدين أثناء الترقية. عند انتهاء الكتابة تعاد تشغيل العقدة تلقائيًا. لا تقطع الطاقة.",
       "ota.remindTomorrow": "ذكّرني غدًا",
@@ -4266,6 +4317,180 @@
     sel.value = currentLang;
     sel.addEventListener("change", function () {
       setLang(sel.value);
+    });
+  }
+
+  /* ── Peer map ───────────────────────────────────────────
+   * Click the Peers count on the Bitcoind card -> overlay with a dot-grid
+   * world map. The board only reports peer IPs (status API "peers");
+   * geolocation is resolved in the browser via ip-api.com (batch, free tier). */
+  var peerMapGeoCache = {}; // ip -> {lat, lon, country, city} | {unknown: true}
+
+  function peerMapGetIps() {
+    var api = lastDashboardApi;
+    var peers = api && api.bitcoin && Array.isArray(api.bitcoin.peers) ? api.bitcoin.peers : [];
+    return peers.filter(function (ip) {
+      return typeof ip === "string" && /^\d{1,3}(\.\d{1,3}){3}$/.test(ip);
+    });
+  }
+
+  function peerMapProject(lat, lon, w, h) {
+    // equirectangular: lon -180..180 -> x 0..w, lat 90..-90 -> y 0..h
+    var x = ((lon + 180) / 360) * w;
+    var y = ((90 - lat) / 180) * h;
+    return { x: x, y: y };
+  }
+
+  function peerMapDrawCanvas(points) {
+    var canvas = document.getElementById("peerMapCanvas");
+    if (!canvas) return;
+    var ctx = canvas.getContext("2d");
+    var w = canvas.width, h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#0b0e14";
+    ctx.fillRect(0, 0, w, h);
+
+    // dot-grid landmass from embedded WORLD_MAP (1-degree cells)
+    var wm = window.WORLD_MAP;
+    if (wm && wm.data) {
+      var bytes = atob(wm.data);
+      var cellW = w / wm.cols, cellH = h / wm.rows;
+      // small squares (not sub-pixel arcs) so the landmass reads clearly
+      var dot = Math.max(1.2, Math.min(cellW, cellH) * 0.62);
+      var rowBytes = Math.ceil(wm.cols / 8); // 45 bytes per row
+      ctx.fillStyle = "rgba(130, 140, 160, 0.9)";
+      for (var row = 0; row < wm.rows; row++) {
+        var rowBase = row * rowBytes;
+        var cy = (row + 0.5) * cellH;
+        for (var col = 0; col < wm.cols; col++) {
+          var byteIdx = rowBase + (col >> 3);
+          var bit = 7 - (col & 7);
+          if (bytes.charCodeAt(byteIdx) & (1 << bit)) {
+            var cx = (col + 0.5) * cellW;
+            ctx.fillRect(cx - dot / 2, cy - dot / 2, dot, dot);
+          }
+        }
+      }
+    }
+
+    // peer markers
+    points.forEach(function (p) {
+      if (p.unknown) return;
+      var pos = peerMapProject(p.lat, p.lon, w, h);
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = "#f7931a";
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+      ctx.stroke();
+    });
+  }
+
+  function peerMapRenderList(points) {
+    var list = document.getElementById("peerMapList");
+    if (!list) return;
+    list.innerHTML = "";
+    points.forEach(function (p) {
+      var item = document.createElement("div");
+      item.className = "peermap-item";
+      var dot = document.createElement("span");
+      dot.className = "peermap-dot" + (p.unknown ? " is-unknown" : "");
+      var ip = document.createElement("span");
+      ip.className = "ip";
+      ip.textContent = p.ip;
+      var loc = document.createElement("span");
+      loc.className = "loc";
+      loc.textContent = p.unknown ? t("peerMap.unknown") : [p.city, p.country].filter(Boolean).join(", ");
+      item.appendChild(dot);
+      item.appendChild(ip);
+      item.appendChild(loc);
+      list.appendChild(item);
+    });
+  }
+
+  function peerMapResolve(ips) {
+    var pending = ips.filter(function (ip) { return !peerMapGeoCache[ip]; });
+    var done = function () {
+      var points = ips.map(function (ip) {
+        var g = peerMapGeoCache[ip];
+        if (g && !g.unknown) return { ip: ip, lat: g.lat, lon: g.lon, city: g.city, country: g.country };
+        return { ip: ip, unknown: true };
+      });
+      peerMapDrawCanvas(points);
+      peerMapRenderList(points);
+      var located = points.filter(function (p) { return !p.unknown; }).length;
+      setText("peerMapStatus", t("peerMap.status").replace("{n}", String(located)).replace("{total}", String(ips.length)));
+    };
+    if (!pending.length) { done(); return; }
+    // ip-api.com batch: up to 100 IPs per request, free tier 45 req/min
+    var CHUNK = 50;
+    var allDone = 0;
+    for (var i = 0; i < pending.length; i += CHUNK) {
+      (function (chunk) {
+        fetch("http://ip-api.com/batch?fields=status,country,city,lat,lon", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(chunk)
+        }).then(function (r) { return r.json(); })
+          .then(function (rows) {
+            chunk.forEach(function (ip, idx) {
+              var row = rows[idx];
+              if (row && row.status === "success" && row.lat != null) {
+                peerMapGeoCache[ip] = { lat: row.lat, lon: row.lon, country: row.country, city: row.city };
+              } else {
+                peerMapGeoCache[ip] = { unknown: true };
+              }
+            });
+          })
+          .catch(function () {
+            chunk.forEach(function (ip) { peerMapGeoCache[ip] = { unknown: true }; });
+          })
+          .then(function () {
+            allDone++;
+            if (allDone * CHUNK >= pending.length) done();
+          });
+      })(pending.slice(i, i + CHUNK));
+    }
+  }
+
+  function openPeerMap() {
+    var overlay = document.getElementById("peerMapOverlay");
+    if (!overlay) return;
+    var ips = peerMapGetIps();
+    overlay.hidden = false;
+    setText("peerMapStatus", t("peerMap.loading"));
+    var list = document.getElementById("peerMapList");
+    if (list) list.innerHTML = "";
+    if (!ips.length) {
+      peerMapDrawCanvas([]);
+      setText("peerMapStatus", t("peerMap.empty"));
+      return;
+    }
+    peerMapResolve(ips);
+  }
+
+  function closePeerMap() {
+    var overlay = document.getElementById("peerMapOverlay");
+    if (overlay) overlay.hidden = true;
+  }
+
+  function bindPeerMap() {
+    var trigger = document.getElementById("nodeConn");
+    if (trigger) {
+      trigger.addEventListener("click", openPeerMap);
+      trigger.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPeerMap(); }
+      });
+    }
+    var closeBtn = document.getElementById("peerMapCloseBtn");
+    if (closeBtn) closeBtn.addEventListener("click", closePeerMap);
+    var overlay = document.getElementById("peerMapOverlay");
+    if (overlay) overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) closePeerMap();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") closePeerMap();
     });
   }
 
@@ -4448,6 +4673,7 @@
     applyI18n();
     bindKebabMenus();
     bindCleanBlockControls();
+    bindPeerMap();
     setTheme(getStoredTheme());
     fetchDashboardData();
     /* prefetch miners cache so the Stratum card pool stats and hero Miners badge fill on first load */

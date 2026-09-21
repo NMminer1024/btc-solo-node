@@ -614,9 +614,31 @@ collect_bitcoin_conn() {
     fi
     [ -n "${connections}" ] || connections=0
 
+    # Peer IP list (IPv4 only) for the frontend peer-map. The board only
+    # reports IPs; geolocation is resolved by the browser (ip-api.com).
+    peers_json="[]"
+    if pidof bitcoind >/dev/null 2>&1; then
+        peers_csv=$(btc_conn_cli getpeerinfo 2>/dev/null \
+            | grep -E '^[[:space:]]*"addr":' \
+            | sed -E 's/^[[:space:]]*"addr":[[:space:]]*"([^"]*)".*/\1/' \
+            | awk -F: '{print $1}' \
+            | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' \
+            | sort -u)
+        if [ -n "${peers_csv}" ]; then
+            peers_json="["
+            first=1
+            for ip in ${peers_csv}; do
+                if [ "${first}" -eq 1 ]; then first=0; else peers_json="${peers_json},"; fi
+                peers_json="${peers_json}\"${ip}\""
+            done
+            peers_json="${peers_json}]"
+        fi
+    fi
+
     {
         state_num updated_at "$(now_epoch)"
         state_str connections "${connections}"
+        state_str peers_json "${peers_json}"
     } | write_state_file "${BITCOIN_CONN_STATE}"
 }
 
@@ -753,6 +775,7 @@ render_status_json() {
     mempool_txs="-"
     version="-"
     connections="-"
+    peers_json="[]"
     best_block_date="-"
     log_blocks=""
     log_progress=""
@@ -1116,6 +1139,7 @@ render_status_json() {
     printf '    "best_block_date": %s,\n' "$(json_str "${best_block_date}")"
     printf '    "btc_context": %s,\n' "$(json_str "${btc_context}")"
     printf '    "connections": %s,\n' "$(json_str "${connections}")"
+    printf '    "peers": %s,\n' "${peers_json}"
     printf '    "difficulty_display": %s,\n' "$(json_str "${difficulty_display}")"
     printf '    "mempool_txs": %s,\n' "$(json_str "${mempool_txs}")"
     printf '    "version": %s,\n' "$(json_str "${version}")"
