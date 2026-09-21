@@ -438,3 +438,62 @@ vm.dirty_expire_centisecs=500
 - 4 台板 `rb-mmc-diag` 慢操作统计：mmc0（WiFi）干净（0~3 次），mmc1（SD 卡）281~4553 次、平均 754~804ms、最大 2496~5748ms。
 - 结论：慢路径集中在 SD 卡 mmc1，WiFi mmc0 干净。与上文"SD 卡写回参与/放大 freeze"的方向一致。
 - DMA 状态：当前镜像已恢复 ADMA（`mmc0/mmc1 ... using ADMA`），quirk 仅 `SDHCI_QUIRK_CAP_CLOCK_BASE_BROKEN`，无 BROKEN_ADMA/BROKEN_DMA（`0034` 已 `.disabled`）。
+
+---
+
+## 2026-09-21：124.9 卡死 3.5h 后由 healthd 软挂死兜底 panic 重启 —— pstore 抓到完整证据链
+
+板子 `192.168.124.9`（1G，SD 卡 SK32G）。现象：13:41 起 web 408 超时、SSH banner
+exchange 超时（ping 通），14:02 自动重启恢复。**本次未改动任何文件，纯取证。**
+
+### 重启机制：不是硬件看门狗，是 rockbase_serial_healthd 软挂死兜底
+
+pstore（`/root/log/pstore-archive/latest/console-ramoops-0`）尾部铁证：
+
+```
+[12750.209324] oom-kill: ... task=bitcoind,pid=7588
+[12750.222031] Out of memory: Killed process 7588 (bitcoind) total-vm:12576248kB, anon-rss:619316kB
+[12756.933679] sysrq: Show Blocked State
+[12759.898896] sysrq: Trigger a crash
+[12759.902399] Kernel panic - not syncing: sysrq triggered crash
+[12759.908150] CPU: 0 PID: 172 Comm: rockbase_serial   ← healthd 写的 c
+[12760.012656] Rebooting in 10 seconds..
+```
+
+链路：关键 I/O 进程持续 D > 60s（`PANIC_AFTER_SEC`）→ healthd 写 `c` 到
+`/proc/sysrq-trigger` → panic → `kernel.panic=10` 10s 后自动重启。
+**healthd 兜底 + pstore 归档工作正常**（上次启动的 console-ramoops 完整保留）。
+
+### 卡死根因证据（上次启动，持续约 3.5h）
+
+1. **SD 卡 mmc1 host claim 长时间不释放**（rb-mmc-diag）：
+   `kworker/0:0H` 持有 mmc1 claim 最长 **507984ms（8.5min）**、196168ms、91304ms、
+   77948ms、53520ms —— 远超正常值。
+2. **bitcoind 线程 D 状态卡在页缓存读**：`b-initload`/`b-msghand` 栈均为
+   `filemap_fault → folio_wait_bit_common → io_schedule`（等 SD 卡数据页）。
+3. **内存压力叠加**：1G 板 + swap 禁用，该次启动 OOM killer 触发两次
+   （4977s、12750s），两次都杀 bitcoind（anon-rss ~619MB）。
+4. OOM 后 D 状态仍未恢复 → healthd 60s 兜底 → panic 重启。
+
+### 时间线（板子时钟 UTC，本地 +8）
+
+| 时间 (UTC) | 事件 |
+|-----------|------|
+| ~10:30 | 上一次启动开始 |
+| 13:41–13:47 | web 408 超时、SSH banner 超时（已严重降级） |
+| 14:02 | healthd 触发 panic → 自动重启 |
+| 14:02:49 | 新启动完成 |
+| 14:08 | SSH 恢复，板子健康 |
+
+### 结论与后续
+
+- 与既有结论一致：**根因是 SD 卡 I/O 路径单核硬卡死，与 PIO/DMA 无关**。
+  本次新增最具体的量化证据：mmc1 claim 持有 8.5min。
+- 新观察：OOM 双杀 bitcoind 后 D 状态仍不恢复，说明卡死点在 I/O 层而非
+  bitcoind 本身；1G + 无 swap 下 bitcoind 619MB anon 是 OOM 主因之一。
+- 当前启动（14:02 起）健康：无 D 任务、load ~1.0；但 diag 日志 22:03–22:11
+  仍有瞬时 D 触发（含 kworker 卡 `drm_atomic_helper_wait_for_vblanks`，自行恢复），
+  SD 卡 I/O 抖动问题仍存在。
+- 排查手法沉淀：卡死后先 `ssh root@<IP> 'cat /root/log/pstore-archive/latest/*'`
+  捞上次启动内核日志；`/tmp/rockbase-serial-healthd.{sysrq,diag,panic}` 是
+  healthd 的触发时间戳（内核秒数）。
