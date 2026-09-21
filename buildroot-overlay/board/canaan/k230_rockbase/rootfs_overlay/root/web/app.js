@@ -4334,10 +4334,15 @@
     });
   }
 
+  var peerMapMarkers = []; // {x, y, ip, city, country} in canvas coords
+
   function peerMapProject(lat, lon, w, h) {
-    // equirectangular: lon -180..180 -> x 0..w, lat 90..-90 -> y 0..h
+    // equirectangular using the map's actual lat range (85..-60)
+    var wm = window.WORLD_MAP;
+    var latMax = wm && wm.latMax != null ? wm.latMax : 85;
+    var latMin = wm && wm.latMin != null ? wm.latMin : -60;
     var x = ((lon + 180) / 360) * w;
-    var y = ((90 - lat) / 180) * h;
+    var y = ((latMax - lat) / (latMax - latMin)) * h;
     return { x: x, y: y };
   }
 
@@ -4373,10 +4378,12 @@
       }
     }
 
-    // peer markers
+    // peer markers (store positions for hover hit-testing)
+    peerMapMarkers = [];
     points.forEach(function (p) {
       if (p.unknown) return;
       var pos = peerMapProject(p.lat, p.lon, w, h);
+      peerMapMarkers.push({ x: pos.x, y: pos.y, ip: p.ip, city: p.city, country: p.country });
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
       ctx.fillStyle = "#f7931a";
@@ -4387,26 +4394,42 @@
     });
   }
 
-  function peerMapRenderList(points) {
-    var list = document.getElementById("peerMapList");
-    if (!list) return;
-    list.innerHTML = "";
-    points.forEach(function (p) {
-      var item = document.createElement("div");
-      item.className = "peermap-item";
-      var dot = document.createElement("span");
-      dot.className = "peermap-dot" + (p.unknown ? " is-unknown" : "");
-      var ip = document.createElement("span");
-      ip.className = "ip";
-      ip.textContent = p.ip;
-      var loc = document.createElement("span");
-      loc.className = "loc";
-      loc.textContent = p.unknown ? t("peerMap.unknown") : [p.city, p.country].filter(Boolean).join(", ");
-      item.appendChild(dot);
-      item.appendChild(ip);
-      item.appendChild(loc);
-      list.appendChild(item);
-    });
+  function peerMapOnMouseMove(e) {
+    var canvas = document.getElementById("peerMapCanvas");
+    var tooltip = document.getElementById("peerMapTooltip");
+    if (!canvas || !tooltip) return;
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = canvas.width / rect.width;
+    var scaleY = canvas.height / rect.height;
+    var mx = (e.clientX - rect.left) * scaleX;
+    var my = (e.clientY - rect.top) * scaleY;
+    var hit = null;
+    for (var i = 0; i < peerMapMarkers.length; i++) {
+      var m = peerMapMarkers[i];
+      var dx = mx - m.x, dy = my - m.y;
+      if (dx * dx + dy * dy <= 120) { hit = m; break; }
+    }
+    if (hit) {
+      tooltip.hidden = false;
+      tooltip.textContent = hit.ip + "  ·  " + [hit.city, hit.country].filter(Boolean).join(", ");
+      var tipX = e.clientX - rect.left + 14;
+      var tipY = e.clientY - rect.top - 32;
+      if (tipX + 180 > rect.width) tipX = e.clientX - rect.left - 190;
+      if (tipY < 0) tipY = e.clientY - rect.top + 14;
+      tooltip.style.left = tipX + "px";
+      tooltip.style.top = tipY + "px";
+      canvas.style.cursor = "pointer";
+    } else {
+      tooltip.hidden = true;
+      canvas.style.cursor = "";
+    }
+  }
+
+  function peerMapOnMouseLeave() {
+    var tooltip = document.getElementById("peerMapTooltip");
+    if (tooltip) tooltip.hidden = true;
+    var canvas = document.getElementById("peerMapCanvas");
+    if (canvas) canvas.style.cursor = "";
   }
 
   function peerMapResolve(ips) {
@@ -4418,7 +4441,6 @@
         return { ip: ip, unknown: true };
       });
       peerMapDrawCanvas(points);
-      peerMapRenderList(points);
       var located = points.filter(function (p) { return !p.unknown; }).length;
       setText("peerMapStatus", t("peerMap.status").replace("{n}", String(located)).replace("{total}", String(ips.length)));
     };
@@ -4460,8 +4482,6 @@
     var ips = peerMapGetIps();
     overlay.hidden = false;
     setText("peerMapStatus", t("peerMap.loading"));
-    var list = document.getElementById("peerMapList");
-    if (list) list.innerHTML = "";
     if (!ips.length) {
       peerMapDrawCanvas([]);
       setText("peerMapStatus", t("peerMap.empty"));
@@ -4489,6 +4509,11 @@
     if (overlay) overlay.addEventListener("click", function (e) {
       if (e.target === overlay) closePeerMap();
     });
+    var canvas = document.getElementById("peerMapCanvas");
+    if (canvas) {
+      canvas.addEventListener("mousemove", peerMapOnMouseMove);
+      canvas.addEventListener("mouseleave", peerMapOnMouseLeave);
+    }
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape") closePeerMap();
     });

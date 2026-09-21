@@ -53,9 +53,10 @@ def main():
         return False
 
     W = 360  # lon -180..179
-    H = 171  # lat 85..-85
+    LAT_MAX, LAT_MIN = 85, -60  # Antarctica cropped
+    H = LAT_MAX - LAT_MIN + 1
     bits = []
-    for lat in range(85, -86, -1):
+    for lat in range(LAT_MAX, LAT_MIN - 1, -1):
         row = 0
         for lon in range(-180, 180):
             if on_land(lon + 0.5, lat + 0.5):
@@ -77,12 +78,12 @@ def main():
             "/* Auto-generated dot-grid world map (1-degree resolution).\n"
             " * Source: Natural Earth 110m land (public domain).\n"
             " * Regenerate: python3 tools/gen_world_map.py\n"
-            f" * Layout: {H} rows (lat 85..-85) x {W} cols (lon -180..179),\n"
+            f" * Layout: {H} rows (lat {LAT_MAX}..{LAT_MIN}, Antarctica cropped) x {W} cols (lon -180..179),\n"
             " * one bit per cell, MSB-first, 45 bytes per row, base64-encoded.\n"
-            " * Bit set = land. */\n"
+            " * Bit set = land. Markers must project with the same lat range. */\n"
             "window.WORLD_MAP = {\n"
             f"  rows: {H},\n"
-            f"  cols: {W},\n"
+            f"  cols: {W},\n" f"  latMax: {LAT_MAX},\n" f"  latMin: {LAT_MIN},\n"
             f'  data: "{b64}"\n'
             "};\n"
         )

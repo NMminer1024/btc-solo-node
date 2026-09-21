@@ -2247,6 +2247,7 @@ html[data-theme="light"] .miners-history-grid {
   color: var(--text, #ddd);
 }
 .peermap-canvas-wrap {
+  position: relative;
   width: 100%;
   border-radius: 8px;
   overflow: hidden;
@@ -2257,45 +2258,24 @@ html[data-theme="light"] .miners-history-grid {
   width: 100%;
   height: auto;
 }
+.peermap-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(13, 17, 23, 0.95);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-family: var(--mono, monospace);
+  color: var(--text, #ddd);
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  z-index: 2;
+}
 .peermap-status {
   margin: 10px 0 0;
   font-size: 12px;
   color: var(--text-dim, #888);
   min-height: 16px;
 }
-.peermap-list {
-  margin-top: 12px;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 6px;
-}
-.peermap-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg, #111);
-}
-.peermap-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex: 0 0 auto;
-  background: #f7931a;
-}
-.peermap-dot.is-unknown {
-  background: #666;
-}
-.peermap-item .ip {
-  font-family: var(--mono, monospace);
-  color: var(--text, #ddd);
-}
-.peermap-item .loc {
-  color: var(--text-dim, #888);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+
