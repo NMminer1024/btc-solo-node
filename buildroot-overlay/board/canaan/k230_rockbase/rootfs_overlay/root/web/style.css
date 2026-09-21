@@ -1889,6 +1889,80 @@ html[data-theme="light"] .miners-history-grid {
   background: rgba(248, 81, 73, 0.08);
 }
 
+/* ── Card kebab (three-dot) action menu ─────────────────── */
+
+.surface-head {
+  position: relative;
+}
+
+.kebab-menu {
+  position: relative;
+}
+
+.kebab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.kebab-btn:hover,
+.kebab-menu.is-open .kebab-btn {
+  border-color: var(--accent);
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.kebab-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2, var(--surface));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kebab-item {
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.kebab-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.kebab-item-danger {
+  color: var(--red);
+}
+
+.kebab-item-danger:hover {
+  background: rgba(248, 81, 73, 0.1);
+}
+
 .action-button-danger {
   background: rgba(248, 81, 73, 0.12);
   border-color: rgba(248, 81, 73, 0.4);

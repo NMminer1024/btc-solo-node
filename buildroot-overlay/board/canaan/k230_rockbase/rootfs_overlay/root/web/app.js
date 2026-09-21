@@ -2587,9 +2587,26 @@
     }
   };
 
+  /* Supported language codes. Only "en" and "zh" have translations today;
+   * every other code is selectable but falls back to English strings (the
+   * t() helper does this automatically). Adding a language later only means
+   * adding an I18N[<code>] dictionary — no UI changes needed. */
+  var LANG_CODES = (function () {
+    var sel = document.getElementById("langSelect");
+    if (!sel) return ["en", "zh"];
+    var codes = [];
+    for (var i = 0; i < sel.options.length; i++) codes.push(sel.options[i].value);
+    return codes.length ? codes : ["en", "zh"];
+  })();
+
+  function isKnownLang(code) {
+    return LANG_CODES.indexOf(code) !== -1;
+  }
+
   function getStoredLang() {
     try {
-      return window.localStorage.getItem("nmLang") === "zh" ? "zh" : "en";
+      var stored = window.localStorage.getItem("nmLang");
+      return isKnownLang(stored) ? stored : "en";
     } catch (e) {
       return "en";
     }
@@ -2615,7 +2632,7 @@
   }
 
   function setLang(lang) {
-    currentLang = lang === "zh" ? "zh" : "en";
+    currentLang = isKnownLang(lang) ? lang : "en";
     try {
       window.localStorage.setItem("nmLang", currentLang);
     } catch (e) {}
@@ -2721,6 +2738,52 @@
     if (confirmBtn) confirmBtn.disabled = false;
   }
 
+  /* Card kebab (three-dot) action menus: toggle on click, close on outside
+   * click / Escape. Each .kebab-menu contains a .kebab-btn + .kebab-panel;
+   * items are plain buttons that keep their own handlers (e.g. cleanBlockBtn). */
+  function closeKebabMenus(exceptMenu) {
+    var open = document.querySelectorAll(".kebab-menu.is-open");
+    for (var i = 0; i < open.length; i++) {
+      var menu = open[i];
+      if (exceptMenu && menu === exceptMenu) continue;
+      menu.classList.remove("is-open");
+      var panel = menu.querySelector(".kebab-panel");
+      var btn = menu.querySelector(".kebab-btn");
+      if (panel) panel.hidden = true;
+      if (btn) btn.setAttribute("aria-expanded", "false");
+    }
+  }
+
+  function bindKebabMenus() {
+    var menus = document.querySelectorAll(".kebab-menu");
+    for (var i = 0; i < menus.length; i++) {
+      (function (menu) {
+        var btn = menu.querySelector(".kebab-btn");
+        var panel = menu.querySelector(".kebab-panel");
+        if (!btn || !panel) return;
+        btn.addEventListener("click", function (event) {
+          event.stopPropagation();
+          var wasOpen = menu.classList.contains("is-open");
+          closeKebabMenus(menu);
+          if (!wasOpen) {
+            menu.classList.add("is-open");
+            panel.hidden = false;
+            btn.setAttribute("aria-expanded", "true");
+          }
+        });
+        /* clicking an item closes the menu after its own handler runs */
+        panel.addEventListener("click", function (event) {
+          event.stopPropagation();
+          window.setTimeout(function () { closeKebabMenus(); }, 0);
+        });
+      })(menus[i]);
+    }
+    document.addEventListener("click", function () { closeKebabMenus(); });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") closeKebabMenus();
+    });
+  }
+
   function bindCleanBlockControls() {
     var btn = document.getElementById("cleanBlockBtn");
     if (btn) {
@@ -2763,6 +2826,7 @@
     bindThemeToggle();
     bindLangSelect();
     applyI18n();
+    bindKebabMenus();
     bindCleanBlockControls();
     setTheme(getStoredTheme());
     fetchDashboardData();
