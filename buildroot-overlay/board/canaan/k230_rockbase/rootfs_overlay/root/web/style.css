@@ -2198,6 +2198,12 @@ html[data-theme="light"] .miners-history-grid {
   background-color: rgba(88, 166, 255, 0.24); /* fallback */
   background-color: color-mix(in srgb, var(--accent) 24%, transparent);
 }
+/* The rolling digits are inline-flex boxes, which break the parent's
+   underline into per-character segments. Force them inline here so the
+   underline runs continuously under the whole value. */
+.stack-row > strong.peer-link .roll-char {
+  display: inline;
+}
 
 .peermap-overlay {
   position: fixed;

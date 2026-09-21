@@ -15,10 +15,10 @@ LAT_MAX, LAT_MIN = 85, -60
 # Visual center longitude: 105E puts China in the middle of the map.
 # The world is still fully shown; the map seam (left/right edge) moves to
 # LON_CENTER-180 (i.e. -75, eastern North America).
-# Visual center longitude. 150E puts the map seam at -30 (mid-Atlantic,
-# east of South America's easternmost point at ~-35W) so no landmass is
-# split. China sits left-of-center but stays prominent.
-LON_CENTER = 150
+# Visual center longitude. 170E puts the map seam at -10 (mid-Atlantic,
+# east of Greenland's easternmost point at ~-12W and clear of all land).
+# China sits left-of-center but stays prominent.
+LON_CENTER = 170
 
 
 def norm_lon(lon):
