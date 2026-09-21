@@ -2681,6 +2681,7 @@
       "peerMap.status": "{n} of {total} peers located",
       "peerMap.empty": "No peers connected.",
       "peerMap.unknown": "Unknown location",
+      "peerMap.self": "This node",
       /* ota */
       "ota.available": "Firmware Update Available",
       "ota.note": "The update is downloaded, verified and written to the standby system slot. Syncing and mining pause during the upgrade. When writing finishes the node reboots automatically. Do not power off.",
@@ -2860,6 +2861,7 @@
       "peerMap.status": "已定位 {n}/{total} 个节点",
       "peerMap.empty": "当前没有已连接的节点。",
       "peerMap.unknown": "位置未知",
+      "peerMap.self": "本节点",
       /* ota */
       "ota.available": "有可用固件更新",
       "ota.note": "更新包将被下载、校验并写入备用系统槽位。升级期间同步和挖矿会暂停。写入完成后节点会自动重启。请勿断电。",
@@ -3030,6 +3032,7 @@
       "peerMap.status": "{n} de {total} pares localizados",
       "peerMap.empty": "No hay pares conectados.",
       "peerMap.unknown": "Ubicación desconocida",
+      "peerMap.self": "Este nodo",
       "ota.available": "Actualización de firmware disponible",
       "ota.note": "La actualización se descarga, se verifica y se escribe en la ranura de sistema en espera. La sincronización y el minado se pausan durante la actualización. Al terminar, el nodo se reinicia automáticamente. No apagues el equipo.",
       "ota.remindTomorrow": "Recordármelo mañana",
@@ -3196,6 +3199,7 @@
       "peerMap.status": "{n} pairs localisés sur {total}",
       "peerMap.empty": "Aucun pair connecté.",
       "peerMap.unknown": "Emplacement inconnu",
+      "peerMap.self": "Ce nœud",
       "ota.available": "Mise à jour du firmware disponible",
       "ota.note": "La mise à jour est téléchargée, vérifiée et écrite dans la baie système en attente. La synchronisation et le minage sont en pause pendant la mise à jour. À la fin, le nœud redémarre automatiquement. Ne coupez pas le courant.",
       "ota.remindTomorrow": "Me le rappeler demain",
@@ -3362,6 +3366,7 @@
       "peerMap.status": "{n} von {total} Peers lokalisiert",
       "peerMap.empty": "Keine verbundenen Peers.",
       "peerMap.unknown": "Unbekannter Standort",
+      "peerMap.self": "Dieser Knoten",
       "ota.available": "Firmware-Update verfügbar",
       "ota.note": "Das Update wird heruntergeladen, geprüft und in den Standby-Systemslot geschrieben. Synchronisation und Mining werden während des Updates pausiert. Nach Abschluss startet der Knoten automatisch neu. Nicht ausschalten.",
       "ota.remindTomorrow": "Morgen daran erinnern",
@@ -3528,6 +3533,7 @@
       "peerMap.status": "{n} de {total} pares localizados",
       "peerMap.empty": "Nenhum par conectado.",
       "peerMap.unknown": "Localização desconhecida",
+      "peerMap.self": "Este nó",
       "ota.available": "Atualização de firmware disponível",
       "ota.note": "A atualização é baixada, verificada e gravada no slot de sistema em espera. A sincronização e a mineração ficam em pausa durante a atualização. Ao terminar, o nó reinicia automaticamente. Não desligue.",
       "ota.remindTomorrow": "Lembrar-me amanhã",
@@ -3694,6 +3700,7 @@
       "peerMap.status": "Определено местоположение {n} из {total} узлов",
       "peerMap.empty": "Нет подключённых узлов.",
       "peerMap.unknown": "Неизвестное местоположение",
+      "peerMap.self": "Этот узел",
       "ota.available": "Доступно обновление прошивки",
       "ota.note": "Обновление скачивается, проверяется и записывается в резервный системный слот. Синхронизация и майнинг приостанавливаются во время обновления. После записи узел автоматически перезагрузится. Не отключайте питание.",
       "ota.remindTomorrow": "Напомнить завтра",
@@ -3860,6 +3867,7 @@
       "peerMap.status": "ピア {total} 件中 {n} 件の位置を特定",
       "peerMap.empty": "接続中のピアがありません。",
       "peerMap.unknown": "位置不明",
+      "peerMap.self": "このノード",
       "ota.available": "ファームウェア更新があります",
       "ota.note": "更新はダウンロードされ、検証されて、スタンバイのシステムスロットに書き込まれます。アップグレード中は同期とマイニングが一時停止されます。書き込みが完了するとノードは自動的に再起動します。電源を切らないでください。",
       "ota.remindTomorrow": "明日リマインド",
@@ -4026,6 +4034,7 @@
       "peerMap.status": "피어 {total}개 중 {n}개 위치 확인",
       "peerMap.empty": "연결된 피어가 없습니다.",
       "peerMap.unknown": "위치 미상",
+      "peerMap.self": "이 노드",
       "ota.available": "펌웨어 업데이트가 있습니다",
       "ota.note": "업데이트는 다운로드되고 검증된 뒤 대기 시스템 슬롯에 기록됩니다. 업그레이드 동안 동기화 및 채굴이 일시 중지됩니다. 기록이 끝나면 노드가 자동으로 재부팅됩니다. 전원을 끄지 마세요.",
       "ota.remindTomorrow": "내일 알림",
@@ -4192,6 +4201,7 @@
       "peerMap.status": "تم تحديد موقع {n} من أصل {total} أقران",
       "peerMap.empty": "لا يوجد أقران متصلون.",
       "peerMap.unknown": "موقع غير معروف",
+      "peerMap.self": "هذا العقد",
       "ota.available": "تحديث البرنامج الثابت متاح",
       "ota.note": "يتم تنزيل التحديث وتحققه وكتابته في فتحة النظام الاحتياطية. يتوقف المزامنة والتعدين أثناء الترقية. عند انتهاء الكتابة تعاد تشغيل العقدة تلقائيًا. لا تقطع الطاقة.",
       "ota.remindTomorrow": "ذكّرني غدًا",
@@ -4387,6 +4397,31 @@
       ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
       ctx.stroke();
     });
+
+    // this node's own location: solid green star
+    var api = lastDashboardApi;
+    var selfGeo = api && api.bitcoin && api.bitcoin.self_geo;
+    if (selfGeo && selfGeo.lat != null && selfGeo.lon != null) {
+      var sp = peerMapProject(selfGeo.lat, selfGeo.lon, w, h);
+      peerMapMarkers.push({ x: sp.x, y: sp.y, ip: "", city: selfGeo.city, country: selfGeo.country, self: true });
+      peerMapDrawStar(ctx, sp.x, sp.y, 9, "#3fb950", "rgba(255, 255, 255, 0.9)");
+    }
+  }
+
+  function peerMapDrawStar(ctx, cx, cy, r, fill, stroke) {
+    ctx.beginPath();
+    for (var i = 0; i < 10; i++) {
+      var rad = (i % 2 === 0) ? r : r * 0.45;
+      var a = -Math.PI / 2 + (i * Math.PI) / 5;
+      var x = cx + rad * Math.cos(a), y = cy + rad * Math.sin(a);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = stroke;
+    ctx.stroke();
   }
 
   function peerMapOnMouseMove(e) {
@@ -4406,7 +4441,8 @@
     }
     if (hit) {
       tooltip.hidden = false;
-      tooltip.textContent = hit.ip + "  ·  " + [hit.city, hit.country].filter(Boolean).join(", ");
+      var loc = [hit.city, hit.country].filter(Boolean).join(", ");
+      tooltip.textContent = hit.self ? (loc || t("peerMap.self")) : (hit.ip + "  ·  " + loc);
       var tipX = e.clientX - rect.left + 14;
       var tipY = e.clientY - rect.top - 32;
       if (tipX + 180 > rect.width) tipX = e.clientX - rect.left - 190;

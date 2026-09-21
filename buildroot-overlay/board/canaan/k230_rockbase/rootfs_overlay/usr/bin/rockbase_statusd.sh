@@ -25,6 +25,7 @@ BITCOIN_CONN_INTERVAL=45
 BITCOIN_LOG_INTERVAL=20
 STRATUM_INTERVAL=30
 NETWORK_INTERVAL=20
+SELF_GEO_INTERVAL=21600
 
 SYSTEM_STATE=${STATE_DIR}/system.state
 BITCOIN_CHAIN_STATE=${STATE_DIR}/bitcoin-chain.state
@@ -32,6 +33,7 @@ BITCOIN_CONN_STATE=${STATE_DIR}/bitcoin-conn.state
 BITCOIN_LOG_STATE=${STATE_DIR}/bitcoin-log.state
 STRATUM_STATE=${STATE_DIR}/stratum.state
 NETWORK_STATE=${STATE_DIR}/network.state
+SELF_GEO_STATE=${STATE_DIR}/self-geo.state
 
 btc_cli() {
     bitcoin-cli -rpcclienttimeout="${BTC_RPC_TIMEOUT}" -conf="${CONF}" -datadir="${DATADIR}" "$@" 2>/dev/null
@@ -642,6 +644,36 @@ collect_bitcoin_conn() {
     } | write_state_file "${BITCOIN_CONN_STATE}"
 }
 
+# Board's own public location for the frontend peer-map (green star).
+# Cached for 6h; a single ip-api.com lookup per refresh window.
+collect_self_geo() {
+    ensure_state_dir
+
+    local now_ts age=0
+    now_ts=$(now_epoch)
+    if [ -r "${SELF_GEO_STATE}" ]; then
+        age=$((now_ts - $(grep -oE 'updated_at=[0-9]+' "${SELF_GEO_STATE}" | head -1 | cut -d= -f2)))
+        [ "${age}" -lt "${SELF_GEO_INTERVAL}" ] && return 0
+    fi
+
+    local resp lat lon city country
+    resp=$(curl -s -m 8 "http://ip-api.com/json/?fields=status,lat,lon,city,country" 2>/dev/null)
+    [ -n "${resp}" ] || return 0
+    lat=$(printf '%s' "${resp}" | sed -nE 's/.*"lat":(-?[0-9]+(\.[0-9]+)?).*/\1/p')
+    lon=$(printf '%s' "${resp}" | sed -nE 's/.*"lon":(-?[0-9]+(\.[0-9]+)?).*/\1/p')
+    city=$(printf '%s' "${resp}" | sed -nE 's/.*"city":"([^"]*)".*/\1/p')
+    country=$(printf '%s' "${resp}" | sed -nE 's/.*"country":"([^"]*)".*/\1/p')
+    [ -n "${lat}" ] && [ -n "${lon}" ] || return 0
+
+    {
+        state_num updated_at "${now_ts}"
+        state_str self_lat "${lat}"
+        state_str self_lon "${lon}"
+        state_str self_city "${city}"
+        state_str self_country "${country}"
+    } | write_state_file "${SELF_GEO_STATE}"
+}
+
 collect_bitcoin_log() {
     ensure_state_dir
 
@@ -776,6 +808,7 @@ render_status_json() {
     version="-"
     connections="-"
     peers_json="[]"
+    self_geo_json="null"
     best_block_date="-"
     log_blocks=""
     log_progress=""
@@ -816,6 +849,13 @@ render_status_json() {
     load_state_file "${BITCOIN_LOG_STATE}"
     load_state_file "${STRATUM_STATE}"
     load_state_file "${NETWORK_STATE}"
+    load_state_file "${SELF_GEO_STATE}"
+
+    if [ -n "${self_lat}" ] && [ -n "${self_lon}" ]; then
+        self_geo_json=$(printf '{"lat":%s,"lon":%s,"city":%s,"country":%s}' \
+            "${self_lat}" "${self_lon}" \
+            "$(json_str "${self_city:-}")" "$(json_str "${self_country:-}")")
+    fi
 
     net_rx_display=$(compact_rate "${net_rx_bps}")
     net_tx_display=$(compact_rate "${net_tx_bps}")
@@ -1140,6 +1180,7 @@ render_status_json() {
     printf '    "btc_context": %s,\n' "$(json_str "${btc_context}")"
     printf '    "connections": %s,\n' "$(json_str "${connections}")"
     printf '    "peers": %s,\n' "${peers_json}"
+    printf '    "self_geo": %s,\n' "${self_geo_json}"
     printf '    "difficulty_display": %s,\n' "$(json_str "${difficulty_display}")"
     printf '    "mempool_txs": %s,\n' "$(json_str "${mempool_txs}")"
     printf '    "version": %s,\n' "$(json_str "${version}")"
@@ -1227,6 +1268,8 @@ refresh_initial() {
     sleep 1
     collect_bitcoin_chain >/dev/null 2>&1 || true
     render_final_cache >/dev/null 2>&1 || true
+    collect_self_geo >/dev/null 2>&1 || true
+    render_final_cache >/dev/null 2>&1 || true
 }
 
 daemon_loop() {
@@ -1254,6 +1297,7 @@ daemon_loop() {
     next_stratum=$((now + 20 + ($$ % 5)))
     next_bitcoin_conn=$((now + 30 + ($$ % 7)))
     next_bitcoin_chain=$((now + 45 + ($$ % 11)))
+    next_self_geo=$((now + 60 + ($$ % 13)))
 
     while :; do
         now=$(now_epoch)
@@ -1300,6 +1344,13 @@ daemon_loop() {
                 next_bitcoin_chain=$((now + BITCOIN_CHAIN_RETRY_INTERVAL))
             fi
             render_final_cache >/dev/null 2>&1 || true
+            sleep 1
+            continue
+        fi
+        if [ "${now}" -ge "${next_self_geo}" ]; then
+            collect_self_geo >/dev/null 2>&1 || true
+            render_final_cache >/dev/null 2>&1 || true
+            next_self_geo=$((now + SELF_GEO_INTERVAL))
             sleep 1
             continue
         fi
