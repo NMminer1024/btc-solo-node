@@ -617,7 +617,8 @@ collect_bitcoin_conn() {
     [ -n "${connections}" ] || connections=0
 
     # Peer IP list (IPv4 only) for the frontend peer-map. The board only
-    # reports IPs; geolocation is resolved by the browser (ip-api.com).
+    # reports IPs; geolocation is resolved on the board via the local
+    # GeoLite2-City.mmdb (/api/geoip.cgi).
     peers_json="[]"
     if pidof bitcoind >/dev/null 2>&1; then
         peers_csv=$(btc_conn_cli getpeerinfo 2>/dev/null \
