@@ -4348,6 +4348,9 @@
   var peerMapMarkers = []; // {x, y, ip, city, country} in canvas coords
   var peerMapLandPath = null; // cached Path2D (land + borders)
   var peerMapGratPath = null; // cached Path2D (graticule)
+  var peerMapPoints = []; // last resolved points (for animated redraws)
+  var peerMapInbound = {}; // ip -> true if the connection is inbound
+  var peerMapAnimId = null; // requestAnimationFrame handle
 
   function peerMapProject(lat, lon, w, h) {
     // equirectangular using the map's actual lat range (85..-60)
@@ -4359,7 +4362,9 @@
     return { x: x, y: y };
   }
 
-  function peerMapDrawCanvas(points) {
+  /* One animation frame: static map + flowing arcs + markers + self star.
+   * t is elapsed seconds, used to scroll the dash pattern along the arcs. */
+  function peerMapDrawFrame(points, t) {
     var canvas = document.getElementById("peerMapCanvas");
     if (!canvas) return;
     var ctx = canvas.getContext("2d");
@@ -4384,14 +4389,40 @@
       ctx.stroke(peerMapLandPath);
     }
 
+    // this node's own location (computed first: flow arcs originate here)
+    var api = lastDashboardApi;
+    var selfGeo = api && api.bitcoin && api.bitcoin.self_geo;
+    var selfPos = null;
+    if (selfGeo && selfGeo.lat != null && selfGeo.lon != null) {
+      selfPos = peerMapProject(selfGeo.lat, selfGeo.lon, w, h);
+    }
+
     // peer markers (store positions for hover hit-testing)
     peerMapMarkers = [];
     points.forEach(function (p) {
       if (p.unknown) return;
       var pos = peerMapProject(p.lat, p.lon, w, h);
       peerMapMarkers.push({ x: pos.x, y: pos.y, ip: p.ip, city: p.city, country: p.country });
+    });
+
+    // data-flow arcs (flight-map style): quadratic curves between the self
+    // star and each peer, with an animated dash pattern expressing the
+    // direction of the connection. outbound: self -> peer (orange);
+    // inbound: peer -> self (blue).
+    if (selfPos) {
+      peerMapMarkers.forEach(function (m) {
+        if (!m.ip) return;
+        var inbound = !!peerMapInbound[m.ip];
+        var x1 = selfPos.x, y1 = selfPos.y, x2 = m.x, y2 = m.y;
+        if (inbound) { var tx = x1, ty = y1; x1 = x2; y1 = y2; x2 = tx; y2 = ty; }
+        peerMapDrawArc(ctx, x1, y1, x2, y2, t, inbound ? "#58a6ff" : "#f7931a");
+      });
+    }
+
+    // peer dots on top of the arcs
+    peerMapMarkers.forEach(function (m) {
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
+      ctx.arc(m.x, m.y, 6, 0, Math.PI * 2);
       ctx.fillStyle = "#f7931a";
       ctx.fill();
       ctx.lineWidth = 1.5;
@@ -4400,12 +4431,73 @@
     });
 
     // this node's own location: solid green star
+    if (selfPos) {
+      peerMapMarkers.push({ x: selfPos.x, y: selfPos.y, ip: "", city: selfGeo.city, country: selfGeo.country, self: true });
+      peerMapDrawStar(ctx, selfPos.x, selfPos.y, 9, "#3fb950", "rgba(255, 255, 255, 0.9)");
+    }
+  }
+
+  /* Flight-map style arc: quadratic bezier bulging upward, dashed with a
+   * scrolling dash offset so the flow visibly travels from (x1,y1) to
+   * (x2,y2). A small arrowhead marks the destination end. */
+  function peerMapDrawArc(ctx, x1, y1, x2, y2, t, color) {
+    var dx = x2 - x1, dy = y2 - y1;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 30) return; // endpoints nearly overlap: arc would be noise
+    var mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    var nx = -dy / dist, ny = dx / dist;
+    if (ny > 0) { nx = -nx; ny = -ny; } // prefer the upward-bulging side
+    var cx = mx + nx * dist * 0.18, cy = my + ny * dist * 0.18;
+
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.quadraticCurveTo(cx, cy, x2, y2);
+    ctx.setLineDash([5, 9]);
+    ctx.lineDashOffset = -t * 28; // scrolls dashes toward (x2, y2)
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.4;
+    ctx.globalAlpha = 0.9;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+
+    // arrowhead at the destination, tangent = control point -> end
+    var ang = Math.atan2(y2 - cy, x2 - cx);
+    var s = 7;
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - s * Math.cos(ang - 0.42), y2 - s * Math.sin(ang - 0.42));
+    ctx.lineTo(x2 - s * Math.cos(ang + 0.42), y2 - s * Math.sin(ang + 0.42));
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  function peerMapDrawCanvas(points) {
+    peerMapPoints = points;
     var api = lastDashboardApi;
-    var selfGeo = api && api.bitcoin && api.bitcoin.self_geo;
-    if (selfGeo && selfGeo.lat != null && selfGeo.lon != null) {
-      var sp = peerMapProject(selfGeo.lat, selfGeo.lon, w, h);
-      peerMapMarkers.push({ x: sp.x, y: sp.y, ip: "", city: selfGeo.city, country: selfGeo.country, self: true });
-      peerMapDrawStar(ctx, sp.x, sp.y, 9, "#3fb950", "rgba(255, 255, 255, 0.9)");
+    var detail = api && api.bitcoin && Array.isArray(api.bitcoin.peers_detail) ? api.bitcoin.peers_detail : [];
+    peerMapInbound = {};
+    detail.forEach(function (d) {
+      if (d && typeof d.ip === "string" && d.inbound) peerMapInbound[d.ip] = true;
+    });
+    peerMapDrawFrame(points, 0);
+  }
+
+  function peerMapStartAnim() {
+    if (peerMapAnimId != null) return;
+    var start = performance.now();
+    var frame = function (now) {
+      peerMapDrawFrame(peerMapPoints, (now - start) / 1000);
+      peerMapAnimId = requestAnimationFrame(frame);
+    };
+    peerMapAnimId = requestAnimationFrame(frame);
+  }
+
+  function peerMapStopAnim() {
+    if (peerMapAnimId != null) {
+      cancelAnimationFrame(peerMapAnimId);
+      peerMapAnimId = null;
     }
   }
 
@@ -4519,9 +4611,11 @@
       return;
     }
     peerMapResolve(ips);
+    peerMapStartAnim();
   }
 
   function closePeerMap() {
+    peerMapStopAnim();
     var overlay = document.getElementById("peerMapOverlay");
     if (overlay) overlay.hidden = true;
   }

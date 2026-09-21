@@ -618,10 +618,14 @@ collect_bitcoin_conn() {
 
     # Peer IP list (IPv4 only) for the frontend peer-map. The board only
     # reports IPs; geolocation is resolved on the board via the local
-    # GeoLite2-City.mmdb (/api/geoip.cgi).
+    # GeoLite2-City.mmdb (/api/geoip.cgi). peers_detail additionally carries
+    # the inbound flag per peer so the map can draw flow arcs in the right
+    # direction (outbound: us -> peer, inbound: peer -> us).
     peers_json="[]"
+    peers_detail_json="[]"
     if pidof bitcoind >/dev/null 2>&1; then
-        peers_csv=$(btc_conn_cli getpeerinfo 2>/dev/null \
+        peerinfo=$(btc_conn_cli getpeerinfo 2>/dev/null)
+        peers_csv=$(printf '%s\n' "${peerinfo}" \
             | grep -E '^[[:space:]]*"addr":' \
             | sed -E 's/^[[:space:]]*"addr":[[:space:]]*"([^"]*)".*/\1/' \
             | awk -F: '{print $1}' \
@@ -636,12 +640,40 @@ collect_bitcoin_conn() {
             done
             peers_json="${peers_json}]"
         fi
+        # Pair each "addr" with the "inbound" flag of the same peer object.
+        peers_detail_csv=$(printf '%s\n' "${peerinfo}" | awk '
+            /"addr":/ {
+                if (match($0, /"addr": *"[^"]*"/)) {
+                    s = substr($0, RSTART, RLENGTH)
+                    sub(/^"addr": *"/, "", s); sub(/"$/, "", s)
+                    ip = s; sub(/:.*/, "", ip)
+                }
+                next
+            }
+            /"inbound":/ && ip != "" {
+                ib = ($0 ~ /"inbound": *true/) ? 1 : 0
+                printf "%s|%d\n", ip, ib
+                ip = ""
+            }
+        ' | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}\|[01]$' | sort -u)
+        if [ -n "${peers_detail_csv}" ]; then
+            peers_detail_json="["
+            first=1
+            for entry in ${peers_detail_csv}; do
+                dip=${entry%|*}
+                dib=${entry#*|}
+                if [ "${first}" -eq 1 ]; then first=0; else peers_detail_json="${peers_detail_json},"; fi
+                peers_detail_json="${peers_detail_json}{\"ip\":\"${dip}\",\"inbound\":${dib}}"
+            done
+            peers_detail_json="${peers_detail_json}]"
+        fi
     fi
 
     {
         state_num updated_at "$(now_epoch)"
         state_str connections "${connections}"
         state_str peers_json "${peers_json}"
+        state_str peers_detail_json "${peers_detail_json}"
     } | write_state_file "${BITCOIN_CONN_STATE}"
 }
 
@@ -818,6 +850,7 @@ render_status_json() {
     version="-"
     connections="-"
     peers_json="[]"
+    peers_detail_json="[]"
     self_geo_json="null"
     best_block_date="-"
     log_blocks=""
@@ -1190,6 +1223,7 @@ render_status_json() {
     printf '    "btc_context": %s,\n' "$(json_str "${btc_context}")"
     printf '    "connections": %s,\n' "$(json_str "${connections}")"
     printf '    "peers": %s,\n' "${peers_json}"
+    printf '    "peers_detail": %s,\n' "${peers_detail_json}"
     printf '    "self_geo": %s,\n' "${self_geo_json}"
     printf '    "difficulty_display": %s,\n' "$(json_str "${difficulty_display}")"
     printf '    "mempool_txs": %s,\n' "$(json_str "${mempool_txs}")"
