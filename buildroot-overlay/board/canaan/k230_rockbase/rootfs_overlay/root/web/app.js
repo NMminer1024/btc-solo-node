@@ -112,6 +112,7 @@
   };
 
   var hasLoadedDashboardData = false;
+  var lastDashboardApi = null;
   var DASHBOARD_REFRESH_SECONDS = 30;
   var countdownTimer = null;
   var countdownDeadline = 0;
@@ -193,7 +194,7 @@
     setText("logServiceBadge", state.label);
     setText("logPath", state.path);
     setText("logSummary", state.summary);
-    setText("logsPanel", state.text || "[empty]");
+    setText("logsPanel", state.text || t("logs.empty"));
     var panel = document.getElementById("logsPanel");
     if (panel) panel.scrollTop = panel.scrollHeight;
   }
@@ -268,7 +269,7 @@
   function startLogPolling(service) {
     stopLogPolling();
     activeLogService = service;
-    setLogSummary(service, getLogState(service).loaded ? "Polling live updates every 5s" : "Tail 300 lines · live cursor");
+    setLogSummary(service, getLogState(service).loaded ? t("logs.polling") : t("logs.summary"));
     renderLogView(service);
     if (!getLogState(service).loaded) {
       fetchLogData(service, true);
@@ -588,9 +589,12 @@
     var mining = api.mining || {};
     var network = api.network || {};
     var progressPct = toNumber(bitcoin.progress_ring, toNumber(bitcoin.progress_pct, mock.bitcoin.progressPct));
-    var syncLabel = labels.sync[toText(bitcoin.sync_key, "")] || mock.bitcoin.syncBadge;
-    var pruneLabel = labels.prune[toText(bitcoin.prune_key, "")] || mock.bitcoin.pruneBadge;
-    var stratumLabel = labels.stratum[toText(mining.ckpool_state, "")] || mock.stratum.badge;
+    var syncKey = toText(bitcoin.sync_key, "");
+    var pruneKey = toText(bitcoin.prune_key, "");
+    var stratumKey = toText(mining.ckpool_state, "");
+    var syncLabel = t("label.sync." + syncKey) !== "label.sync." + syncKey ? t("label.sync." + syncKey) : (labels.sync[syncKey] || mock.bitcoin.syncBadge);
+    var pruneLabel = t("label.prune." + pruneKey) !== "label.prune." + pruneKey ? t("label.prune." + pruneKey) : (labels.prune[pruneKey] || mock.bitcoin.pruneBadge);
+    var stratumLabel = t("label.stratum." + stratumKey) !== "label.stratum." + stratumKey ? t("label.stratum." + stratumKey) : (labels.stratum[stratumKey] || mock.stratum.badge);
     var chainName = toText(bitcoin.btc_context, "").replace(/^main\b/, "Mainnet");
     var loadAverageFallback = joinParts([
       system.load_avg_1 && "1m " + system.load_avg_1,
@@ -1170,7 +1174,7 @@
     if (!box) return;
     var workerRows = Array.isArray(miner.workers_detail) ? miner.workers_detail : [];
     if (!workerRows.length) {
-      box.innerHTML = '<div class="miners-empty">No workers.</div>';
+      box.innerHTML = '<div class="miners-empty">' + escapeHtml(t("miners.noWorkers")) + '</div>';
       return;
     }
     var sort = getWorkerSortState(miner.address);
@@ -1227,17 +1231,17 @@
     });
     if (!miner) {
       setText("minerDetailAddress", address);
-      setBadgeState("minerDetailBadge", "No Data", "status-soft");
+      setBadgeState("minerDetailBadge", t("miner.noData"), "status-soft");
       return;
     }
     activeMinerData = miner;
     setText("minerDetailAddress", miner.address);
-    setBadgeState("minerDetailBadge", miner.online ? "\u25CF Online" : "\u25CF Offline", miner.online ? "status-ok" : "status-soft");
+    setBadgeState("minerDetailBadge", miner.online ? t("miner.online") : t("miner.offline"), miner.online ? "status-ok" : "status-soft");
     var authorised = Number(miner.authorised) || 0;
-    setText("minerDetailAuthorised", authorised > 0 ? "Authorised " + formatAuthorised(authorised) : "Not authorised");
-    setText("minerDetailLastShare", "Last share " + toText(miner.lastshare_ago, "-"));
+    setText("minerDetailAuthorised", authorised > 0 ? t("miner.authorised") + " " + formatAuthorised(authorised) : t("miner.notAuthorised"));
+    setText("minerDetailLastShare", t("miner.lastShare") + " " + toText(miner.lastshare_ago, "-"));
     var wcount = Number(miner.workers || miner.worker_detail_count) || 0;
-    setText("minerDetailWorkersChip", wcount + " worker" + (wcount === 1 ? "" : "s"));
+    setText("minerDetailWorkersChip", wcount + " " + t(wcount === 1 ? "miner.worker" : "miner.workers"));
     setText("minerDetailHash5m", toText(miner.hashrate5m, "--"));
     setText("minerDetailShares", formatShare(miner.shares));
     setText("minerDetailBestShare", formatShare(miner.bestshare));
@@ -1276,7 +1280,7 @@
     if (!list) return;
 
     if (!miners.length) {
-      list.innerHTML = '<div class="miners-empty">' + escapeHtml(payload.error || "No miners found yet. Connect a miner to the local Stratum endpoint.") + '</div>';
+      list.innerHTML = '<div class="miners-empty">' + escapeHtml(payload.error || t("miners.noMiners")) + '</div>';
       return;
     }
 
@@ -1392,7 +1396,7 @@
   }
 
   function setWifiMessage(text) {
-    setText("wifiMessage", text || "Enter your Wi-Fi SSID and password, then tap Apply. The device will reconnect automatically.");
+    setText("wifiMessage", text || t("settings.wifiNote"));
   }
 
   function setWifiControlsDisabled(disabled) {
@@ -1568,7 +1572,7 @@
     var label = document.getElementById("themeToggleLabel");
     var icon = document.getElementById("themeToggleIcon");
     root.setAttribute("data-theme", nextTheme);
-    if (label) label.textContent = themes[nextTheme].label;
+    if (label) label.textContent = t("theme." + nextTheme);
     if (icon) icon.textContent = themes[nextTheme].icon;
     try {
       window.localStorage.setItem("nmTheme", nextTheme);
@@ -1673,6 +1677,7 @@
       if (!response.ok) throw new Error("HTTP " + response.status);
       return response.json();
     }).then(function (api) {
+      lastDashboardApi = api;
       var viewData = normalizeDashboardData(api);
       renderDashboard(viewData);
       hasLoadedDashboardData = true;
@@ -1912,12 +1917,12 @@
     buildTzList(current);
     setTzButtonLabel(current);
     setBadgeState("tzStatusBadge", current || "--", current ? "status-ok" : "status-soft");
-    setTzMessage((data && data.message) || "Select a timezone and tap Apply. Takes effect immediately.");
+    setTzMessage((data && data.message) || t("settings.tzNote"));
     setTzControlsDisabled(tzState.applying);
   }
 
   function setTzMessage(text) {
-    setText("tzMessage", text || "Select a timezone and tap Apply. Takes effect immediately.");
+    setText("tzMessage", text || t("settings.tzNote"));
   }
 
   function setTzControlsDisabled(disabled) {
@@ -2064,15 +2069,12 @@
   var otaRebootTriggered = false;
   var currentProductVersion = "--";
 
-  var OTA_PHASE_LABELS = {
-    preparing: "Preparing...",
-    downloading: "Downloading firmware",
-    verifying: "Verifying signature & checksum",
-    flashing: "Writing system image",
-    reboot_pending: "Write complete",
-    switching: "Switching to new system, rebooting",
-    failed: "Update failed"
-  };
+  var OTA_PHASE_KEYS = ["preparing", "downloading", "verifying", "flashing", "reboot_pending", "switching", "failed"];
+
+  function otaPhaseLabel(phase) {
+    var key = "ota.phase." + phase;
+    return t(key) === key ? (phase || "") : t(key);
+  }
 
   function otaVersionGt(a, b) {
     var pa = String(a || "").replace(/^v/, "").split("-")[0].split(".");
@@ -2169,7 +2171,7 @@
     otaOfferedVersion = latest;
     setText("otaCurrentVer", currentProductVersion);
     setText("otaLatestVer", latest);
-    setText("otaReleaseDate", released ? "Released " + released : "");
+    setText("otaReleaseDate", released ? t("ota.releasedPrefix") + released : "");
     otaShowView("offer");
   }
 
@@ -2219,9 +2221,9 @@
   function otaShowProgress() {
     if (otaAutoRebootTimer) { window.clearTimeout(otaAutoRebootTimer); otaAutoRebootTimer = null; }
     otaRebootTriggered = false;
-    setText("otaPhaseLabel", OTA_PHASE_LABELS.preparing);
+    setText("otaPhaseLabel", otaPhaseLabel("preparing"));
     setText("otaProgressSpeed", "");
-    setText("otaProgressMsg", "Do not power off the node.");
+    setText("otaProgressMsg", t("ota.doNotPowerOff"));
     otaSetProgress(-1);
     var errActions = document.getElementById("otaErrorActions");
     if (errActions) errActions.hidden = true;
@@ -2231,9 +2233,9 @@
   }
 
   function otaShowRebootPending() {
-    setText("otaPhaseLabel", OTA_PHASE_LABELS.reboot_pending);
+    setText("otaPhaseLabel", otaPhaseLabel("reboot_pending"));
     setText("otaProgressSpeed", "");
-    setText("otaProgressMsg", "The new system is written and verified. Rebooting automatically in a few seconds...");
+    setText("otaProgressMsg", t("ota.rebootAuto"));
     otaSetProgress(100);
     var rebootActions = document.getElementById("otaRebootActions");
     if (rebootActions) rebootActions.hidden = false;
@@ -2248,8 +2250,8 @@
     if (otaAutoRebootTimer) { window.clearTimeout(otaAutoRebootTimer); otaAutoRebootTimer = null; }
     otaRebootTriggered = false;
     stopOtaProgressPolling();
-    setText("otaPhaseLabel", OTA_PHASE_LABELS.failed);
-    setText("otaProgressMsg", message || "See /root/config/ota/ota.log on the node for details.");
+    setText("otaPhaseLabel", otaPhaseLabel("failed"));
+    setText("otaProgressMsg", message || t("ota.errorDefault"));
     otaSetProgress(0);
     var errActions = document.getElementById("otaErrorActions");
     if (errActions) errActions.hidden = false;
@@ -2257,7 +2259,7 @@
 
   function otaRenderState(state) {
     var phase = toText(state && state.phase, "preparing");
-    setText("otaPhaseLabel", OTA_PHASE_LABELS[phase] || phase);
+    setText("otaPhaseLabel", otaPhaseLabel(phase));
     setText("otaProgressSpeed", otaFormatSpeed(state && state.speed_bps));
     var msg = toText(state && state.message, "");
     if (msg && phase !== "failed") setText("otaProgressMsg", msg);
@@ -2329,9 +2331,9 @@
     stopOtaRebootWatch();
     otaStateFailCount = 0;
     otaSetProgress(100);
-    setText("otaPhaseLabel", OTA_PHASE_LABELS.switching);
+    setText("otaPhaseLabel", otaPhaseLabel("switching"));
     setText("otaProgressSpeed", "");
-    setText("otaProgressMsg", "The node is rebooting. This page reloads when it is back.");
+    setText("otaProgressMsg", t("ota.rebootMsg"));
     otaRebootTimer = window.setInterval(function () {
       window.fetch("/api/status.cgi?_ts=" + Date.now(), { cache: "no-store" })
         .then(function (response) {
@@ -2342,8 +2344,8 @@
           stopOtaRebootWatch();
           otaApplying = false;
           otaClearDismiss();
-          setText("otaPhaseLabel", "Update complete");
-          setText("otaProgressMsg", "Reloading...");
+          setText("otaPhaseLabel", t("ota.updateComplete"));
+          setText("otaProgressMsg", t("ota.reloading"));
           window.setTimeout(function () {
             window.location.reload();
           }, 1500);
@@ -2394,8 +2396,8 @@
     if (otaRebootTriggered) return;
     otaRebootTriggered = true;
     if (otaAutoRebootTimer) { window.clearTimeout(otaAutoRebootTimer); otaAutoRebootTimer = null; }
-    setText("otaPhaseLabel", OTA_PHASE_LABELS.switching);
-    setText("otaProgressMsg", "Reboot command sent. The node is restarting, this page reloads when it is back.");
+    setText("otaPhaseLabel", otaPhaseLabel("switching"));
+    setText("otaProgressMsg", t("ota.rebootSent"));
     window.fetch("/api/ota.cgi?action=reboot&_ts=" + Date.now(), {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -2436,8 +2438,8 @@
     var checkBtn = document.getElementById("aboutCheckBtn");
 
     if (checkBtn) checkBtn.disabled = true;
-    if (badge) { badge.textContent = "Checking\u2026"; badge.className = "status-badge status-soft"; }
-    if (note) note.textContent = "Contacting update server\u2026";
+    if (badge) { badge.textContent = t("about.checking"); badge.className = "status-badge status-soft"; }
+    if (note) note.textContent = t("about.contacting");
 
     return window.fetch("/api/ota.cgi?action=manifest&_ts=" + Date.now(), { cache: "no-store" })
       .then(function (response) {
@@ -2446,8 +2448,8 @@
       .then(function (manifest) {
         if (checkBtn) checkBtn.disabled = false;
         if (!manifest || typeof manifest.version !== "string") {
-          if (badge) { badge.textContent = "Unavailable"; badge.className = "status-badge status-danger"; }
-          if (note) note.textContent = "Could not reach the update server. Try again later.";
+          if (badge) { badge.textContent = t("about.unavailable"); badge.className = "status-badge status-danger"; }
+          if (note) note.textContent = t("about.unreachable");
           return;
         }
 
@@ -2457,32 +2459,32 @@
         setText("aboutReleased", manifest.released || "--");
 
         if (!/^v\d+\.\d+\.\d+$/.test(latest) || !/^v\d+\.\d+\.\d+$/.test(current)) {
-          if (badge) { badge.textContent = "Unknown"; badge.className = "status-badge"; }
-          if (note) note.textContent = "Version format unrecognized.";
+          if (badge) { badge.textContent = t("about.unknown"); badge.className = "status-badge"; }
+          if (note) note.textContent = t("about.unknownFormat");
           return;
         }
 
         if (otaVersionGt(latest, current)) {
-          if (badge) { badge.textContent = "Update available"; badge.className = "status-badge status-warm"; }
-          if (note) note.textContent = "A newer firmware version is available. Update recommended.";
+          if (badge) { badge.textContent = t("about.updateAvailable"); badge.className = "status-badge status-warm"; }
+          if (note) note.textContent = t("about.updateAvailableNote");
           if (updateBtn) updateBtn.hidden = false;
           if (forceBtn) forceBtn.hidden = true;
         } else if (otaVersionGt(current, latest)) {
-          if (badge) { badge.textContent = "Up to date"; badge.className = "status-badge status-ok"; }
-          if (note) note.textContent = "You are running a newer version than the latest release.";
+          if (badge) { badge.textContent = t("about.upToDate"); badge.className = "status-badge status-ok"; }
+          if (note) note.textContent = t("about.upToDateNewer");
           if (updateBtn) updateBtn.hidden = true;
           if (forceBtn) forceBtn.hidden = false;
         } else {
-          if (badge) { badge.textContent = "Up to date"; badge.className = "status-badge status-ok"; }
-          if (note) note.textContent = "You are running the latest firmware version.";
+          if (badge) { badge.textContent = t("about.upToDate"); badge.className = "status-badge status-ok"; }
+          if (note) note.textContent = t("about.upToDateLatest");
           if (updateBtn) updateBtn.hidden = true;
           if (forceBtn) forceBtn.hidden = false;
         }
       })
       .catch(function () {
         if (checkBtn) checkBtn.disabled = false;
-        if (badge) { badge.textContent = "Error"; badge.className = "status-badge status-danger"; }
-        if (note) note.textContent = "Failed to check for updates.";
+        if (badge) { badge.textContent = t("about.error"); badge.className = "status-badge status-danger"; }
+        if (note) note.textContent = t("about.checkFailed");
       });
   }
 
@@ -2546,7 +2548,10 @@
     if (otaApplying) return;
     var btn = document.getElementById("otaForceConfirmBtn");
     if (btn) btn.disabled = false;
-    setText("otaForceVer", currentProductVersion || "--");
+    var ver = currentProductVersion || "--";
+    setText("otaForceVer", ver);
+    var note = document.getElementById("otaForceNote");
+    if (note) note.innerHTML = t("ota.forceNote").replace("{ver}", '<span class="mono">' + escapeHtml(ver) + "</span>");
     otaShowView("confirm");
   }
 
@@ -2556,6 +2561,152 @@
    * are translated; everything else stays as authored. */
   var I18N = {
     en: {
+      /* nav / topbar */
+      "nav.dashboard": "Dashboard",
+      "nav.miners": "Miners",
+      "nav.logs": "Logs",
+      "nav.settings": "Settings",
+      "nav.about": "About",
+      "nav.bitcoind": "Bitcoind",
+      "nav.stratum": "Stratum",
+      "topbar.uptime": "Uptime",
+      "footer.copyright": "\u00a9 2026 NMMiner \u00b7 Solo BTC Node on Rockbase",
+      /* dashboard */
+      "dash.loading": "Loading live node data...",
+      "dash.peers": "Peers",
+      "dash.difficulty": "Difficulty",
+      "dash.utxo": "UTXO Set",
+      /* stratum card */
+      "stratum.endpoint": "Endpoint",
+      "stratum.hashrate": "Pool Hashrate 5m",
+      "stratum.bestShare": "Best Share",
+      "stratum.workersMiners": "Workers / Miners",
+      /* system & network */
+      "sys.title": "System & Network",
+      "sys.cpu": "CPU Usage",
+      "sys.blockData": "Block Data",
+      "sys.ram": "RAM",
+      "sys.swap": "Swap",
+      "sys.temp": "Temperature",
+      "sys.soc": "SoC",
+      "sys.rootfs": "Root FS",
+      "sys.ipMac": "IP & MAC",
+      "sys.wifiRssi": "WiFi & RSSI",
+      /* miners page */
+      "miners.summary": "Summary",
+      "miners.miners": "Miners",
+      "miners.workers": "Workers",
+      "miners.totalHash": "Total Hashrate 5m",
+      "miners.bestShareEver": "Best Share Ever",
+      "miners.waiting": "Waiting for ckpool cache...",
+      "miners.hashHistory": "Hashrate History",
+      "miners.noWorkers": "No workers.",
+      "miners.noMiners": "No miners found yet. Connect a miner to the local Stratum endpoint.",
+      /* miner detail */
+      "miner.back": "\u2190 Back to Miners",
+      "miner.hash5m": "Hashrate (5m)",
+      "miner.totalShares": "Total Shares",
+      "miner.bestEver": "Best Ever",
+      "miner.blockOdds": "Block Odds",
+      "miner.1d": "1 Day",
+      "miner.1w": "1 Week",
+      "miner.1m": "1 Month",
+      "miner.1y": "1 Year",
+      "miner.workerHistory": "Worker History",
+      "miner.noData": "No Data",
+      "miner.online": "\u25cf Online",
+      "miner.offline": "\u25cf Offline",
+      "miner.authorised": "Authorised",
+      "miner.notAuthorised": "Not authorised",
+      "miner.lastShare": "Last share",
+      "miner.worker": "worker",
+      "miner.workers": "workers",
+      /* logs */
+      "logs.summary": "Tail 300 lines \u00b7 live cursor",
+      "logs.loading": "Loading logs...",
+      "logs.polling": "Polling live updates every 5s",
+      "logs.empty": "[empty]",
+      /* settings */
+      "settings.network": "Network",
+      "settings.wifi": "Wi-Fi Setup",
+      "settings.ssid": "SSID",
+      "settings.password": "Password",
+      "settings.wifiNote": "Enter your Wi-Fi SSID and password, then tap Apply. The device will reconnect automatically.",
+      "settings.timezone": "Timezone",
+      "settings.tzNote": "Select a timezone and tap Apply. Takes effect immediately.",
+      /* about */
+      "about.subtitle": "Versioning, firmware updates, and support diagnostics.",
+      "about.firmwareUpdate": "Firmware Update",
+      "about.current": "Current",
+      "about.latest": "Latest",
+      "about.released": "Released",
+      "about.checkUpdates": "Check for Updates",
+      "about.updateNow": "Update Now",
+      "about.forceUpdate": "Force Update",
+      "about.firmware": "Firmware",
+      "about.board": "Board",
+      "about.api": "API",
+      "about.system": "System",
+      "about.productVersion": "Product Version",
+      "about.lastUpdated": "Last Updated",
+      "about.checking": "Checking\u2026",
+      "about.contacting": "Contacting update server\u2026",
+      "about.unavailable": "Unavailable",
+      "about.unreachable": "Could not reach the update server. Try again later.",
+      "about.unknown": "Unknown",
+      "about.unknownFormat": "Version format unrecognized.",
+      "about.updateAvailable": "Update available",
+      "about.updateAvailableNote": "A newer firmware version is available. Update recommended.",
+      "about.upToDate": "Up to date",
+      "about.upToDateNewer": "You are running a newer version than the latest release.",
+      "about.upToDateLatest": "You are running the latest firmware version.",
+      "about.error": "Error",
+      "about.checkFailed": "Failed to check for updates.",
+      /* ota */
+      "ota.available": "Firmware Update Available",
+      "ota.note": "The update is downloaded, verified and written to the standby system slot. Syncing and mining pause during the upgrade. When writing finishes the node reboots automatically. Do not power off.",
+      "ota.remindTomorrow": "Remind me tomorrow",
+      "ota.updating": "Updating Firmware",
+      "ota.rebootWait": "Rebooting automatically \u2014 please wait, do not power off.",
+      "ota.doNotPowerOff": "Do not power off the node.",
+      "ota.rebootAuto": "The new system is written and verified. Rebooting automatically in a few seconds...",
+      "ota.rebootMsg": "The node is rebooting. This page reloads when it is back.",
+      "ota.updateComplete": "Update complete",
+      "ota.reloading": "Reloading...",
+      "ota.rebootSent": "Reboot command sent. The node is restarting, this page reloads when it is back.",
+      "ota.errorDefault": "See /root/config/ota/ota.log on the node for details.",
+      "ota.releasedPrefix": "Released ",
+      "ota.forceNote": "You are about to force-install firmware {ver}. This will overwrite the current system slot even if the version is the same or newer. Syncing and mining will pause during the upgrade. Do not power off.",
+      "ota.phase.preparing": "Preparing...",
+      "ota.phase.downloading": "Downloading firmware",
+      "ota.phase.verifying": "Verifying signature & checksum",
+      "ota.phase.flashing": "Writing system image",
+      "ota.phase.reboot_pending": "Write complete",
+      "ota.phase.switching": "Switching to new system, rebooting",
+      "ota.phase.failed": "Update failed",
+      /* status labels */
+      "label.sync.syncing": "IBD Syncing",
+      "label.sync.pre_headers": "Pre-sync blockheaders",
+      "label.sync.sync_headers": "Synchronizing blockheaders",
+      "label.sync.sync_blocks": "Synchronizing blocks",
+      "label.sync.loading_index": "Loading block index",
+      "label.sync.loading_blocks": "Loading block files",
+      "label.sync.verifying_blocks": "Verifying blocks",
+      "label.sync.rewinding_blocks": "Rewinding blocks",
+      "label.sync.pruning": "Pruning blocks",
+      "label.sync.synced": "Synced",
+      "label.sync.btc_not_running": "Not Running",
+      "label.prune.pruned_mode": "Pruned Node",
+      "label.prune.full_mode": "Full Node",
+      "label.stratum.running": "Running",
+      "label.stratum.stopped": "Stopped",
+      "wifi.idle": "Idle",
+      "theme.dark": "Dark",
+      "theme.light": "Light",
+      /* common */
+      "common.loading": "Loading...",
+      "common.apply": "Apply",
+      /* clean block */
       "cleanBlock.btn": "Clean Block Data",
       "cleanBlock.title": "Clean Block Data",
       "cleanBlock.warn": "This will completely delete the block data already synced on this device. After deletion the node re-syncs all blocks from scratch, which is expected to take more than 1 month. Mining pauses during the operation. Do not power off.",
@@ -2571,6 +2722,152 @@
       "cleanBlock.phase.error": "Clean finished with an error. Check the logs."
     },
     zh: {
+      /* nav / topbar */
+      "nav.dashboard": "仪表盘",
+      "nav.miners": "矿机",
+      "nav.logs": "日志",
+      "nav.settings": "设置",
+      "nav.about": "关于",
+      "nav.bitcoind": "Bitcoind",
+      "nav.stratum": "Stratum",
+      "topbar.uptime": "运行时间",
+      "footer.copyright": "\u00a9 2026 NMMiner \u00b7 Rockbase 独立比特币节点",
+      /* dashboard */
+      "dash.loading": "正在加载节点实时数据...",
+      "dash.peers": "对等节点",
+      "dash.difficulty": "难度",
+      "dash.utxo": "UTXO 集合",
+      /* stratum card */
+      "stratum.endpoint": "接入地址",
+      "stratum.hashrate": "池算力 5m",
+      "stratum.bestShare": "最佳 Share",
+      "stratum.workersMiners": "Workers / 矿机",
+      /* system & network */
+      "sys.title": "系统与网络",
+      "sys.cpu": "CPU 占用",
+      "sys.blockData": "区块数据",
+      "sys.ram": "内存",
+      "sys.swap": "交换分区",
+      "sys.temp": "温度",
+      "sys.soc": "SoC",
+      "sys.rootfs": "根文件系统",
+      "sys.ipMac": "IP 与 MAC",
+      "sys.wifiRssi": "WiFi 与信号",
+      /* miners page */
+      "miners.summary": "概览",
+      "miners.miners": "矿机",
+      "miners.workers": "Workers",
+      "miners.totalHash": "总算力 5m",
+      "miners.bestShareEver": "历史最佳 Share",
+      "miners.waiting": "等待 ckpool 缓存...",
+      "miners.hashHistory": "算力历史",
+      "miners.noWorkers": "暂无 worker。",
+      "miners.noMiners": "尚未发现矿机。请将矿机连接到本地 Stratum 接入地址。",
+      /* miner detail */
+      "miner.back": "\u2190 返回矿机列表",
+      "miner.hash5m": "算力 (5m)",
+      "miner.totalShares": "总 Shares",
+      "miner.bestEver": "历史最佳",
+      "miner.blockOdds": "出块概率",
+      "miner.1d": "1 天",
+      "miner.1w": "1 周",
+      "miner.1m": "1 个月",
+      "miner.1y": "1 年",
+      "miner.workerHistory": "Worker 历史",
+      "miner.noData": "无数据",
+      "miner.online": "\u25cf 在线",
+      "miner.offline": "\u25cf 离线",
+      "miner.authorised": "已授权",
+      "miner.notAuthorised": "未授权",
+      "miner.lastShare": "最近 Share",
+      "miner.worker": "个 worker",
+      "miner.workers": "个 worker",
+      /* logs */
+      "logs.summary": "尾部 300 行 · 实时游标",
+      "logs.loading": "正在加载日志...",
+      "logs.polling": "每 5 秒轮询实时更新",
+      "logs.empty": "[空]",
+      /* settings */
+      "settings.network": "网络",
+      "settings.wifi": "Wi-Fi 设置",
+      "settings.ssid": "SSID",
+      "settings.password": "密码",
+      "settings.wifiNote": "输入 Wi-Fi 的 SSID 和密码，然后点击应用。设备将自动重连。",
+      "settings.timezone": "时区",
+      "settings.tzNote": "选择时区后点击应用，立即生效。",
+      /* about */
+      "about.subtitle": "版本管理、固件更新与支持诊断。",
+      "about.firmwareUpdate": "固件更新",
+      "about.current": "当前版本",
+      "about.latest": "最新版本",
+      "about.released": "发布日期",
+      "about.checkUpdates": "检查更新",
+      "about.updateNow": "立即更新",
+      "about.forceUpdate": "强制更新",
+      "about.firmware": "固件",
+      "about.board": "主板",
+      "about.api": "API",
+      "about.system": "系统",
+      "about.productVersion": "产品版本",
+      "about.lastUpdated": "最近更新",
+      "about.checking": "检查中…",
+      "about.contacting": "正在连接更新服务器…",
+      "about.unavailable": "不可用",
+      "about.unreachable": "无法连接更新服务器，请稍后再试。",
+      "about.unknown": "未知",
+      "about.unknownFormat": "无法识别的版本格式。",
+      "about.updateAvailable": "有可用更新",
+      "about.updateAvailableNote": "有更新的固件版本可用，建议更新。",
+      "about.upToDate": "已是最新",
+      "about.upToDateNewer": "你运行的版本比最新发布版更新。",
+      "about.upToDateLatest": "你正在运行最新的固件版本。",
+      "about.error": "错误",
+      "about.checkFailed": "检查更新失败。",
+      /* ota */
+      "ota.available": "有可用固件更新",
+      "ota.note": "更新包将被下载、校验并写入备用系统槽位。升级期间同步和挖矿会暂停。写入完成后节点会自动重启。请勿断电。",
+      "ota.remindTomorrow": "明天提醒我",
+      "ota.updating": "正在更新固件",
+      "ota.rebootWait": "正在自动重启 — 请稍候，请勿断电。",
+      "ota.doNotPowerOff": "请勿给节点断电。",
+      "ota.rebootAuto": "新系统已写入并校验完成，几秒后将自动重启...",
+      "ota.rebootMsg": "节点正在重启，恢复后本页面会自动刷新。",
+      "ota.updateComplete": "更新完成",
+      "ota.reloading": "正在刷新...",
+      "ota.rebootSent": "重启指令已发送，节点正在重启，恢复后本页面会自动刷新。",
+      "ota.errorDefault": "详情请查看节点上的 /root/config/ota/ota.log。",
+      "ota.releasedPrefix": "发布于 ",
+      "ota.forceNote": "你即将强制安装固件 {ver}。即使版本相同或更旧，也会覆盖当前系统槽位。升级期间同步和挖矿会暂停。请勿断电。",
+      "ota.phase.preparing": "准备中...",
+      "ota.phase.downloading": "正在下载固件",
+      "ota.phase.verifying": "正在校验签名与校验和",
+      "ota.phase.flashing": "正在写入系统镜像",
+      "ota.phase.reboot_pending": "写入完成",
+      "ota.phase.switching": "正在切换到新系统并重启",
+      "ota.phase.failed": "更新失败",
+      /* status labels */
+      "label.sync.syncing": "IBD 同步中",
+      "label.sync.pre_headers": "预同步区块头",
+      "label.sync.sync_headers": "正在同步区块头",
+      "label.sync.sync_blocks": "正在同步区块",
+      "label.sync.loading_index": "正在加载区块索引",
+      "label.sync.loading_blocks": "正在加载区块文件",
+      "label.sync.verifying_blocks": "正在校验区块",
+      "label.sync.rewinding_blocks": "正在回滚区块",
+      "label.sync.pruning": "正在剪枝区块",
+      "label.sync.synced": "已同步",
+      "label.sync.btc_not_running": "未运行",
+      "label.prune.pruned_mode": "剪枝节点",
+      "label.prune.full_mode": "完整节点",
+      "label.stratum.running": "运行中",
+      "label.stratum.stopped": "已停止",
+      "wifi.idle": "空闲",
+      "theme.dark": "深色",
+      "theme.light": "浅色",
+      /* common */
+      "common.loading": "加载中...",
+      "common.apply": "应用",
+      /* clean block */
       "cleanBlock.btn": "清理区块数据",
       "cleanBlock.title": "清理区块数据",
       "cleanBlock.warn": "这将完全删除设备上已同步的区块数据。删除后节点将从零重新同步所有区块，预计耗时 1 个月以上。期间挖矿暂停，请勿断电。",
@@ -2628,6 +2925,12 @@
       var val = t(key);
       if (val != null) n.textContent = val;
     });
+    /* theme toggle label is set dynamically (not via data-i18n) */
+    var themeLabel = document.getElementById("themeToggleLabel");
+    if (themeLabel) {
+      var curTheme = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+      themeLabel.textContent = t("theme." + curTheme);
+    }
     document.documentElement.setAttribute("lang", currentLang);
   }
 
@@ -2637,6 +2940,9 @@
       window.localStorage.setItem("nmLang", currentLang);
     } catch (e) {}
     applyI18n();
+    /* re-normalize + re-render dashboard so dynamic status badges (Synced/Running/...)
+     * follow the language — they are computed from raw API data at normalize time */
+    if (lastDashboardApi) renderDashboard(normalizeDashboardData(lastDashboardApi));
     if (cleanBlockActive) updateCleanBlockPhaseLabel();
   }
 

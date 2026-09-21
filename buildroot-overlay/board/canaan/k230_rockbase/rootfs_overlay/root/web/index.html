@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NM Bitcoin Node Monitor</title>
-<link rel="stylesheet" href="/style.css?v=20260921-kebab1">
+<link rel="stylesheet" href="/style.css?v=20260921-i18n3">
 </head>
 <body>
 <div class="site-shell">
@@ -17,11 +17,11 @@
     </div>
 
     <nav class="nav" aria-label="Primary">
-      <button class="nav-item is-active" data-view="dashboard">Dashboard</button>
-      <button class="nav-item" data-view="miners">Miners</button>
-      <button class="nav-item" data-view="logs">Logs</button>
-      <button class="nav-item" data-view="settings">Settings</button>
-      <button class="nav-item" data-view="about">About</button>
+      <button class="nav-item is-active" data-view="dashboard" data-i18n="nav.dashboard">Dashboard</button>
+      <button class="nav-item" data-view="miners" data-i18n="nav.miners">Miners</button>
+      <button class="nav-item" data-view="logs" data-i18n="nav.logs">Logs</button>
+      <button class="nav-item" data-view="settings" data-i18n="nav.settings">Settings</button>
+      <button class="nav-item" data-view="about" data-i18n="nav.about">About</button>
     </nav>
   </aside>
 
@@ -29,7 +29,7 @@
     <header class="topbar">
       <div class="topbar-meta">
         <div class="topbar-uptime" title="System uptime">
-          <span class="topbar-uptime-label">Uptime</span>
+          <span class="topbar-uptime-label" data-i18n="topbar.uptime">Uptime</span>
           <strong id="nodeUptime">--</strong>
         </div>
         <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch theme">
@@ -96,22 +96,22 @@
                 <span class="ibd-blocks-current" id="ibdBlocksCurrent">--</span>
                 <span class="sync-height-sub"><span class="ibd-blocks-divider" id="ibdBlocksDivider">/ </span><span class="ibd-blocks-total" id="ibdBlocksTotal">--</span></span>
               </p>
-              <p class="sync-stage" id="ibdStage">Loading live node data...</p>
-              <p id="ibdMeta">Loading live node data...</p>
+              <p class="sync-stage" id="ibdStage" data-i18n="dash.loading">Loading live node data...</p>
+              <p id="ibdMeta" data-i18n="dash.loading">Loading live node data...</p>
             </div>
           </div>
 
           <div class="stack-list">
             <div class="stack-row">
-              <span>Peers</span>
+              <span data-i18n="dash.peers">Peers</span>
               <strong id="nodeConn">--</strong>
             </div>
             <div class="stack-row">
-              <span>Difficulty</span>
+              <span data-i18n="dash.difficulty">Difficulty</span>
               <strong id="nodeDiff">--</strong>
             </div>
             <div class="stack-row">
-              <span>UTXO Set</span>
+              <span data-i18n="dash.utxo">UTXO Set</span>
               <strong id="nodeUtxoSize">--</strong>
             </div>
           </div>
@@ -139,7 +139,7 @@
 
           <div class="stratum-connect">
             <div class="connect-panel">
-              <span class="summary-label">Endpoint</span>
+              <span class="summary-label" data-i18n="stratum.endpoint">Endpoint</span>
               <button class="copy-btn" id="stratumCopyBtn" type="button" title="Copy endpoint" aria-label="Copy endpoint">
                 <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <rect x="5.5" y="5.5" width="9" height="9" rx="1.5"></rect>
@@ -150,15 +150,15 @@
             </div>
             <div class="stack-list">
               <div class="stack-row">
-                <span>Pool Hashrate 5m</span>
+                <span data-i18n="stratum.hashrate">Pool Hashrate 5m</span>
                 <strong class="stack-green" id="minerHash5m">--</strong>
               </div>
               <div class="stack-row">
-                <span>Best Share</span>
+                <span data-i18n="stratum.bestShare">Best Share</span>
                 <strong class="stack-yellow" id="minerBestShare">--</strong>
               </div>
               <div class="stack-row">
-                <span>Workers / Miners</span>
+                <span data-i18n="stratum.workersMiners">Workers / Miners</span>
                 <strong id="minerWorkers">--</strong>
               </div>
             </div>
@@ -170,7 +170,7 @@
         <article class="surface-card">
           <div class="surface-head">
             <div>
-              <h3>System &amp; Network</h3>
+              <h3 data-i18n="sys.title">System &amp; Network</h3>
             </div>
           </div>
 
@@ -180,7 +180,7 @@
                 <span id="cpuPct">--</span>
               </div>
               <div class="metric-orb-copy">
-                <span>CPU Usage</span>
+                <span data-i18n="sys.cpu">CPU Usage</span>
                 <strong id="cpuLoadValue">--</strong>
                 <small id="cpuLoadAvgValue" class="metric-orb-subtext">Load avg 1m -- · 5m --</small>
               </div>
@@ -190,7 +190,7 @@
                 <span id="diskPct">--</span>
               </div>
               <div class="metric-orb-copy">
-                <span>Block Data</span>
+                <span data-i18n="sys.blockData">Block Data</span>
                 <strong id="diskValue">--</strong>
               </div>
             </div>
@@ -199,7 +199,7 @@
                 <span id="memPct">--</span>
               </div>
               <div class="metric-orb-copy">
-                <span>RAM</span>
+                <span data-i18n="sys.ram">RAM</span>
                 <strong id="memValue">--</strong>
               </div>
             </div>
@@ -208,7 +208,7 @@
                 <span id="swapPct">--</span>
               </div>
               <div class="metric-orb-copy">
-                <span>Swap</span>
+                <span data-i18n="sys.swap">Swap</span>
                 <strong id="swapValue">--</strong>
               </div>
             </div>
@@ -217,7 +217,7 @@
                 <span id="tempPct">--</span>
               </div>
               <div class="metric-orb-copy">
-                <span>Temperature</span>
+                <span data-i18n="sys.temp">Temperature</span>
                 <strong id="sysTemp">--</strong>
               </div>
             </div>
@@ -226,21 +226,21 @@
           <div class="stack-cols">
             <div class="stack-list">
               <div class="stack-row">
-                <span>SoC</span>
+                <span data-i18n="sys.soc">SoC</span>
                 <strong id="sysCpu">Canaan K230 &middot; RISC-V</strong>
               </div>
               <div class="stack-row">
-                <span>Root FS</span>
+                <span data-i18n="sys.rootfs">Root FS</span>
                 <strong id="sysBlock">2.1G / 5.8G</strong>
               </div>
             </div>
             <div class="stack-list">
               <div class="stack-row">
-                <span>IP &amp; MAC</span>
+                <span data-i18n="sys.ipMac">IP &amp; MAC</span>
                 <strong class="mono"><span id="netIp">192.168.124.15</span> &middot; <span id="netMac">00:11:22:33:44:55</span></strong>
               </div>
               <div class="stack-row">
-                <span>WiFi &amp; RSSI</span>
+                <span data-i18n="sys.wifiRssi">WiFi &amp; RSSI</span>
                 <strong>
                   <span id="netSsid">Rockbase-Lab</span>
                   <span class="rssi-signal" title="WiFi RSSI">
@@ -260,7 +260,7 @@
       </section>
 
       <footer class="dashboard-footer">
-        <span class="footer-copyright">&copy; 2026 NMMiner &middot; Solo BTC Node on Rockbase</span>
+        <span class="footer-copyright" data-i18n="footer.copyright">&copy; 2026 NMMiner &middot; Solo BTC Node on Rockbase</span>
         <span class="footer-version mono" id="dashVersion">--</span>
       </footer>
     </section>
@@ -270,26 +270,26 @@
         <article class="surface-card surface-card-primary miners-node-summary">
           <div class="surface-head">
             <div>
-              <h3>Summary</h3>
+              <h3 data-i18n="miners.summary">Summary</h3>
             </div>
           </div>
           <div class="miners-kpi-grid">
-            <div class="miners-kpi"><span>Miners</span><strong id="minerUsers">--</strong></div>
-            <div class="miners-kpi"><span>Workers</span><strong id="summaryWorkers">--</strong></div>
-            <div class="miners-kpi"><span>Total Hashrate 5m</span><strong id="summaryHash5m">--</strong></div>
-            <div class="miners-kpi"><span>Best Share Ever</span><strong id="summaryBestShare">--</strong></div>
+            <div class="miners-kpi"><span data-i18n="miners.miners">Miners</span><strong id="minerUsers">--</strong></div>
+            <div class="miners-kpi"><span data-i18n="miners.workers">Workers</span><strong id="summaryWorkers">--</strong></div>
+            <div class="miners-kpi"><span data-i18n="miners.totalHash">Total Hashrate 5m</span><strong id="summaryHash5m">--</strong></div>
+            <div class="miners-kpi"><span data-i18n="miners.bestShareEver">Best Share Ever</span><strong id="summaryBestShare">--</strong></div>
           </div>
-          <p class="miners-cache-note" id="minersUpdated">Waiting for ckpool cache...</p>
+          <p class="miners-cache-note" id="minersUpdated" data-i18n="miners.waiting">Waiting for ckpool cache...</p>
         </article>
 
         <article class="surface-card miners-history-card">
           <div class="surface-head">
             <div>
-              <h3>Hashrate History</h3>
+              <h3 data-i18n="miners.hashHistory">Hashrate History</h3>
             </div>
           </div>
           <div class="miners-history-plot" id="minerHistoryChart">
-            <div class="miners-empty">Loading...</div>
+            <div class="miners-empty" data-i18n="common.loading">Loading...</div>
           </div>
           <div class="miners-history-legend" id="minerHistoryLegend"></div>
         </article>
@@ -299,19 +299,19 @@
         <article class="surface-card surface-card-large">
           <div class="surface-head">
             <div>
-              <h3>Miners</h3>
+              <h3 data-i18n="miners.miners">Miners</h3>
             </div>
             <span class="summary-label" id="minersSource">/root/config/ckpool/logs/users</span>
           </div>
           <div class="miners-list" id="minersList">
-            <div class="miners-empty">Loading...</div>
+            <div class="miners-empty" data-i18n="common.loading">Loading...</div>
           </div>
         </article>
       </section>
     </section>
 
     <section class="panel-view" data-view-panel="miner">
-      <button class="miner-back" id="minerDetailBack" type="button">&larr; Back to Miners</button>
+      <button class="miner-back" id="minerDetailBack" type="button" data-i18n="miner.back">&larr; Back to Miners</button>
 
       <article class="surface-card miner-hero">
         <div class="miner-hero-title">
@@ -324,11 +324,11 @@
           <span class="meta-chip" id="minerDetailWorkersChip">--</span>
         </div>
         <div class="miner-detail-kpis">
-          <div class="stat-card"><span class="stat-label">Hashrate (5m)</span><strong class="stat-value accent" id="minerDetailHash5m">--</strong></div>
-          <div class="stat-card"><span class="stat-label">Total Shares</span><strong class="stat-value" id="minerDetailShares">--</strong></div>
-          <div class="stat-card"><span class="stat-label">Best Share</span><strong class="stat-value yellow" id="minerDetailBestShare">--</strong></div>
-          <div class="stat-card"><span class="stat-label">Best Ever</span><strong class="stat-value yellow" id="minerDetailBestEver">--</strong></div>
-          <div class="stat-card"><span class="stat-label">Workers</span><strong class="stat-value" id="minerDetailWorkers">--</strong></div>
+          <div class="stat-card"><span class="stat-label" data-i18n="miner.hash5m">Hashrate (5m)</span><strong class="stat-value accent" id="minerDetailHash5m">--</strong></div>
+          <div class="stat-card"><span class="stat-label" data-i18n="miner.totalShares">Total Shares</span><strong class="stat-value" id="minerDetailShares">--</strong></div>
+          <div class="stat-card"><span class="stat-label" data-i18n="stratum.bestShare">Best Share</span><strong class="stat-value yellow" id="minerDetailBestShare">--</strong></div>
+          <div class="stat-card"><span class="stat-label" data-i18n="miner.bestEver">Best Ever</span><strong class="stat-value yellow" id="minerDetailBestEver">--</strong></div>
+          <div class="stat-card"><span class="stat-label" data-i18n="miners.workers">Workers</span><strong class="stat-value" id="minerDetailWorkers">--</strong></div>
         </div>
       </article>
 
@@ -349,11 +349,11 @@
       <article class="surface-card">
         <div class="surface-head">
           <div>
-            <h3>Hashrate History</h3>
+            <h3 data-i18n="miners.hashHistory">Hashrate History</h3>
           </div>
         </div>
         <div class="miners-history-plot" id="minerDetailHashChart">
-          <div class="miners-empty">Loading...</div>
+          <div class="miners-empty" data-i18n="common.loading">Loading...</div>
         </div>
         <div class="miners-history-legend miners-history-legend-static" id="minerDetailHashLegend"></div>
       </article>
@@ -361,22 +361,22 @@
       <article class="surface-card">
         <div class="surface-head">
           <div>
-            <h3>Worker History</h3>
+            <h3 data-i18n="miner.workerHistory">Worker History</h3>
           </div>
         </div>
         <div class="miners-history-plot" id="minerDetailWorkerChart">
-          <div class="miners-empty">Loading...</div>
+          <div class="miners-empty" data-i18n="common.loading">Loading...</div>
         </div>
       </article>
 
       <article class="surface-card surface-card-large">
         <div class="surface-head">
           <div>
-            <h3>Workers</h3>
+            <h3 data-i18n="miners.workers">Workers</h3>
           </div>
         </div>
         <div id="minerDetailWorkersTable">
-          <div class="miners-empty">Loading...</div>
+          <div class="miners-empty" data-i18n="common.loading">Loading...</div>
         </div>
       </article>
     </section>
@@ -385,39 +385,39 @@
       <article class="surface-card surface-card-large log-shell">
         <div class="log-header">
           <div class="log-tabs" role="tablist" aria-label="Log sources">
-            <button class="log-tab is-active" type="button" data-log-service="bitcoind">Bitcoind</button>
-            <button class="log-tab" type="button" data-log-service="stratum">Stratum</button>
+            <button class="log-tab is-active" type="button" data-log-service="bitcoind" data-i18n="nav.bitcoind">Bitcoind</button>
+            <button class="log-tab" type="button" data-log-service="stratum" data-i18n="nav.stratum">Stratum</button>
           </div>
           <div class="log-meta">
             <span class="status-badge status-soft" id="logServiceBadge">Bitcoind log</span>
             <span class="mono" id="logPath">/root/block/debug.log</span>
           </div>
         </div>
-        <div class="log-summary" id="logSummary">Tail 300 lines · live cursor</div>
-        <pre class="log-view" id="logsPanel">Loading logs...</pre>
+        <div class="log-summary" id="logSummary" data-i18n="logs.summary">Tail 300 lines · live cursor</div>
+        <pre class="log-view" id="logsPanel" data-i18n="logs.loading">Loading logs...</pre>
       </article>
     </section>
 
     <section class="panel-view" data-view-panel="settings">
       <section class="section-heading">
-        <h3>Network</h3>
+        <h3 data-i18n="settings.network">Network</h3>
       </section>
       <section class="subpage-grid">
         <article class="surface-card">
           <div class="surface-head">
             <div>
-              <h3>Wi-Fi Setup</h3>
+              <h3 data-i18n="settings.wifi">Wi-Fi Setup</h3>
             </div>
-            <span class="status-badge status-soft" id="wifiStatusBadge">Idle</span>
+            <span class="status-badge status-soft" id="wifiStatusBadge" data-i18n="wifi.idle">Idle</span>
           </div>
           <div class="wifi-form">
             <div class="wifi-field">
-              <label for="wifiSsid">SSID</label>
+              <label for="wifiSsid" data-i18n="settings.ssid">SSID</label>
               <input id="wifiSsid" type="text" maxlength="32" autocomplete="off" list="wifiSsidHistory" placeholder="Network name (1-32 chars)">
               <datalist id="wifiSsidHistory"></datalist>
             </div>
             <div class="wifi-field">
-              <label for="wifiPassword">Password</label>
+              <label for="wifiPassword" data-i18n="settings.password">Password</label>
               <div class="wifi-password-wrap">
                 <input id="wifiPassword" type="password" autocomplete="new-password" placeholder="Wi-Fi password (8-63 chars, blank for open)">
                 <button class="wifi-password-toggle" id="wifiPasswordToggle" type="button" aria-label="Show password" title="Show / hide password">
@@ -434,20 +434,20 @@
             </div>
           </div>
           <div class="wifi-actions">
-            <button class="action-button action-button-primary" id="wifiApplyBtn" type="button">Apply</button>
+            <button class="action-button action-button-primary" id="wifiApplyBtn" type="button" data-i18n="common.apply">Apply</button>
           </div>
-          <p class="wifi-note" id="wifiMessage" aria-live="polite">Enter your Wi-Fi SSID and password, then tap Apply. The device will reconnect automatically.</p>
+          <p class="wifi-note" id="wifiMessage" aria-live="polite" data-i18n="settings.wifiNote">Enter your Wi-Fi SSID and password, then tap Apply. The device will reconnect automatically.</p>
         </article>
         <article class="surface-card">
           <div class="surface-head">
             <div>
-              <h3>Timezone</h3>
+              <h3 data-i18n="settings.timezone">Timezone</h3>
             </div>
             <span class="status-badge status-soft" id="tzStatusBadge">--</span>
           </div>
           <div class="wifi-form">
             <div class="wifi-field">
-              <label>Timezone</label>
+              <label data-i18n="settings.timezone">Timezone</label>
               <div class="tz-select" id="tzSelectWrap">
                 <button type="button" class="tz-select-btn" id="tzSelectBtn" aria-haspopup="listbox" aria-expanded="false">
                   <span class="tz-select-name" id="tzSelectName">--</span>
@@ -459,51 +459,51 @@
             </div>
           </div>
           <div class="wifi-actions">
-            <button class="action-button action-button-primary" id="tzApplyBtn" type="button">Apply</button>
+            <button class="action-button action-button-primary" id="tzApplyBtn" type="button" data-i18n="common.apply">Apply</button>
           </div>
-          <p class="wifi-note" id="tzMessage" aria-live="polite">Select a timezone and tap Apply. Takes effect immediately.</p>
+          <p class="wifi-note" id="tzMessage" aria-live="polite" data-i18n="settings.tzNote">Select a timezone and tap Apply. Takes effect immediately.</p>
         </article>
       </section>
     </section>
 
     <section class="panel-view" data-view-panel="about">
       <section class="subpage-hero">
-        <p>Versioning, firmware updates, and support diagnostics.</p>
+        <p data-i18n="about.subtitle">Versioning, firmware updates, and support diagnostics.</p>
       </section>
 
       <article class="surface-card about-update-card">
         <div class="surface-head">
-          <h3>Firmware Update</h3>
+          <h3 data-i18n="about.firmwareUpdate">Firmware Update</h3>
           <span class="status-badge" id="aboutUpdateBadge">Checking&hellip;</span>
         </div>
         <div class="stack-list">
-          <div class="stack-row"><span>Current</span><strong class="mono" id="aboutCurrentVer">--</strong></div>
-          <div class="stack-row"><span>Latest</span><strong class="mono" id="aboutLatestVer">--</strong></div>
-          <div class="stack-row"><span>Released</span><strong id="aboutReleased">--</strong></div>
+          <div class="stack-row"><span data-i18n="about.current">Current</span><strong class="mono" id="aboutCurrentVer">--</strong></div>
+          <div class="stack-row"><span data-i18n="about.latest">Latest</span><strong class="mono" id="aboutLatestVer">--</strong></div>
+          <div class="stack-row"><span data-i18n="about.released">Released</span><strong id="aboutReleased">--</strong></div>
         </div>
         <p class="wifi-note" id="aboutUpdateNote">Checking for updates&hellip;</p>
         <div class="about-update-actions">
-          <button class="action-button" id="aboutCheckBtn" type="button">Check for Updates</button>
-          <button class="action-button action-button-primary" id="aboutUpdateBtn" type="button" hidden>Update Now</button>
-          <button class="action-button" id="aboutForceBtn" type="button" hidden>Force Update</button>
+          <button class="action-button" id="aboutCheckBtn" type="button" data-i18n="about.checkUpdates">Check for Updates</button>
+          <button class="action-button action-button-primary" id="aboutUpdateBtn" type="button" hidden data-i18n="about.updateNow">Update Now</button>
+          <button class="action-button" id="aboutForceBtn" type="button" hidden data-i18n="about.forceUpdate">Force Update</button>
         </div>
       </article>
 
       <section class="subpage-grid">
         <article class="surface-card">
-          <h3>Firmware</h3>
+          <h3 data-i18n="about.firmware">Firmware</h3>
           <div class="stack-list">
-            <div class="stack-row"><span>Board</span><strong>Rockbase</strong></div>
-            <div class="stack-row"><span>Firmware</span><strong id="aboutFirmware">--</strong></div>
-            <div class="stack-row"><span>API</span><strong>preview-v1</strong></div>
+            <div class="stack-row"><span data-i18n="about.board">Board</span><strong>Rockbase</strong></div>
+            <div class="stack-row"><span data-i18n="about.firmware">Firmware</span><strong id="aboutFirmware">--</strong></div>
+            <div class="stack-row"><span data-i18n="about.api">API</span><strong>preview-v1</strong></div>
           </div>
         </article>
         <article class="surface-card">
-          <h3>System</h3>
+          <h3 data-i18n="about.system">System</h3>
           <div class="stack-list">
-            <div class="stack-row"><span>Product Version</span><strong class="mono" id="aboutProductVer">--</strong></div>
-            <div class="stack-row"><span>Uptime</span><strong id="aboutUptime">--</strong></div>
-            <div class="stack-row"><span>Last Updated</span><strong id="aboutUpdated">--</strong></div>
+            <div class="stack-row"><span data-i18n="about.productVersion">Product Version</span><strong class="mono" id="aboutProductVer">--</strong></div>
+            <div class="stack-row"><span data-i18n="topbar.uptime">Uptime</span><strong id="aboutUptime">--</strong></div>
+            <div class="stack-row"><span data-i18n="about.lastUpdated">Last Updated</span><strong id="aboutUpdated">--</strong></div>
           </div>
         </article>
       </section>
@@ -514,29 +514,29 @@
 <div class="ota-overlay" id="otaOverlay" hidden>
   <div class="ota-modal" role="dialog" aria-modal="true" aria-label="Firmware update">
     <div class="ota-view" id="otaOfferView">
-      <h3>Firmware Update Available</h3>
+      <h3 data-i18n="ota.available">Firmware Update Available</h3>
       <p class="ota-ver-line">
         <span class="mono" id="otaCurrentVer">--</span>
         <span class="ota-arrow">&rarr;</span>
         <span class="mono ota-ver-new" id="otaLatestVer">--</span>
       </p>
       <p class="ota-sub" id="otaReleaseDate"></p>
-      <p class="ota-note">The update is downloaded, verified and written to the standby system slot. Syncing and mining pause during the upgrade. When writing finishes the node reboots automatically. Do not power off.</p>
+      <p class="ota-note" data-i18n="ota.note">The update is downloaded, verified and written to the standby system slot. Syncing and mining pause during the upgrade. When writing finishes the node reboots automatically. Do not power off.</p>
       <div class="ota-actions">
-        <button class="action-button" id="otaLaterBtn" type="button">Remind me tomorrow</button>
-        <button class="action-button action-button-primary" id="otaUpdateBtn" type="button">Update Now</button>
+        <button class="action-button" id="otaLaterBtn" type="button" data-i18n="ota.remindTomorrow">Remind me tomorrow</button>
+        <button class="action-button action-button-primary" id="otaUpdateBtn" type="button" data-i18n="about.updateNow">Update Now</button>
       </div>
     </div>
     <div class="ota-view" id="otaConfirmView" hidden>
-      <h3>Force Update</h3>
-      <p class="ota-note">You are about to force-install firmware <span class="mono" id="otaForceVer">--</span>. This will overwrite the current system slot even if the version is the same or newer. Syncing and mining will pause during the upgrade. Do not power off.</p>
+      <h3 data-i18n="about.forceUpdate">Force Update</h3>
+      <p class="ota-note" id="otaForceNote">You are about to force-install firmware <span class="mono" id="otaForceVer">--</span>. This will overwrite the current system slot even if the version is the same or newer. Syncing and mining will pause during the upgrade. Do not power off.</p>
       <div class="ota-actions">
-        <button class="action-button" id="otaForceCancelBtn" type="button">Cancel</button>
-        <button class="action-button action-button-primary" id="otaForceConfirmBtn" type="button">Force Update</button>
+        <button class="action-button" id="otaForceCancelBtn" type="button" data-i18n="cleanBlock.cancel">Cancel</button>
+        <button class="action-button action-button-primary" id="otaForceConfirmBtn" type="button" data-i18n="about.forceUpdate">Force Update</button>
       </div>
     </div>
     <div class="ota-view" id="otaProgressView" hidden>
-      <h3>Updating Firmware</h3>
+      <h3 data-i18n="ota.updating">Updating Firmware</h3>
       <p class="ota-phase" id="otaPhaseLabel">Preparing...</p>
       <div class="ota-progress">
         <div class="ota-progress-fill" id="otaProgressFill"></div>
@@ -548,10 +548,10 @@
       <p class="ota-note" id="otaProgressMsg">Do not power off the node.</p>
       <div class="ota-reboot-wait" id="otaRebootActions" hidden>
         <span class="ota-reboot-wait-spinner" aria-hidden="true"></span>
-        <span>Rebooting automatically &mdash; please wait, do not power off.</span>
+        <span data-i18n="ota.rebootWait">Rebooting automatically &mdash; please wait, do not power off.</span>
       </div>
       <div class="ota-actions" id="otaErrorActions" hidden>
-        <button class="action-button" id="otaCloseBtn" type="button">Close</button>
+        <button class="action-button" id="otaCloseBtn" type="button" data-i18n="cleanBlock.close">Close</button>
       </div>
     </div>
   </div>
@@ -581,6 +581,6 @@
   </div>
 </div>
 
-<script src="/app.js?v=20260921-kebab1"></script>
+<script src="/app.js?v=20260921-i18n3"></script>
 </body>
 </html>
