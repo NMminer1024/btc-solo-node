@@ -13,12 +13,12 @@ Web 前端源码：`buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/
 
 ## i18n 机制（现状）
 
-- **字典**：`app.js` 里的 `I18N` 对象，按语言码分块：`I18N.en`、`I18N.zh`（目前只有这两个有翻译）。
+- **字典**：`app.js` 里的 `var I18N = {` 对象，按语言码分块：`en: {`、`zh: {`、`es: {`、`fr: {`、`de: {`、`pt: {`、`ru: {`、`ja: {`、`ko: {`、`ar: {`（**10 个语言全部有完整翻译**，key 数量必须一致，当前 159 keys × 10）。
 - **标记**：HTML 里需要翻译的元素加 `data-i18n="<key>"`，如 `<button data-i18n="cleanBlock.btn">Clean Block Data</button>`。
 - **取值**：`t(key)` 先查 `I18N[currentLang][key]`，查不到回退 `I18N.en[key]`，再查不到返回 key 本身。
 - **应用**：`applyI18n()` 遍历所有 `[data-i18n]` 节点写入 `t(key)`，并设置 `<html lang>`。
 - **切换**：`#langSelect` 下拉（`index.html`），`setLang()` 持久化到 `localStorage("nmLang")`。
-- **语言列表**：`#langSelect` 现有 10 个主流语言选项（en/zh/es/fr/de/pt/ru/ja/ko/ar），但**只有 `en`/`zh` 有翻译**；其余语言码可选但自动回退英文。`LANG_CODES` 从下拉选项动态读取，`isKnownLang()` 校验。
+- **语言列表**：`#langSelect` 有 10 个语言选项（en/zh/es/fr/de/pt/ru/ja/ko/ar），**全部有完整翻译**。`LANG_CODES` 从下拉选项动态读取，`isKnownLang()` 校验。
 
 > 关键：新增语言翻译 = 在 `I18N` 里加一个 `I18N.<code> = {...}` 字典块，UI 零改动。
 
@@ -34,10 +34,10 @@ Web 前端源码：`buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/
    - 已有 `data-i18n` 且 key 存在 → 只需确认各语言字典里该 key 的值是否需要同步更新
    - 硬编码英文、没有 `data-i18n` → **必须补上** `data-i18n="<key>"`，并在 `I18N.en` + `I18N.zh` 都加对应 key
 
-3. **同步所有已实现语言**
-   - 当前已实现语言 = `I18N` 里实际存在的字典块（现为 `en` + `zh`）
-   - 每个新增/改动的 key，必须在**每一个**已实现语言块里都有对应条目
+3. **同步所有 10 个语言**
+   - 每个新增/改动的 key，必须在**全部 10 个**语言块（en/zh/es/fr/de/pt/ru/ja/ko/ar）里都有对应条目
    - 中文翻译要地道，不要机翻腔；技术术语（bitcoind、Stratum、block、share 等）保留英文
+   - **Arabic 必须用 python 码点校验**（0x0600–0x06FF），终端显示会乱码，不能目视判断
 
 4. **动态字符串**（JS 里拼接的文案，如 cleanBlock 的 phase 标签）
    - 这类不走 `data-i18n`，而是 `t("cleanBlock.phase.xxx")` 显式取 key
@@ -60,22 +60,40 @@ Web 前端源码：`buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/
 
 ## 常见坑
 
-- **只加了英文忘了中文**：最典型的遗漏。改完务必 grep 新 key，确认 `I18N.en` 和 `I18N.zh` 都有。
-- **硬编码英文没加 `data-i18n`**：界面上看着正常（英文），但切中文后该处仍是英文。
+- **只加了英文忘了其它语言**：最典型的遗漏。改完务必跑 parity 校验（见下方命令），确认 10 个语言块 key 数量一致。
+- **硬编码英文没走 `t()`**：两类场景——(1) HTML 静态文案没加 `data-i18n`；(2) **JS 动态消息**（如 `setWifiMessage("SSID is required.")`、`setTzMessage("Applying timezone...")`）直接传英文字符串而非 `t("key")`。后者更隐蔽，界面英文时看不出问题，切其它语言后仍是英文。排查方法：`grep -n 'setWifiMessage\|setTzMessage' app.js` 找所有硬编码字符串调用点。
 - **key 拼写不一致**：HTML 的 `data-i18n` 与 `I18N` 字典 key 必须逐字一致，否则回退显示 key 本身。
 - **动态文案漏配**：`t()` 取不到会直接显示 key 字符串（如页面上出现 `cleanBlock.phase.xxx`），排查时先看是不是 key 缺失。
-- **语言列表 ≠ 已翻译语言**：`#langSelect` 有 10 项，但别以为都要翻译；只同步 `I18N` 里已存在的语言块。新增语言翻译是独立的大工作，按需单独做。
+- **multi_replace 丢行尾逗号**：在字典块中间插入新 key 时，如果 `oldString` 以某行结尾（含逗号），`newString` 必须保留该逗号并在新行末尾也加逗号。漏掉会导致 `node --check` 报 `SyntaxError: Unexpected string`。**改完必须跑 `node --check app.js`**。
+- **语言块头部是无引号标识符**：`en: {` 不是 `"en": {`，写校验脚本时正则要用 `(en|zh|...): \{`。
+- **非 en 块没有 `/* about */` 等注释**：只有 en 块有 section 注释，其它语言块直接连续排列，不能用注释行做锚点。
+- **bash 历史展开吃 `!`**：`node -e "...!..."` 双引号里的 `!` 会被 bash history expansion 吃掉。用 `cat > /tmp/check.js <<'EOF' ... EOF` 写临时脚本再 `node /tmp/check.js`。
+- **eval 提取 I18N 会失败**：字符串值里含 `{`/`}`（如 `{tz}` 占位符），简单花括号计数会错位。用带字符串状态机的解析器，或直接用正则按行提取 key 做 parity 检查。
+- **Arabic 终端显示乱码**：终端渲染阿拉伯语会错乱，必须用 python 码点校验（`0x600 <= ord(c) <= 0x6FF`），不能目视判断。
 
 ---
 
 ## 快速自检命令
 
 ```bash
+WEB=buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/root/web
+
+# JS 语法检查（每次改完 app.js 必跑）
+node --check $WEB/app.js
+
 # 列出所有 data-i18n key（HTML 侧）
-grep -rhoE 'data-i18n="[^"]+"' buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/root/web/index.html | sort -u
+grep -rhoE 'data-i18n="[^"]+"' $WEB/index.html | sort -u
 
 # 列出 I18N 里已实现的语言块
-grep -nE '^    (en|zh|[a-z]{2}): \{' buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/root/web/app.js
+grep -nE '^    (en|zh|es|fr|de|pt|ru|ja|ko|ar): \{' $WEB/app.js
+
+# 10 语言 parity 校验（key 数量 + 一致性 + Arabic 码点）
+# 写临时脚本 /tmp/i18n_check2.js（正则按行提取 key，不用 eval），然后：
+node /tmp/i18n_check2.js
+# 期望输出：langs: en,zh,es,fr,de,pt,ru,ja,ko,ar / en keys: N / PARITY OK / arabic check done
+
+# 查找 JS 动态消息中的硬编码英文（应全部走 t()）
+grep -nE 'set(Wifi|Tz)Message\("[A-Z]' $WEB/app.js
 ```
 
 改完新 key 后，用上面第一条命令确认 HTML 引用的每个 key 都能在 `I18N.en` 和 `I18N.zh` 里找到。
