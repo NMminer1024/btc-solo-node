@@ -125,12 +125,12 @@ wifi_load_config() {
   fi
 
   if [ "$WIFI_CONFIG_LOADED" = "0" ]; then
-    WIFI_SSID="NMTech-2.4G"
+    WIFI_SSID="RockBase_2.4G"
     WIFI_PASS="NMMiner2048"
     WIFI_HIDDEN="0"
   fi
 
-  [ -n "$WIFI_SSID" ] || WIFI_SSID="NMTech-2.4G"
+  [ -n "$WIFI_SSID" ] || WIFI_SSID="RockBase_2.4G"
   [ -n "$WIFI_HIDDEN" ] || WIFI_HIDDEN="0"
 }
 
