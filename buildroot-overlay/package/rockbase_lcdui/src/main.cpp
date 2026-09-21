@@ -167,6 +167,10 @@ struct TileRuntime {
     lv_obj_t* network_gateway = nullptr;
     lv_obj_t* network_dns_dot = nullptr;
     lv_obj_t* network_dns = nullptr;
+    lv_obj_t* network_down_arrow = nullptr;
+    lv_obj_t* network_down_value = nullptr;
+    lv_obj_t* network_up_arrow = nullptr;
+    lv_obj_t* network_up_value = nullptr;
 };
 
 struct RollingDigitSlot {
@@ -243,6 +247,8 @@ struct DashboardData {
     std::string gateway_ip = "-";
     std::string dns_primary = "-";
     std::string dns_secondary = "-";
+    std::string net_rx_display = "--";
+    std::string net_tx_display = "--";
     std::string miners_hashrate_5m = "0";
     std::string miners_hashrate_6h = "0";
     std::string miners_hashrate_1d = "0";
@@ -319,6 +325,8 @@ struct NetworkPageModel {
     std::string timezone_offset = "--";
     std::string gateway = "--";
     std::string dns = "--";
+    std::string net_rx_display = "--";
+    std::string net_tx_display = "--";
     bool device_up = false;
     bool gateway_up = false;
     bool dns_up = false;
@@ -1993,6 +2001,8 @@ bool load_dashboard_data(DashboardData& data) {
     data.gateway_ip = json_value(network, "gateway_ip");
     data.dns_primary = json_value(network, "dns_primary");
     data.dns_secondary = json_value(network, "dns_secondary");
+    data.net_rx_display = json_value(network, "net_rx_display");
+    data.net_tx_display = json_value(network, "net_tx_display");
     load_miners_chart_data(data);
     return true;
 }
@@ -3101,6 +3111,8 @@ bool build_ui_model(UiModel& model) {
     model.network.timezone_offset = timezone_offset_label(data.timezone_key);
     model.network.gateway = data.gateway_ip;
     model.network.dns = join_value(data.dns_primary, " / ", data.dns_secondary);
+    model.network.net_rx_display = data.net_rx_display;
+    model.network.net_tx_display = data.net_tx_display;
     return true;
 }
 
@@ -3551,6 +3563,19 @@ void build_network_tile(lv_obj_t* tv) {
         lv_obj_set_style_text_align(value, LV_TEXT_ALIGN_CENTER, 0);
     }
     lv_label_set_long_mode(g_tiles.network_dns, LV_LABEL_LONG_MODE_DOTS);
+
+    // --- Throughput block: vertical DOWN/UP rates in the left blank area ---
+    constexpr int32_t kTrafficX = 100;
+    constexpr int32_t kDownY = 168;
+    constexpr int32_t kUpY = 205;
+    g_tiles.network_down_arrow = add_label(tile, LV_SYMBOL_DOWN, kTrafficX, kDownY,
+                                           &lv_font_montserrat_22, lv_color_hex(0x59d79b));
+    g_tiles.network_down_value = add_label(tile, "--", kTrafficX + 30, kDownY,
+                                           &lv_font_montserrat_22, lv_color_hex(0xf4efe2));
+    g_tiles.network_up_arrow = add_label(tile, LV_SYMBOL_UP, kTrafficX, kUpY,
+                                         &lv_font_montserrat_22, lv_color_hex(0xe8784f));
+    g_tiles.network_up_value = add_label(tile, "--", kTrafficX + 30, kUpY,
+                                         &lv_font_montserrat_22, lv_color_hex(0xf4efe2));
 }
 
 void set_active_page(uint32_t page) {
@@ -3691,6 +3716,13 @@ uint32_t apply_ui_model(const UiModel& model) {
     for (size_t index = 0; index < 3; ++index) {
         dirty |= set_network_status_dot(network_dots[index], network_states[index]);
     }
+    // TRAFFIC: down/up throughput
+    const bool has_rx = model.network.net_rx_display != "--" && !model.network.net_rx_display.empty();
+    const bool has_tx = model.network.net_tx_display != "--" && !model.network.net_tx_display.empty();
+    dirty |= set_label(g_tiles.network_down_value, has_rx ? model.network.net_rx_display.c_str() : "--");
+    dirty |= set_label(g_tiles.network_up_value, has_tx ? model.network.net_tx_display.c_str() : "--");
+    dirty |= set_text_color(g_tiles.network_down_arrow, has_rx ? 0x59d79b : 0x526269);
+    dirty |= set_text_color(g_tiles.network_up_arrow, has_tx ? 0xe8784f : 0x526269);
     if (dirty) {
         dirty_mask |= page_dirty_bit(3);
     }

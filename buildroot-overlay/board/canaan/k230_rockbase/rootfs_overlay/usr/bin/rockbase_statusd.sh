@@ -134,6 +134,22 @@ compact_size_mb() {
     }'
 }
 
+# Format a byte/second rate for display (e.g. 1.20M/s, 1.0K/s, 512B/s).
+# Empty / non-numeric input yields "--".
+compact_rate() {
+    awk -v n="$1" 'BEGIN {
+      if (n == "" || n == "-" || n == "null") { print "--"; exit }
+      val = n + 0
+      if (val < 1024) { printf "%.0fB/s", val; exit }
+      u[1] = "K"; u[2] = "M"; u[3] = "G"
+      idx = 0
+      while ((val >= 1024) && (idx < 3)) { val /= 1024; idx++ }
+      if (val >= 100) printf "%.0f%s/s", val, u[idx]
+      else if (val >= 10) printf "%.1f%s/s", val, u[idx]
+      else printf "%.2f%s/s", val, u[idx]
+    }'
+}
+
 fmt_int() {
     awk -v n="$1" 'BEGIN {
       if (n == "" || n == "-" || n == "null") { print "-"; exit }
@@ -483,6 +499,28 @@ collect_network() {
 
     timezone_key=$(timezone_from_system)
 
+    # --- Network throughput: diff cumulative byte counters vs previous sample ---
+    # Rate is the average over the sampling window (~NETWORK_INTERVAL). A negative
+    # delta (interface reset / mode switch / reboot) is clamped to 0.
+    # The three prev keys are written via state_num (unquoted integers), so a
+    # plain sed extraction is safe and avoids sourcing the whole state file
+    # (which would clobber the freshly computed wifi/ip/rssi vars above).
+    net_rx_prev=$(sed -n 's/^net_rx_prev=//p' "${NETWORK_STATE}" 2>/dev/null)
+    net_tx_prev=$(sed -n 's/^net_tx_prev=//p' "${NETWORK_STATE}" 2>/dev/null)
+    net_sample_at=$(sed -n 's/^net_sample_at=//p' "${NETWORK_STATE}" 2>/dev/null)
+    net_rx_now=$(cat "/sys/class/net/${iface}/statistics/rx_bytes" 2>/dev/null || echo 0)
+    net_tx_now=$(cat "/sys/class/net/${iface}/statistics/tx_bytes" 2>/dev/null || echo 0)
+    net_now_at=$(now_epoch)
+    net_rx_bps=""
+    net_tx_bps=""
+    if [ -n "${net_rx_prev}" ] && [ -n "${net_tx_prev}" ] && [ -n "${net_sample_at}" ] && [ "${net_sample_at}" -gt 0 ] 2>/dev/null; then
+        net_dt=$((net_now_at - net_sample_at))
+        if [ "${net_dt}" -gt 0 ]; then
+            net_rx_bps=$(awk -v n="${net_rx_now}" -v p="${net_rx_prev}" -v d="${net_dt}" 'BEGIN{r=(n-p)/d; if(r<0)r=0; printf "%.0f", r}')
+            net_tx_bps=$(awk -v n="${net_tx_now}" -v p="${net_tx_prev}" -v d="${net_dt}" 'BEGIN{r=(n-p)/d; if(r<0)r=0; printf "%.0f", r}')
+        fi
+    fi
+
     {
         state_num updated_at "$(now_epoch)"
         state_str wifi_ssid "${wifi_ssid}"
@@ -498,6 +536,11 @@ collect_network() {
         state_str dns_secondary "${dns_secondary}"
         state_str ntp_class "${ntp_class}"
         state_str ntp_key "${ntp_key}"
+        state_str net_rx_bps "${net_rx_bps}"
+        state_str net_tx_bps "${net_tx_bps}"
+        state_num net_rx_prev "${net_rx_now}"
+        state_num net_tx_prev "${net_tx_now}"
+        state_num net_sample_at "${net_now_at}"
     } | write_state_file "${NETWORK_STATE}"
 }
 
@@ -733,6 +776,10 @@ render_status_json() {
     rssi_display="N/A"
     rssi_pct=0
     signal_level=0
+    net_rx_bps=""
+    net_tx_bps=""
+    net_rx_display="--"
+    net_tx_display="--"
     timezone_key="UTC"
     gateway_ip="-"
     dns_primary="-"
@@ -746,6 +793,9 @@ render_status_json() {
     load_state_file "${BITCOIN_LOG_STATE}"
     load_state_file "${STRATUM_STATE}"
     load_state_file "${NETWORK_STATE}"
+
+    net_rx_display=$(compact_rate "${net_rx_bps}")
+    net_tx_display=$(compact_rate "${net_tx_bps}")
 
     btc_running=0
     pidof bitcoind >/dev/null 2>&1 && btc_running=1
@@ -1095,6 +1145,10 @@ render_status_json() {
     printf '    "rssi_display": %s,\n' "$(json_str "${rssi_display}")"
     printf '    "rssi_pct": %s,\n' "$(json_num "${rssi_pct}")"
     printf '    "signal_level": %s,\n' "$(json_num "${signal_level}")"
+    printf '    "net_rx_bps": %s,\n' "$(json_num "${net_rx_bps}")"
+    printf '    "net_tx_bps": %s,\n' "$(json_num "${net_tx_bps}")"
+    printf '    "net_rx_display": %s,\n' "$(json_str "${net_rx_display}")"
+    printf '    "net_tx_display": %s,\n' "$(json_str "${net_tx_display}")"
     printf '    "timezone_key": %s,\n' "$(json_str "${timezone_key}")"
     printf '    "gateway_ip": %s,\n' "$(json_str "${gateway_ip}")"
     printf '    "dns_primary": %s,\n' "$(json_str "${dns_primary}")"
