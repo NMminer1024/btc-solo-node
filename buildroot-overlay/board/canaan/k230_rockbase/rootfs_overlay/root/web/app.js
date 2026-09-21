@@ -1411,7 +1411,7 @@
     var data = wifi || mock.wifi;
     wifiState.current = data;
     setBadgeState("wifiStatusBadge", data.statusBadge, data.statusClass);
-    setWifiMessage(data.applyMessage || "Enter your Wi-Fi SSID and password, then tap Apply. The device will reconnect automatically.");
+    setWifiMessage(data.applyMessage || t("settings.wifiNote"));
 
     var ssidInput = document.getElementById("wifiSsid");
     if (ssidInput && data.savedSsid && data.savedSsid !== "-" && !ssidInput.value) {
@@ -1464,7 +1464,7 @@
       })
       .catch(function () {
         renderWifiView(mock.wifi);
-        setWifiMessage("Wi-Fi settings are unavailable right now.");
+        setWifiMessage(t("settings.wifiUnavailable"));
         return null;
       })
       .then(function (result) {
@@ -1486,7 +1486,7 @@
           wifiState.applying = false;
           stopWifiPolling();
           setWifiControlsDisabled(false);
-          setWifiMessage(data.applyMessage || "Wi-Fi profile updated.");
+          setWifiMessage(data.applyMessage || t("settings.wifiUpdated"));
         }
       });
     }, 2000);
@@ -1499,21 +1499,21 @@
     var pass = password ? password.value : "";
 
     if (!ssid) {
-      setWifiMessage("SSID is required.");
+      setWifiMessage(t("settings.wifiSsidRequired"));
       return Promise.resolve(null);
     }
     if (ssid.length > 32) {
-      setWifiMessage("SSID must be 32 characters or fewer.");
+      setWifiMessage(t("settings.wifiSsidTooLong"));
       return Promise.resolve(null);
     }
     if (pass && (pass.length < 8 || pass.length > 63)) {
-      setWifiMessage("Password must be 8-63 characters (or leave blank for open network).");
+      setWifiMessage(t("settings.wifiPassInvalid"));
       return Promise.resolve(null);
     }
 
     wifiState.applying = true;
     setWifiControlsDisabled(true);
-    setWifiMessage("Applying Wi-Fi profile. The device may reconnect for a few seconds.");
+    setWifiMessage(t("settings.wifiApplying"));
 
     var body = "ssid=" + encodeURIComponent(ssid) +
       "&password=" + encodeURIComponent(pass) +
@@ -1526,7 +1526,7 @@
       if (!payload || payload.ok === false) {
         wifiState.applying = false;
         setWifiControlsDisabled(false);
-        setWifiMessage((payload && payload.error) ? payload.error : "Failed to start Wi-Fi apply.");
+        setWifiMessage((payload && payload.error) ? payload.error : t("settings.wifiApplyFailed"));
         return null;
       }
       // Remember this credential pair for next time (best-effort).
@@ -1537,7 +1537,7 @@
     }).catch(function () {
       wifiState.applying = false;
       setWifiControlsDisabled(false);
-      setWifiMessage("Failed to start Wi-Fi apply.");
+      setWifiMessage(t("settings.wifiApplyFailed"));
       return null;
     });
   }
@@ -1943,7 +1943,7 @@
       })
       .catch(function () {
         renderTzView({});
-        setTzMessage("Timezone settings are unavailable right now.");
+        setTzMessage(t("settings.tzUnavailable"));
         return null;
       })
       .then(function (result) {
@@ -1955,29 +1955,29 @@
   function applyTimezone() {
     var zone = tzState.current;
     if (!zone) {
-      setTzMessage("Please choose a timezone.");
+      setTzMessage(t("settings.tzChoose"));
       return Promise.resolve(null);
     }
     tzState.applying = true;
     setTzControlsDisabled(true);
-    setTzMessage("Applying timezone...");
+    setTzMessage(t("settings.tzApplying"));
     return tzRequest("apply", { method: "POST", body: "timezone=" + encodeURIComponent(zone) })
       .then(function (payload) {
         tzState.applying = false;
         setTzControlsDisabled(false);
         if (!payload || payload.ok === false) {
-          setTzMessage((payload && payload.error) ? payload.error : "Failed to apply timezone.");
+          setTzMessage((payload && payload.error) ? payload.error : t("settings.tzApplyFailed"));
           return null;
         }
         tzState.current = toText(payload.timezone, zone);
         setBadgeState("tzStatusBadge", tzState.current, "status-ok");
-        setTzMessage("Timezone updated to " + tzState.current + ".");
+        setTzMessage(t("settings.tzUpdated").replace("{tz}", escapeHtml(tzState.current)));
         return payload;
       })
       .catch(function () {
         tzState.applying = false;
         setTzControlsDisabled(false);
-        setTzMessage("Failed to apply timezone.");
+        setTzMessage(t("settings.tzApplyFailed"));
         return null;
       });
   }
@@ -2634,6 +2634,18 @@
       "settings.wifiNote": "Enter your Wi-Fi SSID and password, then tap Apply. The device will reconnect automatically.",
       "settings.timezone": "Timezone",
       "settings.tzNote": "Select a timezone and tap Apply. Takes effect immediately.",
+      "settings.wifiUnavailable": "Wi-Fi settings are unavailable right now.",
+      "settings.wifiUpdated": "Wi-Fi profile updated.",
+      "settings.wifiSsidRequired": "SSID is required.",
+      "settings.wifiSsidTooLong": "SSID must be 32 characters or fewer.",
+      "settings.wifiPassInvalid": "Password must be 8-63 characters (or leave blank for open network).",
+      "settings.wifiApplying": "Applying Wi-Fi profile. The device may reconnect for a few seconds.",
+      "settings.wifiApplyFailed": "Failed to start Wi-Fi apply.",
+      "settings.tzUnavailable": "Timezone settings are unavailable right now.",
+      "settings.tzChoose": "Please choose a timezone.",
+      "settings.tzApplying": "Applying timezone...",
+      "settings.tzApplyFailed": "Failed to apply timezone.",
+      "settings.tzUpdated": "Timezone updated to {tz}.",
       /* about */
       "about.subtitle": "Versioning, firmware updates, and support diagnostics.",
       "about.firmwareUpdate": "Firmware Update",
@@ -2650,6 +2662,7 @@
       "about.productVersion": "Product Version",
       "about.lastUpdated": "Last Updated",
       "about.checking": "Checking\u2026",
+      "about.checkingNote": "Checking for updates\u2026",
       "about.contacting": "Contacting update server\u2026",
       "about.unavailable": "Unavailable",
       "about.unreachable": "Could not reach the update server. Try again later.",
@@ -2795,6 +2808,18 @@
       "settings.wifiNote": "输入 Wi-Fi 的 SSID 和密码，然后点击应用。设备将自动重连。",
       "settings.timezone": "时区",
       "settings.tzNote": "选择时区后点击应用，立即生效。",
+      "settings.wifiUnavailable": "Wi-Fi 设置当前不可用。",
+      "settings.wifiUpdated": "Wi-Fi 配置已更新。",
+      "settings.wifiSsidRequired": "请输入 SSID。",
+      "settings.wifiSsidTooLong": "SSID 不能超过 32 个字符。",
+      "settings.wifiPassInvalid": "密码需为 8-63 个字符（开放网络可留空）。",
+      "settings.wifiApplying": "正在应用 Wi-Fi 配置，设备可能会短暂重连。",
+      "settings.wifiApplyFailed": "启动 Wi-Fi 应用失败。",
+      "settings.tzUnavailable": "时区设置当前不可用。",
+      "settings.tzChoose": "请先选择时区。",
+      "settings.tzApplying": "正在应用时区...",
+      "settings.tzApplyFailed": "应用时区失败。",
+      "settings.tzUpdated": "时区已更新为 {tz}。",
       /* about */
       "about.subtitle": "版本管理、固件更新与支持诊断。",
       "about.firmwareUpdate": "固件更新",
@@ -2811,6 +2836,7 @@
       "about.productVersion": "产品版本",
       "about.lastUpdated": "最近更新",
       "about.checking": "检查中…",
+      "about.checkingNote": "正在检查更新…",
       "about.contacting": "正在连接更新服务器…",
       "about.unavailable": "不可用",
       "about.unreachable": "无法连接更新服务器，请稍后再试。",
@@ -2948,6 +2974,18 @@
       "settings.wifiNote": "Introduce el SSID y la contraseña del Wi-Fi y pulsa Aplicar. El dispositivo se reconectará automáticamente.",
       "settings.timezone": "Zona horaria",
       "settings.tzNote": "Selecciona una zona horaria y pulsa Aplicar. Se aplica de inmediato.",
+      "settings.wifiUnavailable": "La configuración de Wi-Fi no está disponible ahora mismo.",
+      "settings.wifiUpdated": "Perfil de Wi-Fi actualizado.",
+      "settings.wifiSsidRequired": "El SSID es obligatorio.",
+      "settings.wifiSsidTooLong": "El SSID debe tener 32 caracteres o menos.",
+      "settings.wifiPassInvalid": "La contraseña debe tener de 8 a 63 caracteres (o déjala vacía para red abierta).",
+      "settings.wifiApplying": "Aplicando el perfil de Wi-Fi. El dispositivo puede reconectarse durante unos segundos.",
+      "settings.wifiApplyFailed": "No se pudo iniciar la aplicación del Wi-Fi.",
+      "settings.tzUnavailable": "La configuración de zona horaria no está disponible ahora mismo.",
+      "settings.tzChoose": "Selecciona una zona horaria.",
+      "settings.tzApplying": "Aplicando zona horaria...",
+      "settings.tzApplyFailed": "No se pudo aplicar la zona horaria.",
+      "settings.tzUpdated": "Zona horaria actualizada a {tz}.",
       "about.subtitle": "Versionado, actualizaciones de firmware y diagnóstico de soporte.",
       "about.firmwareUpdate": "Actualización de firmware",
       "about.current": "Actual",
@@ -2963,6 +3001,7 @@
       "about.productVersion": "Versión del producto",
       "about.lastUpdated": "Última actualización",
       "about.checking": "Comprobando…",
+      "about.checkingNote": "Comprobando actualizaciones…",
       "about.contacting": "Contactando con el servidor de actualizaciones…",
       "about.unavailable": "No disponible",
       "about.unreachable": "No se pudo conectar con el servidor de actualizaciones. Inténtalo más tarde.",
@@ -3096,6 +3135,18 @@
       "settings.wifiNote": "Saisissez le SSID et le mot de passe Wi-Fi, puis appuyez sur Appliquer. L'appareil se reconnectera automatiquement.",
       "settings.timezone": "Fuseau horaire",
       "settings.tzNote": "Sélectionnez un fuseau horaire et appuyez sur Appliquer. Prise d'effet immédiate.",
+      "settings.wifiUnavailable": "La configuration Wi-Fi n'est pas disponible pour le moment.",
+      "settings.wifiUpdated": "Profil Wi-Fi mis à jour.",
+      "settings.wifiSsidRequired": "Le SSID est obligatoire.",
+      "settings.wifiSsidTooLong": "Le SSID doit contenir 32 caractères ou moins.",
+      "settings.wifiPassInvalid": "Le mot de passe doit contenir de 8 à 63 caractères (ou rester vide pour un réseau ouvert).",
+      "settings.wifiApplying": "Application du profil Wi-Fi. L'appareil peut se reconnecter pendant quelques secondes.",
+      "settings.wifiApplyFailed": "Échec du démarrage de l'application du Wi-Fi.",
+      "settings.tzUnavailable": "La configuration du fuseau horaire n'est pas disponible pour le moment.",
+      "settings.tzChoose": "Veuillez choisir un fuseau horaire.",
+      "settings.tzApplying": "Application du fuseau horaire...",
+      "settings.tzApplyFailed": "Échec de l'application du fuseau horaire.",
+      "settings.tzUpdated": "Fuseau horaire mis à jour : {tz}.",
       "about.subtitle": "Versioning, mises à jour du firmware et diagnostics de support.",
       "about.firmwareUpdate": "Mise à jour du firmware",
       "about.current": "Actuelle",
@@ -3111,6 +3162,7 @@
       "about.productVersion": "Version produit",
       "about.lastUpdated": "Dernière mise à jour",
       "about.checking": "Vérification…",
+      "about.checkingNote": "Vérification des mises à jour…",
       "about.contacting": "Connexion au serveur de mise à jour…",
       "about.unavailable": "Indisponible",
       "about.unreachable": "Impossible de joindre le serveur de mise à jour. Réessayez plus tard.",
@@ -3244,6 +3296,18 @@
       "settings.wifiNote": "Gib deinen WLAN-SSID und das Passwort ein und tippe auf Übernehmen. Das Gerät verbindet sich automatisch neu.",
       "settings.timezone": "Zeitzone",
       "settings.tzNote": "Wähle eine Zeitzone und tippe auf Übernehmen. Wirkt sofort.",
+      "settings.wifiUnavailable": "WLAN-Einstellungen sind gerade nicht verfügbar.",
+      "settings.wifiUpdated": "WLAN-Profil aktualisiert.",
+      "settings.wifiSsidRequired": "SSID ist erforderlich.",
+      "settings.wifiSsidTooLong": "SSID darf höchstens 32 Zeichen lang sein.",
+      "settings.wifiPassInvalid": "Das Passwort muss 8-63 Zeichen lang sein (oder leer lassen für offenes Netzwerk).",
+      "settings.wifiApplying": "WLAN-Profil wird übernommen. Das Gerät verbindet sich möglicherweise für wenige Sekunden neu.",
+      "settings.wifiApplyFailed": "WLAN-Anwendung konnte nicht gestartet werden.",
+      "settings.tzUnavailable": "Zeitzoneneinstellungen sind gerade nicht verfügbar.",
+      "settings.tzChoose": "Bitte wähle eine Zeitzone.",
+      "settings.tzApplying": "Zeitzone wird übernommen...",
+      "settings.tzApplyFailed": "Zeitzone konnte nicht übernommen werden.",
+      "settings.tzUpdated": "Zeitzone auf {tz} aktualisiert.",
       "about.subtitle": "Versionierung, Firmware-Updates und Support-Diagnosen.",
       "about.firmwareUpdate": "Firmware-Update",
       "about.current": "Aktuell",
@@ -3259,6 +3323,7 @@
       "about.productVersion": "Produktversion",
       "about.lastUpdated": "Zuletzt aktualisiert",
       "about.checking": "Prüfe…",
+      "about.checkingNote": "Suche nach Updates…",
       "about.contacting": "Verbinde mit Update-Server…",
       "about.unavailable": "Nicht verfügbar",
       "about.unreachable": "Update-Server nicht erreichbar. Versuche es später erneut.",
@@ -3392,6 +3457,18 @@
       "settings.wifiNote": "Insira o SSID e a senha do Wi-Fi e toque em Aplicar. O dispositivo se reconectará automaticamente.",
       "settings.timezone": "Fuso horário",
       "settings.tzNote": "Selecione um fuso horário e toque em Aplicar. Entra em vigor imediatamente.",
+      "settings.wifiUnavailable": "As configurações de Wi-Fi não estão disponíveis no momento.",
+      "settings.wifiUpdated": "Perfil de Wi-Fi atualizado.",
+      "settings.wifiSsidRequired": "O SSID é obrigatório.",
+      "settings.wifiSsidTooLong": "O SSID deve ter no máximo 32 caracteres.",
+      "settings.wifiPassInvalid": "A senha deve ter de 8 a 63 caracteres (ou deixe em branco para rede aberta).",
+      "settings.wifiApplying": "Aplicando o perfil de Wi-Fi. O dispositivo pode se reconectar por alguns segundos.",
+      "settings.wifiApplyFailed": "Falha ao iniciar a aplicação do Wi-Fi.",
+      "settings.tzUnavailable": "As configurações de fuso horário não estão disponíveis no momento.",
+      "settings.tzChoose": "Selecione um fuso horário.",
+      "settings.tzApplying": "Aplicando fuso horário...",
+      "settings.tzApplyFailed": "Falha ao aplicar o fuso horário.",
+      "settings.tzUpdated": "Fuso horário atualizado para {tz}.",
       "about.subtitle": "Versionamento, atualizações de firmware e diagnósticos de suporte.",
       "about.firmwareUpdate": "Atualização de firmware",
       "about.current": "Atual",
@@ -3407,6 +3484,7 @@
       "about.productVersion": "Versão do produto",
       "about.lastUpdated": "Última atualização",
       "about.checking": "Verificando…",
+      "about.checkingNote": "Verificando atualizações…",
       "about.contacting": "Contatando o servidor de atualizações…",
       "about.unavailable": "Indisponível",
       "about.unreachable": "Não foi possível conectar ao servidor de atualizações. Tente novamente mais tarde.",
@@ -3540,6 +3618,18 @@
       "settings.wifiNote": "Введите SSID и пароль Wi-Fi, затем нажмите «Применить». Устройство переподключится автоматически.",
       "settings.timezone": "Часовой пояс",
       "settings.tzNote": "Выберите часовой пояс и нажмите «Применить». Вступает в силу сразу.",
+      "settings.wifiUnavailable": "Настройки Wi-Fi сейчас недоступны.",
+      "settings.wifiUpdated": "Профиль Wi-Fi обновлён.",
+      "settings.wifiSsidRequired": "Укажите SSID.",
+      "settings.wifiSsidTooLong": "SSID должен содержать не более 32 символов.",
+      "settings.wifiPassInvalid": "Пароль должен содержать от 8 до 63 символов (или оставьте пустым для открытой сети).",
+      "settings.wifiApplying": "Применение профиля Wi-Fi. Устройство может переподключиться на несколько секунд.",
+      "settings.wifiApplyFailed": "Не удалось запустить применение Wi-Fi.",
+      "settings.tzUnavailable": "Настройки часового пояса сейчас недоступны.",
+      "settings.tzChoose": "Выберите часовой пояс.",
+      "settings.tzApplying": "Применение часового пояса...",
+      "settings.tzApplyFailed": "Не удалось применить часовой пояс.",
+      "settings.tzUpdated": "Часовой пояс изменён на {tz}.",
       "about.subtitle": "Версионирование, обновления прошивки и диагностика поддержки.",
       "about.firmwareUpdate": "Обновление прошивки",
       "about.current": "Текущая",
@@ -3555,6 +3645,7 @@
       "about.productVersion": "Версия продукта",
       "about.lastUpdated": "Последнее обновление",
       "about.checking": "Проверка…",
+      "about.checkingNote": "Проверка обновлений…",
       "about.contacting": "Соединение с сервером обновлений…",
       "about.unavailable": "Недоступно",
       "about.unreachable": "Не удалось подключиться к серверу обновлений. Попробуйте позже.",
@@ -3688,6 +3779,18 @@
       "settings.wifiNote": "Wi-Fi の SSID とパスワードを入力し、「適用」をタップしてください。デバイスは自動的に再接続します。",
       "settings.timezone": "タイムゾーン",
       "settings.tzNote": "タイムゾーンを選択して「適用」をタップしてください。すぐに反映されます。",
+      "settings.wifiUnavailable": "Wi-Fi 設定は現在利用できません。",
+      "settings.wifiUpdated": "Wi-Fi プロファイルを更新しました。",
+      "settings.wifiSsidRequired": "SSID を入力してください。",
+      "settings.wifiSsidTooLong": "SSID は 32 文字以内で入力してください。",
+      "settings.wifiPassInvalid": "パスワードは 8〜63 文字で入力してください（オープンネットワークの場合は空欄可）。",
+      "settings.wifiApplying": "Wi-Fi プロファイルを適用中です。デバイスは数秒間再接続する場合があります。",
+      "settings.wifiApplyFailed": "Wi-Fi 適用の開始に失敗しました。",
+      "settings.tzUnavailable": "タイムゾーン設定は現在利用できません。",
+      "settings.tzChoose": "タイムゾーンを選択してください。",
+      "settings.tzApplying": "タイムゾーンを適用中...",
+      "settings.tzApplyFailed": "タイムゾーンの適用に失敗しました。",
+      "settings.tzUpdated": "タイムゾーンを {tz} に更新しました。",
       "about.subtitle": "バージョン管理、ファームウェア更新、サポート診断。",
       "about.firmwareUpdate": "ファームウェア更新",
       "about.current": "現在",
@@ -3703,6 +3806,7 @@
       "about.productVersion": "製品バージョン",
       "about.lastUpdated": "最終更新",
       "about.checking": "確認中…",
+      "about.checkingNote": "アップデートを確認中…",
       "about.contacting": "更新サーバーに接続中…",
       "about.unavailable": "利用不可",
       "about.unreachable": "更新サーバーに接続できません。後でもう一度お試しください。",
@@ -3836,6 +3940,18 @@
       "settings.wifiNote": "Wi-Fi SSID와 비밀번호를 입력한 뒤 적용을 누르세요. 장치가 자동으로 다시 연결됩니다.",
       "settings.timezone": "시간대",
       "settings.tzNote": "시간대를 선택하고 적용을 누르세요. 즉시 적용됩니다.",
+      "settings.wifiUnavailable": "Wi-Fi 설정을 현재 사용할 수 없습니다.",
+      "settings.wifiUpdated": "Wi-Fi 프로필이 업데이트되었습니다.",
+      "settings.wifiSsidRequired": "SSID를 입력하세요.",
+      "settings.wifiSsidTooLong": "SSID는 32자 이하여야 합니다.",
+      "settings.wifiPassInvalid": "비밀번호는 8~63자여야 합니다(오픈 네트워크의 경우 비워 둘 수 있음).",
+      "settings.wifiApplying": "Wi-Fi 프로필을 적용하는 중입니다. 장치가 몇 초간 다시 연결될 수 있습니다.",
+      "settings.wifiApplyFailed": "Wi-Fi 적용을 시작하지 못했습니다.",
+      "settings.tzUnavailable": "시간대 설정을 현재 사용할 수 없습니다.",
+      "settings.tzChoose": "시간대를 선택하세요.",
+      "settings.tzApplying": "시간대를 적용하는 중...",
+      "settings.tzApplyFailed": "시간대 적용에 실패했습니다.",
+      "settings.tzUpdated": "시간대가 {tz}(으)로 업데이트되었습니다.",
       "about.subtitle": "버전 관리, 펌웨어 업데이트, 지원 진단.",
       "about.firmwareUpdate": "펌웨어 업데이트",
       "about.current": "현재",
@@ -3851,6 +3967,7 @@
       "about.productVersion": "제품 버전",
       "about.lastUpdated": "마지막 업데이트",
       "about.checking": "확인 중…",
+      "about.checkingNote": "업데이트 확인 중…",
       "about.contacting": "업데이트 서버에 연결하는 중…",
       "about.unavailable": "사용 불가",
       "about.unreachable": "업데이트 서버에 연결할 수 없습니다. 나중에 다시 시도하세요.",
@@ -3984,6 +4101,18 @@
       "settings.wifiNote": "أدخل اسم شبكة Wi-Fi وكلمة المرور ثم اضغط تطبيق. سيعيد الجهاز الاتصال تلقائيًا.",
       "settings.timezone": "المنطقة الزمنية",
       "settings.tzNote": "اختر منطقة زمنية واضغط تطبيق. يسري المفعول فورًا.",
+      "settings.wifiUnavailable": "إعدادات Wi-Fi غير متاحة حاليًا.",
+      "settings.wifiUpdated": "تم تحديث ملف Wi-Fi.",
+      "settings.wifiSsidRequired": "اسم الشبكة (SSID) مطلوب.",
+      "settings.wifiSsidTooLong": "يجب ألا يتجاوز اسم الشبكة 32 حرفًا.",
+      "settings.wifiPassInvalid": "يجب أن تتكون كلمة المرور من 8 إلى 63 حرفًا (أو اتركها فارغة لشبكة مفتوحة).",
+      "settings.wifiApplying": "جارٍ تطبيق ملف Wi-Fi. قد يعيد الجهاز الاتصال لبضع ثوانٍ.",
+      "settings.wifiApplyFailed": "فشل بدء تطبيق Wi-Fi.",
+      "settings.tzUnavailable": "إعدادات المنطقة الزمنية غير متاحة حاليًا.",
+      "settings.tzChoose": "يرجى اختيار منطقة زمنية.",
+      "settings.tzApplying": "جارٍ تطبيق المنطقة الزمنية...",
+      "settings.tzApplyFailed": "فشل تطبيق المنطقة الزمنية.",
+      "settings.tzUpdated": "تم تحديث المنطقة الزمنية إلى {tz}.",
       "about.subtitle": "إدارة الإصدارات، تحديثات البرامج الثابتة، وتشخيصات الدعم.",
       "about.firmwareUpdate": "تحديث البرنامج الثابت",
       "about.current": "الحالي",
@@ -3999,6 +4128,7 @@
       "about.productVersion": "إصدار المنتج",
       "about.lastUpdated": "آخر تحديث",
       "about.checking": "جارٍ التحقق…",
+      "about.checkingNote": "جارٍ التحقق من التحديثات…",
       "about.contacting": "جارٍ الاتصال بخادم التحديثات…",
       "about.unavailable": "غير متاح",
       "about.unreachable": "تعذر الوصول إلى خادم التحديثات. حاول مرة أخرى لاحقًا.",
