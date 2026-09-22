@@ -1,6 +1,6 @@
 ---
 name: rockbase-cpupress
-description: 'Measure Rockbase board CPU pressure distribution per process / per UI page. Use when: CPU压力, CPU占用, CPU分布, 进程CPU, 页面CPU, 哪个进程吃CPU, CPU热点, 刷新过快, 卡顿排查, cpu_page, 单核打满, load average高.'
+description: 'Measure Rockbase board CPU, memory reclaim, scheduling and SD I/O pressure over short or long periods. Use when: CPU压力, CPU占用, CPU分布, 进程CPU, 页面CPU, 哪个进程吃CPU, CPU热点, 持续观测, 长期观测, 一小时压力, 压力趋势, SD压力, IO压力, 内存回收, 刷新过快, 卡顿排查, cpu_page, cpu_watch, 单核打满, load average高.'
 ---
 
 # Rockbase CPU 压力分布测试流程
@@ -13,6 +13,8 @@ description: 'Measure Rockbase board CPU pressure distribution per process / per
 - **统一用 `/root/script/cpu_page.sh`**（已固化进镜像）：所有板子同一套脚本，保证横向对比有效
 - **采样时长默认 60s**：太短会被瞬时波动干扰，太长浪费时间
 - 脚本兼容 BusyBox（板子上无 `getconf`/`pgrep`/`ps --sort`，脚本内部只用 awk 解析 /proc）
+- **长期观测统一用 `/root/script/cpu_watch.sh`**：主日志和进程日志写入 `/tmp` tmpfs，不向 SD 落盘
+- `cpu_watch.sh` 默认观测 1 小时、每 30s 采样一次、每 15 分钟执行一个 60s 进程分布窗口
 
 ---
 
@@ -66,6 +68,98 @@ ssh -o StrictHostKeyChecking=no root@192.168.124.XX 'sh /root/script/cpu_page.sh
    - `present_display_buffer` / DRM commit 是否每帧全量
 3. **优化方向**：降刷新频率、降采样点数、脏区重绘、数据无变化时跳过重绘
 4. **改完按 `rockbase-lvgl-ui` skill 流程重建 + 热部署验证**，再用本 skill 复测对比
+
+---
+
+## 长期观测（CPU + 调度 + 内存回收 + SD I/O）
+
+当用户要求持续观测、一小时压力、长期趋势或事后关联分析时，直接使用已固化脚本：
+
+```bash
+ssh -o StrictHostKeyChecking=no root@192.168.124.XX '
+old=$(cat /tmp/cpu_watch.pid 2>/dev/null)
+if [ -n "$old" ] && kill -0 "$old" 2>/dev/null; then
+   echo "ALREADY_RUNNING pid=$old"
+   exit 1
+fi
+rm -f /tmp/cpu_watch_latest.log /tmp/cpu_watch_latest_process.log /tmp/cpu_watch.pid
+nohup sh /root/script/cpu_watch.sh 3600 30 900 >/tmp/cpu_watch_launcher.log 2>&1 &
+pid=$!
+echo "$pid" >/tmp/cpu_watch.pid
+echo "STARTED pid=$pid"
+'
+```
+
+参数依次为：
+
+```text
+cpu_watch.sh <总时长秒> <主采样间隔秒> <进程分布间隔秒>
+```
+
+默认值就是 `3600 30 900`。不传参数也可直接执行：
+
+```bash
+sh /root/script/cpu_watch.sh
+```
+
+### 日志位置
+
+日志全部位于 `/tmp` tmpfs（RAM）中，板子无 swap，因此不会给 SD 增加写压力：
+
+```text
+/tmp/cpu_watch_latest.log          # 高频主日志软链接
+/tmp/cpu_watch_latest_process.log  # 逐进程窗口日志软链接
+/tmp/cpu_watch_<时间戳>.log
+/tmp/cpu_watch_<时间戳>_process.log
+```
+
+重启会清空 `/tmp`，观测完成后及时拉回主机：
+
+```bash
+scp root@192.168.124.XX:/tmp/cpu_watch_latest.log ./
+scp root@192.168.124.XX:/tmp/cpu_watch_latest_process.log ./
+```
+
+### 检查状态
+
+不要轮询或持续 `tail`；长任务等待自然完成，需要人工确认时只检查一次：
+
+```bash
+ssh root@192.168.124.XX '
+pid=$(cat /tmp/cpu_watch.pid 2>/dev/null)
+if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+   echo "RUNNING pid=$pid"
+else
+   echo "FINISHED"
+fi
+tail -n 2 /tmp/cpu_watch_latest.log 2>/dev/null
+'
+```
+
+主日志出现 `===== CPU WATCH END ... =====` 表示完整结束。脚本退出前会等待最后一个 60s 进程窗口完成，因此实际结束时间可能比总时长最多晚约 60s。
+
+### 主日志字段
+
+每个采样周期记录增量，便于按同一时间轴做关联分析：
+
+- `cpu[]`：`busy/usr/sys/iowait/irq/steal/idle` 百分比
+- `load[]`：1/5/15 分钟 load、运行队列/总任务数、最近 PID
+- `sched[]`：context switch、中断、fork、当前 running/blocked 数
+- `mem_kb`：`MemAvailable/MemTotal`
+- `vm[]`：fault、major fault、kswapd/direct scan 与 steal、allocstall、OOM
+- `sd[]`：`mmcblk1` 的读写次数、KB、耗时、inflight、busy%、weighted I/O ms
+- `temp_raw`：thermal zone 原始温度值
+
+`/proc/diskstats` 和 `/sys` 的读取只访问内核统计，不会向 SD 发起数据读写。Rockbase 统一接线中 SD 为 `mmcblk1`；若未来硬件拓扑变化，先确认 `/proc/partitions` 再修改脚本中的 `SD_DEV`。
+
+### 事后分析顺序
+
+1. 汇总 `busy` 平均值、峰值以及超过 80%/90% 的样本比例。
+2. 对照 `load`、`running`、`blocked` 判断 CPU 排队还是不可中断等待。
+3. 用 `sys/iowait`、`sd busy_pct/weighted_ms` 区分内核 CPU 与 SD I/O 阻塞。
+4. 用 `MemAvailable`、`scan_d`、`allocstall`、major fault 判断内存回收压力。
+5. 对齐进程窗口，确认 `bitcoind`、`ckpool`、`rockbase-lcdui`、内核线程的 CPU 与 RSS。
+6. 检查 `oom>0`、持续 `blocked>0`、高温等严重异常。
 
 ---
 
