@@ -42,6 +42,11 @@ The core of Rockbase is a **standalone Bitcoin node you can mine against**:
 - **Fast cold start (optional)** — a "full image" ships with pre-seeded block data, skipping
   most of the initial chain download.
 
+> **Note: the node itself contributes no mining hashrate.** Rockbase is a service provider,
+> not a miner — think of it as bringing a "mining pool" into your home: your miners connect
+> to your own node, so your mining no longer depends on any third-party pool. This also makes
+> mining viable in regions where access to public pools is restricted or unavailable.
+
 ## What It Cannot Do
 
 Explicit capability boundaries of the node:
