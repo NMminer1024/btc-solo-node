@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Generate the lcdui full-screen peer-map backdrop:
-world_map_800x480.argb (raw ARGB8888, LVGL byte order B,G,R,A per pixel).
+"""Generate the lcdui peer-map backdrop:
+world_map_800x408.argb (raw ARGB8888, LVGL byte order B,G,R,A per pixel).
+The map renders below the 72px title bar, so the canvas is 800x408.
 
 Same projection as tools/gen_world_map.py (equirectangular, lat 85..-60,
 LON_CENTER=170 so the seam sits mid-Atlantic east of Greenland), rendered
-at 800x480 for the Rockbase LCD. Dark theme colors match the web peer map:
-  background #0b0e14, graticule rgba(120,130,150,0.35),
-  land fill rgba(130,140,160,0.55), borders rgba(170,180,200,0.8).
+at 800x408 for the Rockbase LCD. Dark blue tech theme (darker/bluer than the web map):
+  background #060a13, graticule rgba(70,95,140,0.30),
+  land fill rgba(85,105,145,0.50), borders rgba(120,145,190,0.70).
 
 Usage: gen_world_map_image.py [countries.geojson] [out.argb]
 Default input: /tmp/ne_110m_countries.geojson
@@ -16,14 +17,14 @@ import sys
 
 from PIL import Image, ImageDraw
 
-W, H = 800, 480
+W, H = 800, 408
 LAT_MAX, LAT_MIN = 85, -60
 LON_CENTER = 170
 
-BG = (0x0b, 0x0e, 0x14)
-GRATICULE = (120, 130, 150, 89)   # 0.35 * 255
-LAND_FILL = (130, 140, 160, 140)  # 0.55 * 255
-BORDER = (170, 180, 200, 204)     # 0.8 * 255
+BG = (0x06, 0x0a, 0x13)
+GRATICULE = (70, 95, 140, 76)     # 0.30 * 255
+LAND_FILL = (85, 105, 145, 128)   # 0.50 * 255
+BORDER = (120, 145, 190, 178)     # 0.70 * 255
 
 
 def norm_lon(lon):
@@ -66,7 +67,7 @@ def ring_to_segments(coords):
 def main():
     geo_path = sys.argv[1] if len(sys.argv) > 1 else "/tmp/ne_110m_countries.geojson"
     out_path = sys.argv[2] if len(sys.argv) > 2 else \
-        "buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/usr/share/rockbase-lcdui/world_map_800x480.argb"
+        "buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/usr/share/rockbase-lcdui/world_map_800x408.argb"
 
     with open(geo_path) as f:
         geo = json.load(f)

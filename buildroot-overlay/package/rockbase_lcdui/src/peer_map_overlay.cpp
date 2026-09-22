@@ -14,9 +14,12 @@ namespace {
 
 constexpr int32_t kWidth = 800;
 constexpr int32_t kHeight = 480;
-constexpr size_t kFrameBytes = static_cast<size_t>(kWidth) * kHeight * 4;
+// The map renders below the 72px title bar (title + close button row).
+constexpr int32_t kMapTop = 72;
+constexpr int32_t kMapHeight = kHeight - kMapTop;  // 408
+constexpr size_t kFrameBytes = static_cast<size_t>(kWidth) * kMapHeight * 4;
 constexpr const char* kMapPath =
-    "/usr/share/rockbase-lcdui/world_map_800x480.argb";
+    "/usr/share/rockbase-lcdui/world_map_800x408.argb";
 constexpr const char* kGeoipBin = "/usr/bin/rockbase-geoip";
 constexpr double kLatMax = 85.0;
 constexpr double kLatMin = -60.0;
@@ -112,20 +115,22 @@ PeerMapOverlay::Geo lookup_geo(const std::string& ip) {
 }
 
 void project(double lat, double lon, int32_t& x, int32_t& y) {
+    // Coordinates are relative to the map buffer (800 x 408); the buffer is
+    // blitted at (0, kMapTop) on screen.
     const double lo = kLonCenter - 180.0;
     double nlon = std::fmod(lon - lo, 360.0);
     if (nlon < 0.0) nlon += 360.0;
     nlon += lo;
     x = static_cast<int32_t>(std::lround((nlon - lo) / 360.0 * kWidth));
     y = static_cast<int32_t>(std::lround((kLatMax - lat) /
-                                         (kLatMax - kLatMin) * kHeight));
+                                         (kLatMax - kLatMin) * kMapHeight));
     x = std::max(0, std::min(kWidth - 1, x));
-    y = std::max(0, std::min(kHeight - 1, y));
+    y = std::max(0, std::min(kMapHeight - 1, y));
 }
 
 void blend_pixel(std::vector<uint8_t>& buf, int32_t x, int32_t y,
                  uint32_t rgb, uint8_t alpha = 255) {
-    if (x < 0 || x >= kWidth || y < 0 || y >= kHeight) return;
+    if (x < 0 || x >= kWidth || y < 0 || y >= kMapHeight) return;
     const size_t off = (static_cast<size_t>(y) * kWidth + x) * 4;
     const uint8_t sr = static_cast<uint8_t>((rgb >> 16) & 0xff);
     const uint8_t sg = static_cast<uint8_t>((rgb >> 8) & 0xff);
@@ -177,9 +182,9 @@ void PeerMapOverlay::open(const std::vector<std::string>& peer_ips, const Geo& s
     if (!map_ready_) {
         backdrop_.assign(kFrameBytes, 0);
         for (size_t i = 0; i < kFrameBytes; i += 4) {
-            backdrop_[i] = 0x14;
-            backdrop_[i + 1] = 0x0e;
-            backdrop_[i + 2] = 0x0b;
+            backdrop_[i] = 0x13;
+            backdrop_[i + 1] = 0x0a;
+            backdrop_[i + 2] = 0x06;
             backdrop_[i + 3] = 0xff;
         }
     }
@@ -189,7 +194,7 @@ void PeerMapOverlay::open(const std::vector<std::string>& peer_ips, const Geo& s
     lv_obj_remove_style_all(root_);
     lv_obj_set_size(root_, LV_PCT(100), LV_PCT(100));
     lv_obj_set_pos(root_, 0, 0);
-    lv_obj_set_style_bg_color(root_, lv_color_hex(0x0b0e14), 0);
+    lv_obj_set_style_bg_color(root_, lv_color_hex(0x060a13), 0);
     lv_obj_set_style_bg_opa(root_, LV_OPA_COVER, 0);
     lv_obj_clear_flag(root_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(root_, LV_OBJ_FLAG_CLICKABLE);
@@ -198,7 +203,7 @@ void PeerMapOverlay::open(const std::vector<std::string>& peer_ips, const Geo& s
     img_dsc_.header.magic = LV_IMAGE_HEADER_MAGIC;
     img_dsc_.header.cf = LV_COLOR_FORMAT_ARGB8888;
     img_dsc_.header.w = kWidth;
-    img_dsc_.header.h = kHeight;
+    img_dsc_.header.h = kMapHeight;
     img_dsc_.header.stride = kWidth * 4;
     img_dsc_.data_size = static_cast<uint32_t>(buf_.size());
     img_dsc_.data = buf_.data();
@@ -206,14 +211,14 @@ void PeerMapOverlay::open(const std::vector<std::string>& peer_ips, const Geo& s
     map_img_ = lv_image_create(root_);
     lv_obj_remove_style_all(map_img_);
     lv_image_set_src(map_img_, &img_dsc_);
-    lv_obj_set_pos(map_img_, 0, 0);
+    lv_obj_set_pos(map_img_, 0, kMapTop);
 
     // Header readability comes from subtle solid strips, not a floating card.
     lv_obj_t* header = lv_obj_create(root_);
     lv_obj_remove_style_all(header);
     lv_obj_set_size(header, kWidth, 72);
     lv_obj_set_pos(header, 0, 0);
-    lv_obj_set_style_bg_color(header, lv_color_hex(0x0b0e14), 0);
+    lv_obj_set_style_bg_color(header, lv_color_hex(0x060a13), 0);
     lv_obj_set_style_bg_opa(header, LV_OPA_70, 0);
     lv_obj_clear_flag(header, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -297,7 +302,12 @@ void PeerMapOverlay::draw_arc(int32_t x1, int32_t y1, int32_t x2, int32_t y2,
     const double cy = my + ny * dist * 0.18;
 
     constexpr int kSteps = 120;
-    const int dash_phase = static_cast<int>(t * 28.0) % 14;
+    // Dash pattern: 2 on / 4 off (~5px dashes at 120 steps, matching the
+    // web map's 5/9 dash scaled to the 800px canvas). The phase subtracts
+    // from the step index so the visible dashes travel from the start point
+    // toward the destination (self -> peer), matching the web map's
+    // negative lineDashOffset.
+    const int dash_phase = static_cast<int>(t * 28.0) % 6;
     int32_t prev_x = x1;
     int32_t prev_y = y1;
     for (int i = 1; i <= kSteps; ++i) {
@@ -307,7 +317,8 @@ void PeerMapOverlay::draw_arc(int32_t x1, int32_t y1, int32_t x2, int32_t y2,
             one * one * x1 + 2.0 * one * u * cx + u * u * x2));
         const int32_t y = static_cast<int32_t>(std::lround(
             one * one * y1 + 2.0 * one * u * cy + u * u * y2));
-        if (((i + dash_phase) % 14) < 6) {
+        const int pos = ((i - dash_phase) % 6 + 6) % 6;
+        if (pos < 2) {
             draw_line(buf_, prev_x, prev_y, x, y, color, 220, 1);
         }
         prev_x = x;
