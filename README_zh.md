@@ -34,33 +34,35 @@ Rockbase 是一台面向个人矿工的小型硬件设备：
 
 ## 能做什么
 
-| 能力 | 说明 |
-|------|------|
-| 区块验证 | 完整验证区块头 + 区块体（pruned 存储，仅保留最近 ~4GB 区块数据） |
-| Solo / 本地挖矿 | 内置 ckpool Stratum 服务，矿机指向本机 `stratum+tcp://<board-ip>:3333` 即可 |
-| 快速冷启动 | 支持带 seed 的"完整镜像"（预置区块数据），上电后跳过大部分下载时间 |
-| LCD 交互 | 触摸翻页（Bitcoind / Stratum / System / Network 四页）、Peer Map 全球节点分布图、OTA 弹窗 |
-| Web 监控 | 浏览器实时查看同步状态、算力、温度、网络、日志 |
-| OTA 升级 | 从 GitHub Releases / 生产域名拉取签名固件，A/B 槽切换，断电安全（写盘中断电不影响已启动槽） |
-| 网络自适应 | 统一镜像同时含 USB 网卡与 SDIO WiFi 驱动，运行时 `rockbase_netsel.sh` 按所插硬件自动选择 |
-| 1G/2G 内存自适应 | U-Boot 运行时探测 DDR 容量，同一镜像兼容两种板子 |
+Rockbase 的核心是一台**可以对着它挖矿的独立 Bitcoin 节点**：
+
+- **独立验证 Bitcoin 链**——完整验证区块头 + 区块体，pruned 存储（`prune=4096`，
+  仅保留最近 ~4GB 区块），不依赖任何外部节点。
+- **开箱即用的 Solo 挖矿**——内置 ckpool Stratum v1/v2 服务，矿机指向
+  `stratum+tcp://<board-ip>:3333` 即可直接对着自己的节点挖矿。
+- **快速冷启动（可选）**——"完整镜像"预置区块数据，上电后跳过大部分链下载时间。
+
+设备上的其他能力都服务于这个核心：
+
+- 800×480 触摸 LCD——同步进度、算力、全球 Peer Map
+- Web 监控页面（`http://<board-ip>/`）——节点/挖矿/网络状态实时可见
+- A/B 双槽 OTA——签名固件升级，断电安全
+- 同一镜像兼容所有硬件变体（USB 网卡 / SDIO WiFi、1G / 2G 内存，启动时自动选择）
 
 ## 不能做什么
 
-明确的能力边界，避免误用：
+明确节点的能力边界，避免误用：
 
 - **不是全节点（full node）**：`prune=4096` 只保留最近 ~4GB 区块，无法提供完整历史区块/UTXO 查询，
   不能作为其他节点的全量数据源，也不支持需要完整链数据的 RPC（如全量 `getblockfilter`、
   长范围 `scantxoutset`）。
 - **不是矿池（pool）**：ckpool 面向单机/小团队 solo 场景，没有多用户账户体系、
   没有 PPLNS 等复杂奖励分配，不适合运营公共矿池。
-- **无 IPv6**：`onlynet=ipv4`，仅 IPv4 组网。
-- **连接数受限**：`maxconnections=10`（NAT 后无 inbound），peer 数量少，
-  冷启动同步速度受限于上行带宽与 peer 质量。
 - **无钱包功能**：bitcoind 以 server 模式运行，不面向终端用户做钱包。
-- **算力有限**：K230 是 RISC-V 应用处理器，CPU 挖矿效率极低——
+- **不是算力来源**：K230 是 RISC-V 应用处理器，CPU 挖矿效率极低——
   本设备的价值在于**验证 + 本地 Stratum 出口**，不是挖矿算力本身。
-- **无 swap**：内存紧张时依赖 OOM 策略，不要往板上跑额外的大内存服务。
+- **仅 IPv4、peer 有限**：`onlynet=ipv4`、`maxconnections=10`（NAT 后无 inbound），
+  冷启动同步速度受限于上行带宽与 peer 质量。
 
 ## 硬件与运行组件
 

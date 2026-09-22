@@ -33,34 +33,36 @@ Rockbase is a small hardware device for individual miners:
 
 ## What It Can Do
 
-| Capability | Notes |
-|------------|-------|
-| Block validation | Full header + block validation (pruned storage, keeps only the most recent ~4 GB of blocks) |
-| Solo / local mining | Built-in ckpool Stratum service — point your miner at `stratum+tcp://<board-ip>:3333` |
-| Fast cold start | Optional "full image" ships with pre-seeded block data, skipping most of the initial download |
-| LCD interaction | Touch paging (Bitcoind / Stratum / System / Network), global peer map, OTA prompt |
-| Web monitoring | Live sync state, hashrate, temperature, network, logs in the browser |
-| OTA upgrade | Signed firmware from GitHub Releases / production domain, A/B slot switch, power-fail safe |
-| Network auto-select | One image carries both USB NIC and SDIO WiFi drivers; `rockbase_netsel.sh` picks at runtime |
-| 1G/2G RAM auto-detect | U-Boot probes DDR size at boot; one image fits both board variants |
+The core of Rockbase is a **standalone Bitcoin node you can mine against**:
+
+- **Validates the Bitcoin chain on its own** — full header + block validation, pruned storage
+  (`prune=4096`, keeps the most recent ~4 GB of blocks). No external node required.
+- **Solo mining out of the box** — built-in ckpool Stratum v1/v2 service; point your miner at
+  `stratum+tcp://<board-ip>:3333` and mine directly against your own node.
+- **Fast cold start (optional)** — a "full image" ships with pre-seeded block data, skipping
+  most of the initial chain download.
+
+Everything else on the device serves this core:
+
+- 800×480 touch LCD — sync progress, hashrate, global peer map
+- Web dashboard at `http://<board-ip>/` — live node/mining/network status
+- A/B slot OTA — signed firmware upgrades, power-fail safe
+- One image fits all hardware variants (USB NIC / SDIO WiFi, 1G / 2G RAM, auto-selected at boot)
 
 ## What It Cannot Do
 
-Explicit capability boundaries:
+Explicit capability boundaries of the node:
 
 - **Not a full node**: `prune=4096` keeps only the most recent ~4 GB of blocks. It cannot serve
   full historical blocks/UTXOs to other nodes, and RPCs requiring full chain data
   (all `getblockfilter`, long-range `scantxoutset`, …) are not supported.
 - **Not a mining pool**: ckpool targets solo / small-team use. No multi-user account system,
   no PPLNS-style reward schemes — not suitable for running a public pool.
-- **No IPv6**: `onlynet=ipv4`, IPv4-only networking.
-- **Limited connections**: `maxconnections=10` (no inbound behind NAT); cold-start sync speed
-  is bounded by uplink bandwidth and peer quality.
 - **No wallet**: bitcoind runs in server mode; it is not a user-facing wallet.
-- **Modest CPU**: the K230 is a RISC-V application processor — CPU mining efficiency is very low.
-  The device's value is **validation + a local Stratum endpoint**, not hashrate.
-- **No swap**: under memory pressure the OOM killer decides; don't run extra memory-hungry
-  services on the board.
+- **Not a hashrate source**: the K230 is a RISC-V application processor — CPU mining efficiency
+  is very low. The device's value is **validation + a local Stratum endpoint**, not mining power.
+- **IPv4 only, limited peers**: `onlynet=ipv4`, `maxconnections=10` (no inbound behind NAT);
+  cold-start sync speed is bounded by uplink bandwidth and peer quality.
 
 ## Hardware & Runtime Components
 
