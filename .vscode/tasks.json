@@ -6,10 +6,7 @@
             "type": "shell",
             "command": "make",
             "options": {
-                "cwd": "${workspaceFolder}",
-                "env": {
-                    "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-                }
+                "cwd": "${workspaceFolder}"
             },
             "args": [
                 "CONF=k230_rockbase_defconfig"
