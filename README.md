@@ -42,13 +42,6 @@ The core of Rockbase is a **standalone Bitcoin node you can mine against**:
 - **Fast cold start (optional)** — a "full image" ships with pre-seeded block data, skipping
   most of the initial chain download.
 
-Everything else on the device serves this core:
-
-- 800×480 touch LCD — sync progress, hashrate, global peer map
-- Web dashboard at `http://<board-ip>/` — live node/mining/network status
-- A/B slot OTA — signed firmware upgrades, power-fail safe
-- One image fits all hardware variants (USB NIC / SDIO WiFi, 1G / 2G RAM, auto-selected at boot)
-
 ## What It Cannot Do
 
 Explicit capability boundaries of the node:
