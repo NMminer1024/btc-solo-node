@@ -26,7 +26,7 @@
 Rockbase is a small hardware device for individual miners:
 
 - **Bitcoin Core v31.1** (pruned mode, `prune=4096`) downloads and validates blocks;
-- **ckpool** serves a local Stratum v1/v2 interface — miners connect directly to the board;
+- **Built-in Stratum v1/v2 service** — miners connect directly to the board;
 - **rockbase-lcdui** (LVGL) drives the 800×480 touch panel: sync progress, hashrate, peer map, etc.;
 - **rockbase-webd** serves a web dashboard and status API at `http://<board-ip>/`;
 - **A/B slot OTA**: U-Boot manages two rootfs slots; OTA writes the inactive slot and rolls back automatically on failure.
@@ -37,7 +37,7 @@ The core of Rockbase is a **standalone Bitcoin node you can mine against**:
 
 - **Validates the Bitcoin chain on its own** — full header + block validation, pruned storage
   (`prune=4096`, keeps the most recent ~4 GB of blocks). No external node required.
-- **Solo mining out of the box** — built-in ckpool Stratum v1/v2 service; point your miner at
+- **Solo mining out of the box** — built-in Stratum v1/v2 service; point your miner at
   `stratum+tcp://<board-ip>:3333` and mine directly against your own node.
 - **Fast cold start (optional)** — a "full image" ships with pre-seeded block data, skipping
   most of the initial chain download.
@@ -54,7 +54,7 @@ Explicit capability boundaries of the node:
 - **Not a full node**: `prune=4096` keeps only the most recent ~4 GB of blocks. It cannot serve
   full historical blocks/UTXOs to other nodes, and RPCs requiring full chain data
   (all `getblockfilter`, long-range `scantxoutset`, …) are not supported.
-- **Not a mining pool**: ckpool targets solo / small-team use. No multi-user account system,
+- **Not a mining pool**: the built-in Stratum service targets solo / small-team use. No multi-user account system,
   no PPLNS-style reward schemes — not suitable for running a public pool.
 - **No wallet**: bitcoind runs in server mode; it is not a user-facing wallet.
 - **Not a hashrate source**: the K230 is a RISC-V application processor — CPU mining efficiency
@@ -78,7 +78,7 @@ Key resident processes:
 | Process | Role |
 |---------|------|
 | `bitcoind` | Bitcoin Core v31.1, datadir `/root/block` (blockdata partition) |
-| `ckpool` | Local Stratum service |
+| Stratum service | Local Stratum v1/v2 (port 3333) |
 | `rockbase-lcdui` | LVGL touch UI (peer map, OTA prompt) |
 | `rockbase-webd` | Web dashboard + status API (`/root/web`) |
 | `rockbase_status` | Status collector (feeds LCD/Web) |

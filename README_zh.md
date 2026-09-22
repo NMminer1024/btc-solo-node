@@ -27,7 +27,7 @@
 Rockbase 是一台面向个人矿工的小型硬件设备：
 
 - **Bitcoin Core v31.1**（pruned 模式，`prune=4096`）负责区块下载与验证；
-- **ckpool** 提供本地 Stratum v1/v2 接口，矿机直连本机即可出块挖矿；
+- **内置 Stratum v1/v2 服务**，矿机直连本机即可出块挖矿；
 - **rockbase-lcdui**（LVGL）驱动 800×480 触摸屏，展示同步进度、算力、Peer Map 等；
 - **rockbase-webd** 提供 Web 监控页面与状态 API（浏览器访问 `http://<board-ip>/`）；
 - **A/B 双槽 OTA**：U-Boot 管理两个 rootfs 槽位，OTA 写对侧槽、失败自动回滚。
@@ -38,7 +38,7 @@ Rockbase 的核心是一台**可以对着它挖矿的独立 Bitcoin 节点**：
 
 - **独立验证 Bitcoin 链**——完整验证区块头 + 区块体，pruned 存储（`prune=4096`，
   仅保留最近 ~4GB 区块），不依赖任何外部节点。
-- **开箱即用的 Solo 挖矿**——内置 ckpool Stratum v1/v2 服务，矿机指向
+- **开箱即用的 Solo 挖矿**——内置 Stratum v1/v2 服务，矿机指向
   `stratum+tcp://<board-ip>:3333` 即可直接对着自己的节点挖矿。
 - **快速冷启动（可选）**——"完整镜像"预置区块数据，上电后跳过大部分链下载时间。
 
@@ -53,7 +53,7 @@ Rockbase 的核心是一台**可以对着它挖矿的独立 Bitcoin 节点**：
 - **不是全节点（full node）**：`prune=4096` 只保留最近 ~4GB 区块，无法提供完整历史区块/UTXO 查询，
   不能作为其他节点的全量数据源，也不支持需要完整链数据的 RPC（如全量 `getblockfilter`、
   长范围 `scantxoutset`）。
-- **不是矿池（pool）**：ckpool 面向单机/小团队 solo 场景，没有多用户账户体系、
+- **不是矿池（pool）**：内置 Stratum 服务面向单机/小团队 solo 场景，没有多用户账户体系、
   没有 PPLNS 等复杂奖励分配，不适合运营公共矿池。
 - **无钱包功能**：bitcoind 以 server 模式运行，不面向终端用户做钱包。
 - **不是算力来源**：K230 是 RISC-V 应用处理器，CPU 挖矿效率极低——
@@ -77,7 +77,7 @@ Rockbase 的核心是一台**可以对着它挖矿的独立 Bitcoin 节点**：
 | 进程 | 职责 |
 |------|------|
 | `bitcoind` | Bitcoin Core v31.1，datadir `/root/block`（blockdata 分区） |
-| `ckpool` | 本地 Stratum 服务 |
+| Stratum 服务 | 本地 Stratum v1/v2（端口 3333） |
 | `rockbase-lcdui` | LVGL 触摸 UI（含 Peer Map、OTA 弹窗） |
 | `rockbase-webd` | Web 监控 + 状态 API（`/root/web`） |
 | `rockbase_status` | 状态采集（供 LCD/Web 读取） |
