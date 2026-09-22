@@ -101,11 +101,15 @@ flowchart LR
 2. 编辑仓库根 `VERSION` 文件，写入新版本号（纯数字，不带 `v`，**PATCH 两位**）。
 3. 单独提交，commit message 里说明升版原因，例如：
    `chore(version): bump to 0.0.02 (fix system page load-avg card removal)`。
-4. 版本号只能递增，不能回退；同一个版本号已经发布过 OTA release 后不能复用
+4. **在升版 commit 上打 git tag**：`git tag v<VERSION>`（如 `git tag v0.0.02`）。
+   tag 名带 `v` 前缀，与 `VERSION` 文件内容一一对应；tag 必须指向升版 commit
+   （即包含 `VERSION` 文件改动的那个 commit），不要打在功能 commit 上。
+   有远端时一并推送：`git push origin v<VERSION>`。
+5. 版本号只能递增，不能回退；同一个版本号已经发布过 OTA release 后不能复用
    （见 `rockbase-ota-release` skill 里"同一 vX.X.XX+board+date+sha 只能发布一次"的规则）。
    已发布版本发现 bug：PATCH +1 发修复版（如 `0.0.01` 有 bug → 发 `0.0.02`），
    不要试图覆盖或撤回已发布 release。
-5. 需要发布 OTA 时，先确认 `VERSION` 已经按第 1-3 步更新完，再走
+6. 需要发布 OTA 时，先确认 `VERSION` 已经按第 1-4 步更新完（含 tag），再走
    `rockbase-build` → `rockbase-ota-release` → `rockbase-ota` 三步链路。
 
 ## 常见错误
@@ -117,3 +121,5 @@ flowchart LR
   `vX.X.XX`。
 - 不要跳过 `VERSION` 文件直接在发布脚本里手写版本号——`rockbase-ota-release`
   的默认值必须来自这个文件，手写等于绕过唯一真源。
+- 升版后忘记打 git tag——每次升版 commit 后必须 `git tag v<VERSION>` 并推送，
+  否则后续无法从 tag 追溯该版本的完整源码状态。
