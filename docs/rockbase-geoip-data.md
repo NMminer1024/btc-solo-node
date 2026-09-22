@@ -5,11 +5,13 @@
 
 ## 许可约束
 
-- GeoLite2 免费数据**可用于产品**（含嵌入式设备），但 **mmdb 文件本身不可公开再分发**。
-- 因此该文件**不进入 git**（已在 `.gitignore` 排除），也不由 buildroot 包安装。
-- 需要 MaxMind 账号（免费）+ license key 下载。
+- GeoLite2 免费数据**可用于产品**（含嵌入式设备）。
+- 该文件**已进入 git 跟踪**（`buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/usr/share/GeoLite2-City.mmdb`），
+  任何 clone + 构建都会把 `/usr/share/GeoLite2-City.mmdb` 打进镜像，无需手动 provision。
+- 注意：文件约 65MB，超过 GitHub 推荐的 50MB 单文件大小，push 时会触发 GH001 警告（可正常提交）。
+- 若需更新数据，仍需 MaxMind 账号（免费）+ license key 下载。
 
-## 获取方式
+## 更新方式
 
 1. 注册 https://dev.maxmind.com/geoip/geolite2-free-geolocation-data
 2. 创建 license key，用官方 `geoipupdate` 工具拉取：
@@ -22,14 +24,17 @@
 ./geoipupdate -f GeoIP.conf -d /tmp/geoip
 ```
 
-3. 放入 overlay（构建时会随 rootfs 打进镜像）：
+3. 覆盖 overlay 中已跟踪的文件（构建时会随 rootfs 打进镜像）：
 
 ```sh
 cp /tmp/geoip/GeoLite2-City.mmdb \
    buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/usr/share/
+git add buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/usr/share/GeoLite2-City.mmdb
+git commit -m "chore: refresh GeoLite2-City.mmdb"
+git push origin dev
 ```
 
-4. 热部署到板子验证：
+4. 热部署到板子验证（可选）：
 
 ```sh
 scp .../GeoLite2-City.mmdb root@<board>:/usr/share/
