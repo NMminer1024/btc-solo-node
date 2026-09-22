@@ -609,6 +609,15 @@ void draw_cached_indicator(uint32_t* dst, uint32_t stride_px) {
     if (!g_show_page_indicator) {
         return;
     }
+    // The dots are blitted straight into the framebuffer on top of LVGL
+    // content, so they would punch through full-screen overlays (peer map,
+    // OTA, settings, ...). Hide them while any overlay is active.
+    if (g_network_settings_overlay.active() || g_wifi_config_overlay.active() ||
+        g_timezone_overlay.active() || g_miners_overlay.active() ||
+        g_peer_map_overlay.active() || g_ota_overlay.active() ||
+        g_firmware_update_overlay.active()) {
+        return;
+    }
     constexpr int32_t kDotSize = 10;
     constexpr int32_t kDotStartX = 359;
     constexpr int32_t kDotStepX = 24;

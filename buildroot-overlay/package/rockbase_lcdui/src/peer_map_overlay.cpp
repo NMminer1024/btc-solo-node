@@ -218,9 +218,19 @@ void PeerMapOverlay::open(const std::vector<std::string>& peer_ips, const Geo& s
     lv_obj_remove_style_all(header);
     lv_obj_set_size(header, kWidth, 72);
     lv_obj_set_pos(header, 0, 0);
-    lv_obj_set_style_bg_color(header, lv_color_hex(0x060a13), 0);
-    lv_obj_set_style_bg_opa(header, LV_OPA_70, 0);
+    // Slightly lighter navy than the map backdrop so the title row reads as
+    // its own band, with a thin divider line keeping the tech aesthetic.
+    lv_obj_set_style_bg_color(header, lv_color_hex(0x0d1730), 0);
+    lv_obj_set_style_bg_opa(header, LV_OPA_COVER, 0);
     lv_obj_clear_flag(header, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* divider = lv_obj_create(root_);
+    lv_obj_remove_style_all(divider);
+    lv_obj_set_size(divider, kWidth, 1);
+    lv_obj_set_pos(divider, 0, 71);
+    lv_obj_set_style_bg_color(divider, lv_color_hex(0x24365a), 0);
+    lv_obj_set_style_bg_opa(divider, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(divider, LV_OBJ_FLAG_SCROLLABLE);
 
     title_label_ = lv_label_create(header);
     lv_label_set_text(title_label_, "Peer Map");
@@ -301,26 +311,39 @@ void PeerMapOverlay::draw_arc(int32_t x1, int32_t y1, int32_t x2, int32_t y2,
     const double cx = mx + nx * dist * 0.18;
     const double cy = my + ny * dist * 0.18;
 
-    constexpr int kSteps = 120;
-    // Dash pattern: 2 on / 4 off (~5px dashes at 120 steps, matching the
-    // web map's 5/9 dash scaled to the 800px canvas). The phase subtracts
-    // from the step index so the visible dashes travel from the start point
-    // toward the destination (self -> peer), matching the web map's
-    // negative lineDashOffset.
-    const int dash_phase = static_cast<int>(t * 28.0) % 6;
+    // Fixed pixel-length dashes (5px on / 9px off, matching the web map's
+    // [5,9]) that scroll at a constant pixel speed toward the destination,
+    // independent of the arc length. The phase subtracts from the arc-length
+    // position so the visible dashes travel from the start point toward the
+    // destination (self -> peer), matching the web map's negative
+    // lineDashOffset.
+    constexpr double kDashOn = 5.0;
+    constexpr double kDashOff = 9.0;
+    constexpr double kDashPeriod = kDashOn + kDashOff;
+    // At 5 fps, the web speed (28px/s) jumps 5.6px per frame and can trigger
+    // a wagon-wheel illusion against the 14px period. 14px/s moves 2.8px per
+    // frame, making the forward direction unambiguous.
+    constexpr double kScrollSpeed = 14.0;
+    const int steps = std::max(32, static_cast<int>(std::ceil(dist * 1.25)));
+    const double scroll = std::fmod(t * kScrollSpeed, kDashPeriod);
     int32_t prev_x = x1;
     int32_t prev_y = y1;
-    for (int i = 1; i <= kSteps; ++i) {
-        const double u = static_cast<double>(i) / kSteps;
+    double arc_length = 0.0;
+    for (int i = 1; i <= steps; ++i) {
+        const double u = static_cast<double>(i) / steps;
         const double one = 1.0 - u;
         const int32_t x = static_cast<int32_t>(std::lround(
             one * one * x1 + 2.0 * one * u * cx + u * u * x2));
         const int32_t y = static_cast<int32_t>(std::lround(
             one * one * y1 + 2.0 * one * u * cy + u * u * y2));
-        const int pos = ((i - dash_phase) % 6 + 6) % 6;
-        if (pos < 2) {
+        const double segment = std::hypot(x - prev_x, y - prev_y);
+        const double s = arc_length + segment * 0.5;
+        double mod = std::fmod(s - scroll, kDashPeriod);
+        if (mod < 0.0) mod += kDashPeriod;
+        if (mod < kDashOn) {
             draw_line(buf_, prev_x, prev_y, x, y, color, 220, 1);
         }
+        arc_length += segment;
         prev_x = x;
         prev_y = y;
     }
