@@ -15,9 +15,10 @@ FINAL_CACHE=/tmp/status-api.json
 PIDFILE=/var/run/rockbase-statusd.pid
 LOCK_DIR=/var/run/rockbase-statusd.lock
 BTC_RPC_TIMEOUT=60
-# getpeerinfo can take ~5s while bitcoind is under IBD load; 2s caused
-# persistent timeouts that emptied the peer list on the web peer-map.
-CONN_RPC_TIMEOUT=10
+# getpeerinfo can take 6-23s on the single-core K230 while bitcoind is
+# under IBD load (cs_vNodes lock contention); 2s caused persistent
+# timeouts that emptied the peer list on the web peer-map.
+CONN_RPC_TIMEOUT=30
 SYNC_HEADER_LAG=2
 SYSTEM_INTERVAL=15
 BITCOIN_CHAIN_INTERVAL=600
