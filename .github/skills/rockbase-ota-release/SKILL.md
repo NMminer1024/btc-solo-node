@@ -1,6 +1,6 @@
 ---
 name: rockbase-ota-release
-description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 仓库，校验 manifest / 签名 / 校验和，或在不重新编译镜像的前提下更新版本化 OTA 发布。
+description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 仓库，校验 manifest / 签名 / 校验和，或在不重新编译镜像的前提下更新版本化 OTA 发布。也包含发布仓库 README 双语规则（英文被 git 跟踪发布、中文本地参考不跟踪、中英同步修改）。Use when: OTA 发布, release, README, 双语, 中英文, 产品说明, 发布仓库文档.
 ---
 
 # Rockbase OTA 发布
@@ -103,6 +103,26 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
 - 源码仓库和发布仓库要分开。
 - 没有发布仓库写权限时，不要尝试绕过流程。
 - **签名密钥必须与源码固化公钥配对**，发布前核对不一致就先处理，不要带着不匹配的密钥发布。
+
+## README 双语规则（发布仓库）
+
+发布仓库的 README 采用「英文发布 + 中文本地参考」模式：
+
+- **git 只跟踪英文版 `README.md`**（GitHub 默认展示，最终发布物）。
+- **中文版 `README.zh-CN.md` 不被 git 跟踪**（已写入发布仓库 `.gitignore`），
+  仅作为本地参考阅读、方便纠错。文件保留在本地工作目录，不要删除。
+- **每次修改 README 内容时，必须中英两份同步修改**：先改哪份都行，但提交前
+  确认两份内容一致（章节、事实、图片引用都要对齐），只提交 `README.md`。
+- 两份文件顶部都有语言切换链接（`[ English ] · [ 中文 ](README.zh-CN.md)` 互链），
+  保持这个格式。
+- 检查命令：
+  ```bash
+  cd "$RELEASE_WORKDIR"
+  git status --short          # README.zh-CN.md 不应出现在待提交列表
+  git check-ignore README.zh-CN.md   # 应输出该文件名（确认被忽略）
+  ```
+- 如果 `git status` 里出现 `README.zh-CN.md`（说明被误跟踪），执行
+  `git rm --cached README.zh-CN.md` 取消跟踪，文件本身保留。
 
 ## 常用命令
 
