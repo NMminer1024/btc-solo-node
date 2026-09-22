@@ -1,7 +1,11 @@
 # GeoLite2-City.mmdb 数据文件管理
 
-`rockbase-geoip` 工具依赖 MaxMind GeoLite2-City 数据库
-（`/usr/share/GeoLite2-City.mmdb`，约 65MB）。
+`rockbase-geoip` 工具依赖 MaxMind GeoLite2-City 数据库（约 65MB）。
+
+**默认搜索顺序**（`rockbase-geoip` 无参数时，`/api/geoip.cgi` 同规则）：
+1. `/root/config/GeoLite2-City.mmdb` — config 分区，仅作**热修逃生舱**
+   （临时 scp 覆盖验证，不随 OTA 更新）；
+2. `/usr/share/GeoLite2-City.mmdb` — rootfs，**常规唯一真源**，随 OTA 更新。
 
 ## 许可约束
 
@@ -40,9 +44,26 @@ git push origin dev
 scp .../GeoLite2-City.mmdb root@<board>:/usr/share/
 ```
 
+## 放置策略：rootfs（随 OTA）而非 config 分区
+
+数据库放 rootfs、随 OTA 更新，**不**放 config 分区。理由：
+
+- **新鲜度**：GeoLite2 每月更新；放 rootfs 则每次 OTA 都带构建时验证过的版本，
+  镜像即唯一真源。放 config 分区会冻结在首次 seed 的版本，除非另写升级逻辑。
+- **分区定位**：config 分区存用户/设备状态（WiFi profile、bitcoin.conf、ckpool
+  数据、历史曲线），需跨 OTA 保留；mmdb 是厂商数据文件，不是用户状态。
+- **避免版本漂移**：同一固件版本的所有设备 geo 数据一致；config 方案下不同
+  首烧时间的设备会持有不同版本数据库。
+- **零额外代码**：不需要版本比较/下载/原子替换逻辑，没有半写失败模式。
+- **容量**：config 分区仅 1G，65MB 厂商数据占近 7% 不划算。
+
+`/root/config/` 优先搜索路径保留为逃生舱：紧急热修数据库时 scp 到 config 分区
+即可覆盖，无需重打 OTA；常规路径永远是 OTA 带的 `/usr/share/` 版本。
+
 ## 更新频率
 
-建议每月跑一次 `geoipupdate` 并替换 overlay 中的文件（数据每月更新）。
+建议每月跑一次 `geoipupdate` 并替换 overlay 中的文件（数据每月更新），
+随下一次 OTA 发布生效。
 
 ## 降级行为
 

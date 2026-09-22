@@ -37,7 +37,9 @@ echo "Cache-Control: no-store, no-cache, must-revalidate"
 echo "Pragma: no-cache"
 echo ""
 
-if [ ! -x "$GEOIP_BIN" ] || [ ! -r /usr/share/GeoLite2-City.mmdb ]; then
+# mmdb ships in rootfs (/usr/share/, updated via OTA); /root/config/ is a
+# hot-fix override. rockbase-geoip resolves the same search order.
+if [ ! -x "$GEOIP_BIN" ] || { [ ! -r /root/config/GeoLite2-City.mmdb ] && [ ! -r /usr/share/GeoLite2-City.mmdb ]; }; then
   printf '{"ok":false,"error":"geoip unavailable"}'
   exit 0
 fi

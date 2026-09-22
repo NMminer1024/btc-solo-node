@@ -9,13 +9,14 @@
  * The mmdb is opened once and mmap'd; lookups are O(log n) tree walks.
  *
  * Usage: rockbase-geoip [mmdb-path]
- * Default mmdb path: /usr/share/GeoLite2-City.mmdb
+ * Default mmdb search order: /root/config/ then /usr/share/ (see main).
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <stdbool.h>
+#include <sys/stat.h>
 #include <maxminddb.h>
 
 #define MAX_IPS_PER_LINE 64
@@ -107,11 +108,33 @@ static int lookup_one(MMDB_s *mmdb, const char *ip, FILE *out)
     return 0;
 }
 
+/* Default mmdb search order:
+ * 1. /root/config/GeoLite2-City.mmdb  - config partition, hot-fix escape
+ *    hatch only (scp override for emergency validation; not OTA-managed).
+ * 2. /usr/share/GeoLite2-City.mmdb    - rootfs, the regular source of truth,
+ *    updated with every OTA release.
+ */
+static const char *default_mmdb_paths[] = {
+    "/root/config/GeoLite2-City.mmdb",
+    "/usr/share/GeoLite2-City.mmdb",
+};
+
 int main(int argc, char **argv)
 {
-    const char *mmdb_path = "/usr/share/GeoLite2-City.mmdb";
+    const char *mmdb_path = NULL;
     if (argc > 1)
         mmdb_path = argv[1];
+    else {
+        for (size_t i = 0; i < sizeof(default_mmdb_paths) / sizeof(default_mmdb_paths[0]); i++) {
+            struct stat st;
+            if (stat(default_mmdb_paths[i], &st) == 0 && S_ISREG(st.st_mode)) {
+                mmdb_path = default_mmdb_paths[i];
+                break;
+            }
+        }
+        if (!mmdb_path)
+            mmdb_path = default_mmdb_paths[0]; /* report the primary path in errors */
+    }
 
     MMDB_s mmdb;
     int rc = MMDB_open(mmdb_path, MMDB_MODE_MMAP, &mmdb);
