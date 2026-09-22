@@ -32,7 +32,11 @@ KIMG_DIR=""
 BASE_URL="https://example.invalid/rockbase"   # must be overridden for real releases
 OUT_DIR=""
 HW="rockbase"
-MIN_VERSION="v1.0.0"
+# Default to the first released product version so devices on any current
+# firmware pass the min_version gate. The device-side check only compares the
+# manifest "version" against /etc/version/product_version, but a too-high
+# min_version is still misleading for future gating logic.
+MIN_VERSION="v0.0.01"
 
 while [ $# -gt 0 ]; do
     case "$1" in
