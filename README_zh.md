@@ -37,7 +37,7 @@ Rockbase 是一台面向个人矿工的小型硬件设备：
 | 能力 | 说明 |
 |------|------|
 | 区块验证 | 完整验证区块头 + 区块体（pruned 存储，仅保留最近 ~4GB 区块数据） |
-| Solo / 本地挖矿 | 内置 ckpool Stratum 服务，矿机指向本机 `stratum+tcp://<board-ip>:3256` 即可 |
+| Solo / 本地挖矿 | 内置 ckpool Stratum 服务，矿机指向本机 `stratum+tcp://<board-ip>:3333` 即可 |
 | 快速冷启动 | 支持带 seed 的"完整镜像"（预置区块数据），上电后跳过大部分下载时间 |
 | LCD 交互 | 触摸翻页（Bitcoind / Stratum / System / Network 四页）、Peer Map 全球节点分布图、OTA 弹窗 |
 | Web 监控 | 浏览器实时查看同步状态、算力、温度、网络、日志 |

@@ -36,7 +36,7 @@ Rockbase is a small hardware device for individual miners:
 | Capability | Notes |
 |------------|-------|
 | Block validation | Full header + block validation (pruned storage, keeps only the most recent ~4 GB of blocks) |
-| Solo / local mining | Built-in ckpool Stratum service — point your miner at `stratum+tcp://<board-ip>:3256` |
+| Solo / local mining | Built-in ckpool Stratum service — point your miner at `stratum+tcp://<board-ip>:3333` |
 | Fast cold start | Optional "full image" ships with pre-seeded block data, skipping most of the initial download |
 | LCD interaction | Touch paging (Bitcoind / Stratum / System / Network), global peer map, OTA prompt |
 | Web monitoring | Live sync state, hashrate, temperature, network, logs in the browser |
