@@ -15,7 +15,9 @@ FINAL_CACHE=/tmp/status-api.json
 PIDFILE=/var/run/rockbase-statusd.pid
 LOCK_DIR=/var/run/rockbase-statusd.lock
 BTC_RPC_TIMEOUT=60
-CONN_RPC_TIMEOUT=2
+# getpeerinfo can take ~5s while bitcoind is under IBD load; 2s caused
+# persistent timeouts that emptied the peer list on the web peer-map.
+CONN_RPC_TIMEOUT=10
 SYNC_HEADER_LAG=2
 SYSTEM_INTERVAL=15
 BITCOIN_CHAIN_INTERVAL=600
@@ -621,10 +623,31 @@ collect_bitcoin_conn() {
     # GeoLite2-City.mmdb (/api/geoip.cgi). peers_detail additionally carries
     # the inbound flag per peer so the map can draw flow arcs in the right
     # direction (outbound: us -> peer, inbound: peer -> us).
+    # On RPC failure (e.g. getpeerinfo timeout under IBD load) keep the
+    # previously collected peer lists instead of clobbering them with [].
     peers_json="[]"
     peers_detail_json="[]"
+    peers_ok=0
     if pidof bitcoind >/dev/null 2>&1; then
         peerinfo=$(btc_conn_cli getpeerinfo 2>/dev/null)
+        case "${peerinfo}" in
+            \[*\]*) peers_ok=1 ;;
+        esac
+        [ "${peers_ok}" -eq 1 ] || {
+            # Sourcing the old state also clobbers `connections`/`updated_at`;
+            # snapshot the fresh values and restore them afterwards.
+            _conn_keep="${connections}"
+            [ -r "${BITCOIN_CONN_STATE}" ] && . "${BITCOIN_CONN_STATE}" 2>/dev/null || true
+            connections="${_conn_keep}"
+            case "${peers_json}" in
+                \[*\]*) : ;;
+                *) peers_json="[]" ;;
+            esac
+            case "${peers_detail_json}" in
+                \[*\]*) : ;;
+                *) peers_detail_json="[]" ;;
+            esac
+        }
         peers_csv=$(printf '%s\n' "${peerinfo}" \
             | grep -E '^[[:space:]]*"addr":' \
             | sed -E 's/^[[:space:]]*"addr":[[:space:]]*"([^"]*)".*/\1/' \
