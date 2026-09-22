@@ -1,238 +1,267 @@
-# K230 Linux SDK
+# Rockbase — K230 Bitcoin Solo Mining Node
 
->This document uses the k230d_canmv_defconfig configuration as an example. If you use other configurations, replace k230d_canmv_defconfig with correct names. All the configurations supported by this sdk,  can be found in  buildroot-overlay/configs directory.
+> **Language: English** | [中文](README_zh.md)
 
-## Install toolchain and dependencies
+> A **Bitcoin pruned validating node + local Stratum / solo mining device** built on the Kendryte K230 (RISC-V). Boots from a single SD card, with a built-in 800×480 touch LCD, a web monitoring UI, and A/B slot OTA upgrades.
+
+---
+
+## Table of Contents
+
+- [What It Is](#what-it-is)
+- [What It Can Do](#what-it-can-do)
+- [What It Cannot Do](#what-it-cannot-do)
+- [Hardware & Runtime Components](#hardware--runtime-components)
+- [Building](#building)
+- [Flashing](#flashing)
+- [LCD UI](#lcd-ui)
+- [Developer Workflow](#developer-workflow)
+- [Repository Layout](#repository-layout)
+- [Reference Docs](#reference-docs)
+
+---
+
+## What It Is
+
+Rockbase is a small hardware device for individual miners:
+
+- **Bitcoin Core v31.1** (pruned mode, `prune=4096`) downloads and validates blocks;
+- **ckpool** serves a local Stratum v1/v2 interface — miners connect directly to the board;
+- **rockbase-lcdui** (LVGL) drives the 800×480 touch panel: sync progress, hashrate, peer map, etc.;
+- **rockbase-webd** serves a web dashboard and status API at `http://<board-ip>/`;
+- **A/B slot OTA**: U-Boot manages two rootfs slots; OTA writes the inactive slot and rolls back automatically on failure.
+
+## What It Can Do
+
+| Capability | Notes |
+|------------|-------|
+| Block validation | Full header + block validation (pruned storage, keeps only the most recent ~4 GB of blocks) |
+| Solo / local mining | Built-in ckpool Stratum service — point your miner at `stratum+tcp://<board-ip>:3256` |
+| Fast cold start | Optional "full image" ships with pre-seeded block data, skipping most of the initial download |
+| LCD interaction | Touch paging (Bitcoind / Stratum / System / Network), global peer map, OTA prompt |
+| Web monitoring | Live sync state, hashrate, temperature, network, logs in the browser |
+| OTA upgrade | Signed firmware from GitHub Releases / production domain, A/B slot switch, power-fail safe |
+| Network auto-select | One image carries both USB NIC and SDIO WiFi drivers; `rockbase_netsel.sh` picks at runtime |
+| 1G/2G RAM auto-detect | U-Boot probes DDR size at boot; one image fits both board variants |
+
+## What It Cannot Do
+
+Explicit capability boundaries:
+
+- **Not a full node**: `prune=4096` keeps only the most recent ~4 GB of blocks. It cannot serve
+  full historical blocks/UTXOs to other nodes, and RPCs requiring full chain data
+  (all `getblockfilter`, long-range `scantxoutset`, …) are not supported.
+- **Not a mining pool**: ckpool targets solo / small-team use. No multi-user account system,
+  no PPLNS-style reward schemes — not suitable for running a public pool.
+- **No IPv6**: `onlynet=ipv4`, IPv4-only networking.
+- **Limited connections**: `maxconnections=10` (no inbound behind NAT); cold-start sync speed
+  is bounded by uplink bandwidth and peer quality.
+- **No wallet**: bitcoind runs in server mode; it is not a user-facing wallet.
+- **Modest CPU**: the K230 is a RISC-V application processor — CPU mining efficiency is very low.
+  The device's value is **validation + a local Stratum endpoint**, not hashrate.
+- **No swap**: under memory pressure the OOM killer decides; don't run extra memory-hungry
+  services on the board.
+
+## Hardware & Runtime Components
+
+| Item | Spec |
+|------|------|
+| SoC | Kendryte K230 (dual-core C908 + dual-core C906, RISC-V) |
+| Memory | 1 GB or 2 GB LPDDR4 (probed at runtime by U-Boot; one image fits both) |
+| Display | 800×480 touch LCD (DSI; framebuffer 480×800 ARGB8888 portrait, rotated for rendering) |
+| Storage | SD card (mmc1; A/B dual rootfs slots + config + blockdata partitions) |
+| Network | SDIO WiFi (RTL8189FS, mmc0) + USB NIC (one selected at runtime) |
+| Boot | U-Boot → Linux (Buildroot rootfs) |
+
+Key resident processes:
+
+| Process | Role |
+|---------|------|
+| `bitcoind` | Bitcoin Core v31.1, datadir `/root/block` (blockdata partition) |
+| `ckpool` | Local Stratum service |
+| `rockbase-lcdui` | LVGL touch UI (peer map, OTA prompt) |
+| `rockbase-webd` | Web dashboard + status API (`/root/web`) |
+| `rockbase_status` | Status collector (feeds LCD/Web) |
+| `rockbase_netsel.sh` | Network interface selection at boot |
+
+## Building
+
+### Prerequisites
+
+- **Ubuntu 22.04 / 24.04** (WSL2 or bare metal; other versions may hit build issues)
+- Disk: first full build needs roughly **60–80 GB** (toolchain + source tree + artifacts)
+- RAM: ≥ 16 GB recommended (full-parallel builds)
+
+### Install Toolchain
 
 ```bash
 sudo make toolchain_and_depend
-#The above command will install GCC and the SDK's dependent packages. For details, refer to the tools/install_toolchain_and_depend.sh file
 ```
 
-> - This SDK has been verified on Ubuntu 22.04 and 24.04, and other versions may have compilation issues.
-> - Only the k230d_canmv_ilp32_defconfig requires additional manual installation(see command below) of the rv64ilp32 toolchain:
->
->   ```bash
->   #only k230d_canmv_ilp32_defconfig need
->   wget -c https://github.com/ruyisdk/riscv-gnu-toolchain-rv64ilp32/releases/download/2024.06.25/riscv64ilp32-elf-ubuntu-22.04-gcc-nightly-2024.06.25-nightly.tar.gz;
->   mkdir -p /opt/toolchain/riscv64ilp32-elf-ubuntu-22.04-gcc-nightly-2024.06.25/;
->   tar -xvf riscv64ilp32-elf-ubuntu-22.04-gcc-nightly-2024.06.25-nightly.tar.gz   -C /opt/toolchain/riscv64ilp32-elf-ubuntu-22.04-gcc-nightly-2024.06.25/;
->   #only k230d_canmv_ilp32_defconfig need
->   ```
+### Build the Image
 
-## build
+The primary defconfig is `k230_rockbase_defconfig` (1G/2G merged into a single profile).
+
+**Default: non-seed minimal image** (256 MB blockdata, ~5.2 GB image; syncs blocks after first boot):
 
 ```bash
-
-make CONF=k230d_canmv_defconfig #build k230d canmv image (kernel and rootfs both 64bit);
-# make CONF=k230_canmv_defconfig # build k230 canmv image
-# make CONF=k230d_canmv_ilp32_defconfig  #build k230d canmv 32bit rootfs;
-# make help # view help
+mkdir -p /tmp/rockbase-empty-seed
+make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
+  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed \
+  K230_BLOCKDATA_SIZE=256M \
+  K230_IMAGE_GZIP=0
 ```
 
->The initial image build takes considerable time. If you'd like to skip compilation and try the Linux system directly, you can download the [daily build image provided by Canaan](https://download.kendryte.com/k230/release/linux_sdk_images/daily_build/).
->
-## output
+**Full image (with seed)**: ships real block data (`K230_BLOCKDATA_SIZE=20G`),
+skipping most of the initial download. The seed dir must contain `blocks/`, `blocks/index/`, `chainstate/`:
 
 ```bash
-output/k230d_canmv_defconfig/images/sysimage-sdcard.img.gz
+make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
+  BLOCK_SEED_DIR=seed/root-block \
+  K230_BLOCKDATA_SIZE=20G \
+  K230_IMAGE_GZIP=0
 ```
 
->Note that k230d_canmv_defconfig is an example and needs to be replaced with the correct name
->uncompress file , [burn to tf card]("https://www.kendryte.com/k230_linux/zh/main/userguide/how_to_flash.html"),insert  tf to device, poweron device.
+### Artifacts
 
-## uboot
+| Artifact | Path |
+|----------|------|
+| Flashable image | `output/k230_rockbase_defconfig/images/sysimage-sdcard.img` |
+| WSL auto-export | `/mnt/d/code/pony/IoT/k230/img/sysimage-sdcard-rockbase-<stamp>/sysimage-sdcard.img` |
+
+Image directory suffixes: `-min-` = non-seed minimal, `-full-` = seeded full image,
+`-net-` = unified network image (both USB and SDIO drivers included).
+
+### Incremental Build Gotchas
+
+| Change type | Required before building |
+|-------------|--------------------------|
+| Add/modify `patches/linux/*.patch` | `make CONF=k230_rockbase_defconfig linux-dirclean` |
+| **Content** edits under `rootfs_overlay/` or overlay top-level files | `make sync` (`.overlay_sync` is insensitive to content changes) |
+| Local package sources (`package/<pkg>/src/`) | Nothing (rsync change detection is fixed; auto-rebuilds) |
+| Suspected stale artifacts | `make CONF=k230_rockbase_defconfig clean` for a full rebuild |
+
+## Flashing
+
+The image is a raw whole-card image (includes the GPT table); write it to the whole card device:
+
+**Linux / WSL:**
 
 ```bash
-make uboot-rebuild #rebuild uboot
-make uboot-dirclean #uboot clean
-#uboot directory description
-buildroot-overlay/boot/uboot/u-boot-2022.10-overlay/  #uboot overlay code
-output/k230d_canmv_defconfig/build/uboot-2022.10/ #uboot full code,uboot build dir
+# After inserting the SD card, confirm the device node (the newly appeared /dev/sdX is the
+# SD card — double-check, writing to the wrong device will destroy your disk)
+ls -l /dev/sd*
+
+sudo dd if=sysimage-sdcard.img of=/dev/sdc bs=1M oflag=sync
+sync
 ```
 
-## linux
+**Windows:** use [Rufus](https://rufus.ie/downloads/), select `sysimage-sdcard.img`,
+MBR partition scheme, and write.
+
+After flashing, insert the SD card and power on. First boot:
+
+1. U-Boot probes DDR size and boots slot A;
+2. `rockbase_netsel.sh` selects the network interface based on attached hardware (USB NIC / SDIO WiFi);
+3. `S59blockdata` mounts the blockdata partition at `/root/block`; bitcoind starts syncing;
+4. The LCD shows a boot splash (~10 s) then the Bitcoind page; the web UI is available at `http://<board-ip>/`.
+
+SSH login: `ssh root@<board-ip>` (passwordless root, LAN use only).
+
+## LCD UI
+
+The LCD is an 800×480 landscape touch UI; swipe left/right in the LVGL tileview to page through
+**Bitcoind → Stratum → System → Network**.
+
+### Bitcoind Page
+
+Sync pipeline status (Starting → … → Synced), sync progress, current/latest block height,
+latest block time. The top-right area is the **Peer Map entry** (tap to open the global peer distribution).
+
+![Bitcoind page](docs/pic/lcd-bitcoind-page.png)
+
+### Peer Map
+
+Tap the top-right area of the Bitcoind page to open. All current peers are geolocated on a
+world map via GeoIP; the red star marks this node, dashed lines show connection paths to each
+peer; the footer shows how many peers were located (e.g. `10 of 10 peers located`).
+Tap × in the top-right corner to close.
+
+![Peer Map](docs/pic/lcd-peer-map.png)
+
+## Developer Workflow
+
+### Hot-deploy First
+
+For UI / business-logic changes, **hot-deploy to a real board first, then solidify into source**:
 
 ```bash
-make linux-menuconfig #modify configuration
-make linux-savedefconfig #save to defconfig
-
-make linux-rebuild  #rebuild linux
-make linux-dirclean #linux clean
+# Example: after changing the web frontend, scp it straight to the board to verify
+scp buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/root/web/app.js root@<board-ip>:/root/web/
 ```
 
-## buildroot
+### Closed-loop LCD Debugging
+
+Two debug tools ship in the image (`/usr/bin/`):
+
+- **`drmshot <out.ppm>`** — grabs the current screen from the DRM framebuffer (480×800 portrait PPM);
+- **`touchswipe <x0> <y0> <x1> <y1> [steps]`** — injects touch events into `/dev/input/event0`
+  (coordinates are ft5x06 physical panel coords 480×800, not UI landscape coords; tap = same start/end).
+
+Typical loop: edit → build & deploy → swipe to the page → screenshot → visual check:
 
 ```bash
-make menuconfig #buildroot(sdk) modify configuration
-make savedefconfig #buildroot(sdk) savedefconfig
+BOARD=192.168.124.9
+# Swipe to the next page (physical Y decreasing = UI left = next page) and screenshot
+ssh root@$BOARD '/usr/bin/touchswipe 240 700 240 100 10; sleep 2; /usr/bin/drmshot /tmp/screen.ppm'
+scp root@$BOARD:/tmp/screen.ppm /tmp/screen_raw.ppm
+python3 -c "
+from PIL import Image
+Image.open('/tmp/screen_raw.ppm').rotate(-90, expand=True).rotate(180).save('/tmp/screen.png')
+"
 ```
 
-## debian ubuntu
+Note: after a reboot wait ~12 s (touch is ignored during the boot splash); dismiss the OTA
+prompt by tapping "Not Now".
 
-```bash
-make debian #generate debian distribution image
-make ubuntu #generate ubuntu distribution image
+### OTA Release Pipeline
+
+`rockbase-build` (compile) → `rockbase-ota-release` (package, sign, publish to
+`NMminer1024/btc-solo-node-release`) → `rockbase-ota` (apply on device).
+Between the three steps, verify signing-key consistency (md5 of `~/.rockbase-ota-keys/ota-pub.pem`
+must equal both `rootfs_overlay/etc/rockbase-ota-pub.pem` in source and
+`/etc/rockbase-ota-pub.pem` on the device).
+
+## Repository Layout
+
+```
+k230_linux_sdk/
+├── Makefile                        # Top-level build entry (make CONF=... buildroot)
+├── VERSION                         # Human-readable product version (vX.Y.ZZ)
+├── buildroot-overlay/              # Buildroot overlay (core of this project)
+│   ├── board/canaan/k230_rockbase/ # Rockbase board support
+│   │   ├── rootfs_overlay/         # rootfs overlay (web/, etc/, scripts)
+│   │   ├── patches/linux/          # Kernel patches (DTS, etc.)
+│   │   ├── fragment/linux.fragment # Kernel config
+│   │   ├── post-build.sh           # Seed validation, etc.
+│   │   └── post-image.sh           # Image generation + export
+│   ├── package/                    # Local packages (rockbase_lcdui, rockbase-geoip, ...)
+│   └── configs/                    # defconfigs
+├── docs/                           # Design docs, debug playbooks, screenshots (pic/)
+├── seed/                           # Seed block data
+├── tools/                          # Build helpers (sync.mk, etc.)
+└── output/                         # Build artifacts (not committed)
 ```
 
->The initial image build takes considerable time. If you'd like to skip compilation and try the Linux system directly, you can download the [daily build image provided by Canaan](https://download.kendryte.com/k230/release/linux_sdk_images/daily_build/)
->
->For more information about Debian, please refer to [<<K230 Debian/Ubuntu 系统使用>>](https://www.kendryte.com/k230_linux/zh/main/app_develop_guide/user_develop/debian_ubuntu.html)
+## Reference Docs
 
-## ai_demo
-
-The AI-related demos currently integrated are as follows:
-
-| name                 | 说明                              |
-| -------------------- | --------------------------------- |
-| anomaly_det          | 异常检测                          |
-| bytetrack            | ByteTrack（一种多目标跟踪算法）   |
-| crosswalk_detect     | 斑马线检测                        |
-| demo_mix             | 演示混合                          |
-| dynamic_gesture      | 动态手势识别                      |
-| eye_gaze             | 视线追踪/眼动检测                 |
-| face_alignment       | 人脸对齐                          |
-| face_detection       | 人脸检测                          |
-| face_emotion         | 面部情绪识别                      |
-| face_gender          | 人脸性别识别                      |
-| face_glasses         | 人脸眼镜检测                      |
-| face_landmark        | 人脸关键点检测                    |
-| face_mask            | 口罩检测                          |
-| face_mesh            | 人脸网格                          |
-| face_parse           | 人脸解析                          |
-| face_pose            | 人脸姿态检测                      |
-| face_verification    | 人脸验证                          |
-| falldown_detect      | 跌倒检测                          |
-| finger_guessing      | 猜拳/手势识别（可能特指手指游戏） |
-| fitness              | 健身/运动检测                     |
-| head_detection       | 头部检测                          |
-| helmet_detect        | 头盔检测                          |
-| kws                  | 关键词唤醒                        |
-| licence_det          | 车牌检测                          |
-| licence_det_rec      | 车牌检测与识别                    |
-| llamac               | 大语言模型                        |
-| object_detect_yolov8 | YOLOv8 目标检测                   |
-| ocr                  | 光学字符识别                      |
-| person_attr          | 人体属性识别                      |
-| person_detect        | 人体检测                          |
-| person_distance      | 人体距离检测                      |
-| pose_detect          | 姿态检测/人体姿势检测             |
-| pphumanseg           | 飞桨（PaddlePaddle）人体分割模型  |
-| puzzle_game          | 拼图游戏                          |
-| segment_yolov8n      | YOLOv8n 语义分割                  |
-| smoke_detect         | 烟雾检测                          |
-| space_resize         | 空间尺寸调整                      |
-| sq_hand_det          | 手掌检测                          |
-| sq_handkp_class      | 手掌关键点分类                    |
-| sq_handkp_det        | 手掌关键点检测                    |
-| sq_handkp_flower     | 手掌关键点（花朵相关场景）检测    |
-| sq_handkp_ocr        | 手掌关键点 OCR 识别               |
-| sq_handreco          | 手掌识别                          |
-| traffic_light_detect | 交通信号灯检测                    |
-| tts_zh               | 中文语音合成                      |
-| vehicle_attr         | 车辆属性识别                      |
-| virtual_keyboard     | 虚拟键盘                          |
-| yolop_lane_seg       | YOLOP 车道线分割                  |
-
->
-> - demo source code directory ：buildroot-overlay/package/ai_demo
->
->   ```bash
->   ls buildroot-overlay/package/ai_demo; #can see all ai demo
->   ls buildroot-overlay/package/ai_demo/face_detection/;#face_detection code
->   ```
->
-> - The compilation method for a single demo (taking face_detection as an example):
->
->   ```bash
->   make face_detection-dirclean;make face_detection;#rebuild face_detection demo
->   ```
->
-> - By default, only the (face_detection) demo is enabled. If other demos are needed, please enable the corresponding demo through the menu:
->
->   ```bash
->   make menuconfig;#Target packages  --->canaan package  ---> AI  --->
->   [*] face detection
->   [ ] demo mix
->   [ ] bytetrack
->    .............
->   [ ] face_mesh
->   [ ] face_parse
->   [ ] face_pose
->   [ ] face_verification
->   ```
->
-> - If you need to experience the demo, please enter the corresponding directory under /root/app and run the relevant demo
->
->   ```shell
->   [root@canaan ~ ]#cd /root/app/face_detection/
->   [root@canaan ~/app/face_detection ]ls
->   face_detect_image.sh       face_detection_320.kmodel
->   face_detect_isp.sh         face_detection_640.kmodel
->   face_detection.elf
->   [root@canaan ~/app/face_detection ]#./face_detect_isp.sh
->   ```
->
-> - For more information about ai demo, please refer to [K230 AI Demo使用指南](https://www.kendryte.com/k230_linux/zh/main/app_develop_guide/ai_develop/aidemo_doc.html)
->
-## FQA
-
-### how to enable gdb
-
-enable BR2_PACKAGE_GDB and BR2_PACKAGE_GDB_DEBUGGER
-
-```bash
-make menuconfig
-# Target packages → Debugging, profiling and benchmark->gdb->full debugger
-make
-```
-
-### How to quickly update the kernel and device tree
-
-Just replace the corresponding files in the boot directory.
-
-```bash
-[root@canaan ~ ]#ls -lh /boot/
-total 17M
--rw-r--r--    1 root     root       17.9M Jun 20  2025 Image    #kernel
--rw-r--r--    1 root     root      264.4K Jun 20  2025 fw_jump_add_uboot_head.bin
-lrwxrwxrwx    1 root     root          24 Jun 20  2025 k.dtb -> k230-canmv-lckfb-lcd.dtb
--rwxr-xr-x    1 root     root       53.8K Jun 20  2025 k230-canmv-lckfb-lcd.dtb  #lcd dtb
-drwx------    2 root     root       12.0K Jun 20  2025 lost+found
--rwxr-xr-x    1 root     root      172.2K Jun 20  2025 nuttx-7000000-uart2.bin
-[root@canaan ~ ]#
-```
-
-### How to configure WiFi
-
-- use sta.sh script
-
-```bash
-sta.sh wlan0 H3C_wjx 12345678
-```
-
-- save wifissid and passwd to env
-
-```bash
-fw_setenv wlanssid  H3C_wjx; fw_setenv wlanpass 12345678;reboot;
-```
-
-### How to test DDR
-
-Use the following command to generate a DDR test image. This image will automatically execute the DDR stability test program, which will run continuously. There will be constant output on the serial port, and if it fails, an error message will be printed on the serial port.
-
-```bash
-make ddr_test_img_128 #build ddr 128MB test img,128 can be 512/1024/2048/128"
-```
-
-for more ,please refer to:
-
-[K230 Linux SDK 文档](https://www.kendryte.com/zh/sdkResource/230linux)
-
-[k230问答社区](https://www.kendryte.com/answer/)
-
-[k230产品中心](https://www.kendryte.com/zh/products)
-
-[k230文档](https://www.kendryte.com/zh/document)
-
-[K230 debian/ubuntu 系统指南](https://www.kendryte.com/k230_linux/zh/main/app_develop_guide/user_develop/debian_ubuntu.html)
+| Doc | Content |
+|-----|---------|
+| `docs/rockbase-project-overview.md` | Project background, board baseline, build baseline |
+| `docs/rockbase-debug-playbook.md` | Freeze/lockup debugging playbook |
+| `docs/rockbase-freeze-milestones.md` | Freeze investigation milestones |
+| `docs/rockbase-block-seed-image-workflow.md` | Seed image workflow |
+| `docs/rockbase-ota-handoff.md` | OTA design and on-device verification log |
+| `docs/rockbase-net-unified-image-plan.md` | Unified network image plan |
+| `docs/rockbase-cpu-baseline.md` | CPU baseline data |
+| `AGENTS.md` | Project memory (board list, core rules, skill index) |

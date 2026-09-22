@@ -233,7 +233,7 @@ manifest.json 里的 `slot.url` / `slot.sig_url` 是指向具体 tag 的**绝对
   `.../releases/download/<tag>/slot-<ver>.img.gz`（GitHub 支持 Range，curl `-C -` 可断点）。
 - GitHub Releases 单文件上限 2GB，本方案 ~200MB 远低于上限，纯免费够用。
 - 实际仓库拓扑（已落地）：
-  - `NMminer1024/btc-fullnode`：源码仓库（本仓库），私有
+  - `NMminer1024/btc-solo-node`：源码仓库（本仓库），私有
   - `NMminer1024/btc-solo-node-release`：发布仓库，公开，只存 `manifest.json` / `slot-*.img.gz` / `slot-*.img.gz.sig`，由 GitHub Actions 在打 tag 时自动发布
 
 #### 2.5.2 签名校验（必须，P1 即上）
