@@ -20,6 +20,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
+#include <map>
 #include <vector>
 
 #include <thead.h>
@@ -214,6 +215,7 @@ struct DashboardData {
     std::string btc_context = "-";
     std::string connections = "-";
     std::vector<std::string> peer_ips;
+    std::map<std::string, bool> peer_inbound;
     PeerMapOverlay::Geo self_geo;
     std::string difficulty_display = "-";
     std::string rss = "-";
@@ -273,6 +275,7 @@ struct BitcoinPageModel {
     HeightCardModel height;
     std::string peers = "--";
     std::vector<std::string> peer_ips;
+    std::map<std::string, bool> peer_inbound;
     PeerMapOverlay::Geo self_geo;
     std::string block_date = "--";
     std::string block_time;
@@ -421,6 +424,7 @@ bool g_miners_overlay_open_pending = false;
 PeerMapOverlay g_peer_map_overlay;
 bool g_peer_map_overlay_open_pending = false;
 std::vector<std::string> g_peer_map_ips;
+std::map<std::string, bool> g_peer_map_inbound;
 PeerMapOverlay::Geo g_peer_map_self_geo;
 OtaOverlay g_ota_overlay;
 FirmwareUpdateOverlay g_firmware_update_overlay;
@@ -2022,6 +2026,25 @@ bool load_dashboard_data(DashboardData& data) {
     data.btc_context = json_value(bitcoin, "btc_context");
     data.connections = json_value(bitcoin, "connections");
     data.peer_ips = json_string_array(json_array(bitcoin, "peers"));
+    // peers_detail carries the inbound flag per peer so the map can draw
+    // flow arcs in the right direction (outbound: us -> peer, inbound: peer -> us).
+    {
+        const std::string peers_detail = json_array(bitcoin, "peers_detail");
+        size_t pos = 0;
+        while (pos < peers_detail.size()) {
+            const size_t ob = peers_detail.find('{', pos);
+            if (ob == std::string::npos) break;
+            const size_t cb = peers_detail.find('}', ob);
+            if (cb == std::string::npos) break;
+            const std::string obj = peers_detail.substr(ob, cb - ob + 1);
+            const std::string ip = json_value(obj, "ip", "");
+            if (!ip.empty()) {
+                // statusd emits inbound as 0/1 (integer), not true/false
+                data.peer_inbound[ip] = (json_value(obj, "inbound", "0") == "1");
+            }
+            pos = cb + 1;
+        }
+    }
     const std::string self_geo = json_object(bitcoin, "self_geo");
     data.self_geo.lat = json_double(self_geo, "lat", 999.0);
     data.self_geo.lon = json_double(self_geo, "lon", 999.0);
@@ -3109,6 +3132,7 @@ bool build_ui_model(UiModel& model) {
     model.bitcoin.height = make_height_card_model(data, blocks);
     model.bitcoin.peers = data.connections;
     model.bitcoin.peer_ips = data.peer_ips;
+    model.bitcoin.peer_inbound = data.peer_inbound;
     model.bitcoin.self_geo = data.self_geo;
     model.bitcoin.block_date = block_date;
     model.bitcoin.block_time = block_time;
@@ -3822,6 +3846,7 @@ void refresh_status_cb(lv_timer_t*) {
 
     mark_dirty_pages(apply_ui_model(model));
     g_peer_map_ips = model.bitcoin.peer_ips;
+    g_peer_map_inbound = model.bitcoin.peer_inbound;
     g_peer_map_self_geo = model.bitcoin.self_geo;
 
     if (!logged_first_status) {
@@ -4068,7 +4093,7 @@ int main() {
             g_miners_overlay_open_pending = false;
         }
         if (g_peer_map_overlay_open_pending && !g_peer_map_overlay.active()) {
-            g_peer_map_overlay.open(g_peer_map_ips, g_peer_map_self_geo);
+            g_peer_map_overlay.open(g_peer_map_ips, g_peer_map_self_geo, g_peer_map_inbound);
             g_peer_map_overlay_open_pending = false;
         }
         g_network_settings_overlay.update();

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -28,7 +29,8 @@ public:
         bool known = false;
     };
 
-    void open(const std::vector<std::string>& peer_ips, const Geo& self_geo);
+    void open(const std::vector<std::string>& peer_ips, const Geo& self_geo,
+              const std::map<std::string, bool>& inbound = {});
     void update();  // call from the main loop (drives the arc animation)
     bool active() const { return root_ != nullptr; }
 
@@ -65,6 +67,7 @@ private:
 
     std::vector<std::string> ips_;
     std::vector<Marker> markers_;
+    std::map<std::string, bool> inbound_;
     Geo self_geo_ {};
     int32_t self_x_ = -1;
     int32_t self_y_ = -1;

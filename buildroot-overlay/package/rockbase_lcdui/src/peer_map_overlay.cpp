@@ -172,11 +172,13 @@ void draw_line(std::vector<uint8_t>& buf, int32_t x0, int32_t y0,
 
 }  // namespace
 
-void PeerMapOverlay::open(const std::vector<std::string>& peer_ips, const Geo& self_geo) {
+void PeerMapOverlay::open(const std::vector<std::string>& peer_ips, const Geo& self_geo,
+                          const std::map<std::string, bool>& inbound) {
     close();
     close_requested_ = false;
     ips_ = peer_ips;
     self_geo_ = self_geo;
+    inbound_ = inbound;
 
     map_ready_ = read_exact_file(kMapPath, backdrop_);
     if (!map_ready_) {
@@ -276,6 +278,8 @@ void PeerMapOverlay::resolve_geo(const std::vector<std::string>& ips) {
         if (!geo.known) continue;
         Marker marker;
         project(geo.lat, geo.lon, marker.x, marker.y);
+        const auto ib = inbound_.find(ip);
+        marker.inbound = (ib != inbound_.end()) && ib->second;
         markers_.push_back(marker);
         ++located;
     }
@@ -382,7 +386,13 @@ void PeerMapOverlay::draw_frame(double t) {
 
     if (self_x_ >= 0 && self_y_ >= 0) {
         for (const Marker& marker : markers_) {
-            draw_arc(self_x_, self_y_, marker.x, marker.y, t, 0xf7931a);
+            // Match the web map: outbound flows self -> peer (orange),
+            // inbound flows peer -> self (blue) so the arrow points at us.
+            if (marker.inbound) {
+                draw_arc(marker.x, marker.y, self_x_, self_y_, t, 0x58a6ff);
+            } else {
+                draw_arc(self_x_, self_y_, marker.x, marker.y, t, 0xf7931a);
+            }
         }
     }
 
