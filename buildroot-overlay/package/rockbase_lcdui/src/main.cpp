@@ -28,6 +28,7 @@
 #include "lvgl/draw/lv_snapshot.h"
 #include "buzzer.h"
 #include "network_settings_overlay.h"
+#include "peer_map_overlay.h"
 #include "ui_style.h"
 
 // DSEG7 digital-tube font (see font/README.md). Its glyph set has no
@@ -212,6 +213,8 @@ struct DashboardData {
     std::string best_block_date = "-";
     std::string btc_context = "-";
     std::string connections = "-";
+    std::vector<std::string> peer_ips;
+    PeerMapOverlay::Geo self_geo;
     std::string difficulty_display = "-";
     std::string rss = "-";
     std::string ckpool_state = "-";
@@ -269,6 +272,8 @@ struct BitcoinPageModel {
     std::string progress = "--";
     HeightCardModel height;
     std::string peers = "--";
+    std::vector<std::string> peer_ips;
+    PeerMapOverlay::Geo self_geo;
     std::string block_date = "--";
     std::string block_time;
     std::string ip_addr = "--";
@@ -413,6 +418,10 @@ std::string g_network_settings_timezone_summary = "--";
 bool g_network_settings_wifi_enabled = false;
 MinersOverlay g_miners_overlay;
 bool g_miners_overlay_open_pending = false;
+PeerMapOverlay g_peer_map_overlay;
+bool g_peer_map_overlay_open_pending = false;
+std::vector<std::string> g_peer_map_ips;
+PeerMapOverlay::Geo g_peer_map_self_geo;
 OtaOverlay g_ota_overlay;
 FirmwareUpdateOverlay g_firmware_update_overlay;
 int g_pressed_hotspot_index = -1;
@@ -464,7 +473,12 @@ void open_miners_overlay() {
     g_miners_overlay_open_pending = true;
 }
 
+void open_peer_map_overlay() {
+    g_peer_map_overlay_open_pending = true;
+}
+
 constexpr ConfigHotspot kConfigHotspots[] = {
+    {0, 540, 142, 216, 96, open_peer_map_overlay},
     {1, 42, 118, 716, 308, open_miners_overlay},
     {3, 704, 20, 64, 64, open_network_settings_overlay},
 };
@@ -1411,6 +1425,41 @@ std::string json_value(const std::string& object, const char* key, const char* f
     return value;
 }
 
+std::vector<std::string> json_string_array(const std::string& array_json) {
+    std::vector<std::string> values;
+    if (array_json.size() < 2 || array_json.front() != '[') return values;
+    size_t pos = 1;
+    while (pos < array_json.size()) {
+        pos = array_json.find('"', pos);
+        if (pos == std::string::npos) break;
+        const size_t start = ++pos;
+        bool escaped = false;
+        for (; pos < array_json.size(); ++pos) {
+            const char ch = array_json[pos];
+            if (escaped) {
+                escaped = false;
+            }
+            else if (ch == '\\') {
+                escaped = true;
+            }
+            else if (ch == '"') {
+                values.push_back(json_unescape(array_json.substr(start, pos - start)));
+                ++pos;
+                break;
+            }
+        }
+    }
+    return values;
+}
+
+double json_double(const std::string& object, const char* key, double fallback) {
+    const std::string value = json_value(object, key, "");
+    if (value.empty()) return fallback;
+    char* end = nullptr;
+    const double parsed = std::strtod(value.c_str(), &end);
+    return end != value.c_str() ? parsed : fallback;
+}
+
 int json_int_value(const std::string& object, const char* key, int fallback = 0) {
     const std::string value = json_value(object, key, "");
     if (value.empty()) {
@@ -1963,6 +2012,14 @@ bool load_dashboard_data(DashboardData& data) {
     data.best_block_date = json_value(bitcoin, "best_block_date");
     data.btc_context = json_value(bitcoin, "btc_context");
     data.connections = json_value(bitcoin, "connections");
+    data.peer_ips = json_string_array(json_array(bitcoin, "peers"));
+    const std::string self_geo = json_object(bitcoin, "self_geo");
+    data.self_geo.lat = json_double(self_geo, "lat", 999.0);
+    data.self_geo.lon = json_double(self_geo, "lon", 999.0);
+    data.self_geo.city = json_value(self_geo, "city", "");
+    data.self_geo.country = json_value(self_geo, "country", "");
+    data.self_geo.known = data.self_geo.lat >= -90.0 && data.self_geo.lat <= 90.0 &&
+                          data.self_geo.lon >= -180.0 && data.self_geo.lon <= 180.0;
     data.difficulty_display = json_value(bitcoin, "difficulty_display");
     data.rss = json_value(bitcoin, "rss");
 
@@ -2222,6 +2279,7 @@ void touch_read_cb(lv_indev_t*, lv_indev_data_t* data) {
     static bool was_down = false;
     if (g_network_settings_overlay.active() || g_wifi_config_overlay.active() ||
         g_timezone_overlay.active() || g_miners_overlay.active() ||
+        g_peer_map_overlay.active() ||
         g_ota_overlay.active() || g_firmware_update_overlay.active()) {
         if (g_network_settings_overlay.active() && g_network_settings_overlay_wait_release) {
             if (!g_touch.down) {
@@ -3041,6 +3099,8 @@ bool build_ui_model(UiModel& model) {
     model.bitcoin.progress = format_progress(data.progress_ring);
     model.bitcoin.height = make_height_card_model(data, blocks);
     model.bitcoin.peers = data.connections;
+    model.bitcoin.peer_ips = data.peer_ips;
+    model.bitcoin.self_geo = data.self_geo;
     model.bitcoin.block_date = block_date;
     model.bitcoin.block_time = block_time;
     model.bitcoin.ip_addr = data.ip_addr;
@@ -3752,6 +3812,8 @@ void refresh_status_cb(lv_timer_t*) {
     }
 
     mark_dirty_pages(apply_ui_model(model));
+    g_peer_map_ips = model.bitcoin.peer_ips;
+    g_peer_map_self_geo = model.bitcoin.self_geo;
 
     if (!logged_first_status) {
         std::printf("rockbase-lcdui: status loaded ip=%s sync=%s blocks=%s headers=%s\n",
@@ -3996,6 +4058,10 @@ int main() {
             g_miners_overlay.open();
             g_miners_overlay_open_pending = false;
         }
+        if (g_peer_map_overlay_open_pending && !g_peer_map_overlay.active()) {
+            g_peer_map_overlay.open(g_peer_map_ips, g_peer_map_self_geo);
+            g_peer_map_overlay_open_pending = false;
+        }
         g_network_settings_overlay.update();
         const NetworkSettingsOverlay::Action settings_action =
             g_network_settings_overlay.take_action();
@@ -4020,6 +4086,7 @@ int main() {
             g_network_settings_overlay_open_pending = true;
         }
         g_miners_overlay.update();
+        g_peer_map_overlay.update();
         g_ota_overlay.update();  // self-manages open/close from /run/rockbase/ota-state.json
         // Passive OTA check: periodically runs check-async in the background
         // and pops a prompt only when a genuinely newer version is available.
@@ -4034,6 +4101,7 @@ int main() {
         bool custom_present = false;
         if (!g_network_settings_overlay.active() && !g_wifi_config_overlay.active() &&
             !g_timezone_overlay.active() && !g_miners_overlay.active() &&
+            !g_peer_map_overlay.active() &&
             !g_ota_overlay.active() && !g_firmware_update_overlay.active() && g_touch.down) {
             const int32_t scroll_x = visual_scroll_x_from_touch();
             if (g_swipe_drag_started) {
@@ -4042,13 +4110,15 @@ int main() {
         }
         else if (!g_network_settings_overlay.active() && !g_wifi_config_overlay.active() &&
              !g_timezone_overlay.active() && !g_miners_overlay.active() &&
+                 !g_peer_map_overlay.active() &&
                  !g_ota_overlay.active() && !g_firmware_update_overlay.active() && g_pager_anim_active) {
             custom_present = present_pager_snap_anim(now_ms);
         }
 
         g_custom_frame_presenting = !g_network_settings_overlay.active() &&
                         !g_wifi_config_overlay.active() && !g_timezone_overlay.active() &&
-                                    !g_miners_overlay.active() && !g_ota_overlay.active() &&
+                                    !g_miners_overlay.active() && !g_peer_map_overlay.active() &&
+                                    !g_ota_overlay.active() &&
                                     !g_firmware_update_overlay.active() &&
                                     (g_touch.down || custom_present);
         uint32_t next_ms = lv_timer_handler();
