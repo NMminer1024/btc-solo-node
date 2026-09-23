@@ -606,6 +606,14 @@ cmd_apply() {
     sync
     log "flash done"
 
+    # Clean up downloaded slot images to free /root/config space.
+    # The image has been dd'd to the target partition; keeping stale copies
+    # (~74 MB each) will eventually fill the 975 MB config partition.
+    local cleaned
+    for cleaned in "$WORKDIR"/slot-*.img.gz "$WORKDIR"/slot-*.img.gz.sig; do
+        [ -f "$cleaned" ] && rm -f "$cleaned" && log "cleaned: $(basename "$cleaned")"
+    done
+
     # 4) sanity: mount read-only and check version marker
     local mnt=/tmp/ota_verify_mnt
     mkdir -p "$mnt"
