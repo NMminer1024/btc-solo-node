@@ -497,3 +497,127 @@ pstore（`/root/log/pstore-archive/latest/console-ramoops-0`）尾部铁证：
 - 排查手法沉淀：卡死后先 `ssh root@<IP> 'cat /root/log/pstore-archive/latest/*'`
   捞上次启动内核日志；`/tmp/rockbase-serial-healthd.{sysrq,diag,panic}` 是
   healthd 的触发时间戳（内核秒数）。
+
+## 2026-09-23：WiFi 省电排除实验 —— IPS/LPS 不是 freeze 根因（124.9 热部署验证）
+
+背景：用户反馈 8189fs（SDIO WiFi，Realtek 0x024C，即 8819S 同族）模块非常烫。
+排查驱动配置发现省电被三层全关（`CONFIG_POWER_SAVING=n` / `IPS_MODE=0` /
+`LPS_MODE=0`，来自补丁 `0001-disable-sdio-power-saving.patch`），且
+`CONFIG_TXPWR_LIMIT_EN=n`（发射功率无上限，实测 Tx-Power 12 dBm）。
+**关键事实：关省电之后 freeze 依然发生（09-21 / 09-22 两次 124.9 卡死都是
+关省电镜像），所以省电不是 freeze 主因。** 本次做排除法实验：开省电重编模块
+热部署，确认省电路径行为，正式把 IPS/LPS 从嫌疑名单划掉。
+
+### 实验操作（可复用）
+
+1. 补丁禁用：`mv patches/rtl8189fs/0001-disable-sdio-power-saving.patch
+   *.patch.disabled`（buildroot 只应用 board 补丁目录下的 `*.patch`，
+   `.disabled` 后缀自动跳过；机制在 `pkg-generic.mk` 的
+   `pkg-patches-dirs` + `APPLY_PATCHES ... \*.patch`）。
+2. build 目录手动反转：`patch -R -p1 < 0001-...patch.disabled`
+   （恢复 `CONFIG_POWER_SAVING=y / IPS_MODE=default / LPS_MODE=default`）。
+3. 只删 `.stamp_built/.stamp_installed/.stamp_target_installed` 等构建 stamp
+   （**保留 `.stamp_patched/.stamp_configured`**，避免重新解压+打补丁冲掉手动反转），
+   然后 `make rtl8189fs`（在 `output/k230_rockbase_defconfig/` 下直接跑，
+   顶层 Makefile 没有通用 target 透传）。**不需要重编内核**——out-of-tree
+   模块对着现有 6.6.36 头文件编译，vermagic 匹配即可。
+4. 热部署：板上模块在 `/lib/modules/6.6.36/updates/8189fs.ko`，
+   先 `cp ... 8189fs.ko.bak-nops` 备份，scp 新 ko（md5 核对），
+   `(rmmod 8189fs && sleep 3 && modprobe 8189fs) &` 后台执行
+   （WiFi 断 ~30s 后自动重连，SSH 轮询等回）。
+
+### 实验结果
+
+- 新模块生效：`/proc/net/rtl8189fs/drv_cfg` 出现 `CONFIG_POWER_SAVING` 行
+  （旧模块无此行）；`ps_info` 显示 `LPS mode: MAX / LPS level: LPS_LCLK`，
+  省电状态机已激活。
+- **但 90s 采样（15s 间隔 × 6）`IPS enter count` / `LPS enter count` 始终为 0**：
+  124.9 是 stratum hub，持续有矿机 share 流量（5s 内 tx +28KB / rx +34KB），
+  永远达不到 LPS 触发条件（`LPS_Enter` 要求 `LpsIdleCount >= 2`，
+  即连续空闲 ~4s 才进省电）。IPS 只在未关联 AP 时生效，关联状态下不触发。
+- 结论：**在这台板子的真实负载下，开/关省电对运行时行为几乎无差异**
+  （省电状态机根本进不去）。这从机制上解释了为什么关省电"修"不了 freeze、
+  开省电也改变不了什么——freeze 根因不在 WiFi 省电路径，与既有结论
+  （SD 卡 I/O 单核硬卡死）一致。
+
+### 模块发热的真正原因（与 freeze 无关）
+
+- 省电关不关都不影响发热：因为持续流量下省电本来就不会触发。
+- 发热主因是 **PA 满功率常开 + 持续 TX 占空比**：
+  `CONFIG_TXPWR_LIMIT_EN=n`（无法规功率上限）、实测 Tx-Power 12 dBm、
+  信号 -40~-46 dBm（离 AP 很近，完全不需要这么高功率）。
+- 降温方向：降发射功率（`iw phy phy0 set txpower 8` 或启用
+  `CONFIG_TXPWR_LIMIT_EN`），不动省电路径，不碰 freeze 风险。
+
+### 当前状态（2026-09-23 13:05 本地）
+
+- 124.9 运行**开省电版** 8189fs.ko（md5 `72956c62...`），旧版备份在
+  `/lib/modules/6.6.36/updates/8189fs.ko.bak-nops`。
+- 源码侧 `0001-disable-sdio-power-saving.patch` 已改名为 `.disabled`
+  （未提交 git）。**待决策**：既然省电对 freeze 和发热都无实际影响，
+  保持 disabled（开省电）还是恢复（关省电）都行；若后续要固化，
+  需同步决定降 TX 功率方案一起进镜像。
+- 回滚方法：`cp 8189fs.ko.bak-nops 8189fs.ko && rmmod 8189fs && modprobe 8189fs`。
+
+## 2026-09-23：启用 Realtek 动态发射功率（DTP）—— 自适应降温（124.9 热部署验证）
+
+背景：上一节确认模块发热的真正原因是 **PA 满功率常开 + 持续 TX 占空比**
+（`CONFIG_TXPWR_LIMIT_EN=n`、Tx-Power 12 dBm、信号 -40~-46 dBm 离 AP 很近）。
+手动降功率（`iw phy phy0 set txpower 8`）在本驱动构建里**没有运行时热调路径**
+（cfg80211 `set_txpower` 是 `#if 0` 空壳、`iwpriv mp_txpower` 报 "no private ioctls"、
+proc 文件只读或无效），且固定降功率在信号变差时会伤链路。
+正确方案是启用 Realtek PHYDM 自带的 **DTP（Dynamic TX Power）**：
+信号强时自动降 PA 输出、信号弱时自动升，per-sta 基于 RSSI，是厂商内置的
+自适应机制（802.11 本身没有 STA↔AP 功率协商）。
+
+### DTP 被两道门禁用（本次全部打开）
+
+1. **编译门**：`CONFIG_SUPPORT_DYNAMIC_TXPWR` 从未定义 →
+   `CONFIG_DYNAMIC_TX_TWR` 保持 off（`hal/phydm/phydm_features_ce.h:134-136`
+   在 `#ifdef CONFIG_SUPPORT_DYNAMIC_TXPWR` 下才定义）→
+   `phydm_dynamictxpower.o` 编译成空对象（992 字节、无符号）。
+2. **运行时门**：`ODM_BB_DYNAMIC_TXPWR` 在 `phydm_supportability_init_ce()`
+   的 8188F case 里被注释掉（`hal/phydm/phydm.c:918`）→ 即使编译进去，
+   `phydm_dynamic_tx_power()` 也会因 `support_ability` 缺位而 early-return。
+
+### 固化补丁 `0009-enable-dynamic-tx-power.patch`
+
+位置：`buildroot-overlay/board/canaan/k230_rockbase/patches/rtl8189fs/`
+两处改动：
+- `Makefile`：`EXTRA_CFLAGS += -DCONFIG_SUPPORT_DYNAMIC_TXPWR`
+  （加在 `-DDM_ODM_SUPPORT_TYPE=0x04` 之后）。
+- `hal/phydm/phydm.c`：8188F CE case 把
+  `/*@ODM_BB_DYNAMIC_TXPWR |*/` 改为 `ODM_BB_DYNAMIC_TXPWR |`。
+
+### 验证（124.9 热部署）
+
+- 重编后 `phydm_dynamictxpower.o` 从 992 → 4264 字节，含
+  `phydm_dynamic_tx_power` / `phydm_dtp_per_sta` 等符号（之前为空）。
+- 新 ko md5 `c8ca841f...`（旧省电版 `72956c62...`，备份 `8189fs.ko.bak-ps`）。
+- 重载后模块大小 1396736（旧 1392640），链路稳定无掉线
+  （Bit Rate 150 Mb/s、Signal -42~-49 dBm、Link Quality 61-68/70）。
+- **激活链确认**：`CONFIG_DYNAMIC_TX_TWR` 已在 `phydm.o` 编译命令中
+  （周期任务 `phydm.c:2058` 会调 `phydm_dynamic_tx_power`）；
+  `CONFIG_PHY_CTRL_PWR` **未定义**（`.o.cmd` 无此宏），故
+  `phydm_dynamic_response_power()` 不会 early-return。
+- **STA 模式生效路径**：我们是连 AP 的 client，真正起作用的是
+  `phydm_dynamic_response_power()`——按我们**收到的 AP 信号**（`rssi_min`，
+  百分比标度）算功率等级，写寄存器 `ODM_REG_RESP_TX_11AC`(0x6D8) bit[20:18]
+  调整本机 TX 功率。`phydm_dtp_per_sta()` 循环是给 AP 模式用的
+  （我们没关联 client，不做事）。
+- **阈值/offset**（`phydm_dynamictxpower.h`）：RSSI ≥ LVL2(74) → level3 =
+  -11dB；≥ LVL1(60) → level2 = -7dB；≥ LVL1-3 → level1 = -3dB；否则 0。
+  当前信号 Link Quality 61-68/70 ≈ 87-97%，远超 74 → 应触发 **-11dB**。
+- **观测限制**：`tx_power_idx` proc 显示的是 base 功率表（48=12dBm），
+  DTP 走 per-packet TX descriptor offset / 0x6D8 寄存器，**不改这张表**，
+  所以该 proc 看不到变化；`CONFIG_RTW_DEBUG=n` 故 dmesg 无 DTP 日志。
+  客观确认降功率需读 0x6D8 寄存器（devmem，需 SDIO MAC 基址）或手摸模块温度。
+
+### 当前状态（2026-09-23 13:40 本地）
+
+- 124.9 运行 **DTP 版** 8189fs.ko（md5 `c8ca841f...`），
+  省电版备份 `8189fs.ko.bak-ps`、更早的关省电版 `8189fs.ko.bak-nops`。
+- 补丁 `0009-enable-dynamic-tx-power.patch` 已固化到 overlay（未提交 git）。
+- **待办**：手摸模块温度对比（DTP 版 vs 旧版）确认实际降温幅度；
+  若有效，连同 0001 的省电决策一起提交 git 并进镜像。
+- 回滚：`cp 8189fs.ko.bak-ps 8189fs.ko && rmmod 8189fs && modprobe 8189fs`。
