@@ -1,6 +1,6 @@
 ---
 name: rockbase-ota-release
-description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 仓库，校验 manifest / 签名 / 校验和，或在不重新编译镜像的前提下更新版本化 OTA 发布。也包含发布仓库 README 双语规则（英文被 git 跟踪发布、中文本地参考不跟踪、中英同步修改）。Use when: OTA 发布, release, README, 双语, 中英文, 产品说明, 发布仓库文档.
+description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 仓库，校验 manifest / 签名 / 校验和，或在不重新编译镜像的前提下更新版本化 OTA 发布。也包含发布仓库 README 双语规则（英文被 git 跟踪发布、中文本地参考不跟踪、中英同步修改）、release 变更说明（RELEASE_NOTES.md）规则、GitHub API token 用法（删/改已发布 release）。Use when: OTA 发布, release, README, 双语, 中英文, 产品说明, 发布仓库文档, api token, github token, 删release, 重发, 覆盖发布, release body, 变更说明, release notes.
 ---
 
 # Rockbase OTA 发布
@@ -79,20 +79,27 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
    - `sha256sum` 必须和 `manifest.json` 里的值一致。
 7. 如果包不存在、已过期，或 `manifest` 指向了错误仓库，就重新生成：
    - `tools/mk-ota-package.sh --version "$VERSION" --key "$PRIVATE_KEY" --slot-img "$SLOT_IMG" --base-url "https://github.com/$RELEASE_REPO/releases/download/$VERSION" --out-dir "$PKG_DIR"`
-8. 把发布仓库里的 `release-packages/$VERSION/` 和 GitHub Actions workflow 一起提交并推送。
+8. **写发布说明 `RELEASE_NOTES.md`**（必须，见下方「Release 说明规则」）：
+   在 `release-packages/$VERSION/RELEASE_NOTES.md` 里总结**从上一个 OTA tag 到当前版本**
+   所有影响用户使用的改动（性能优化、操作方式变化、功能增删等），分点描述，
+   不写技术细节。该文件会被 workflow 用作 GitHub Release 的 body。
+9. 把发布仓库里的 `release-packages/$VERSION/`（含 `RELEASE_NOTES.md`）和
+   GitHub Actions workflow 一起提交并推送。
    提交作者也应为 `NMminer1024 <nmminer1024@users.noreply.github.com>`。
-9. 用版本 tag 触发 workflow：
-   - `git tag -a "$VERSION" -m "$VERSION"`
-   - `git push origin main --tags`
-10. 发布后做闭环收尾检查：
+10. 用版本 tag 触发 workflow：
+    - `git tag -a "$VERSION" -m "$VERSION"`
+    - `git push origin main --tags`
+11. 发布后做闭环收尾检查：
    - 先等 GitHub Actions / Release 生成完成；如果刚推完就查不到资产，先轮询重试
    - `curl -sfI -L "https://github.com/$RELEASE_REPO/releases/tag/$VERSION"`，确认 release 页面可打开
    - `curl -sfI -L "https://github.com/$RELEASE_REPO/releases/download/$VERSION/manifest.json"`
    - `curl -sfI -L "https://github.com/$RELEASE_REPO/releases/download/$VERSION/slot-$VERSION.img.gz"`
    - `curl -sfI -L "https://github.com/$RELEASE_REPO/releases/download/$VERSION/slot-$VERSION.img.gz.sig"`
    如果任一项失败，立刻停下来修流程或等 GitHub Actions 完成，不要假设发布成功。
-11. 发布只是这条链路的中间一环：`rockbase-build`（编译）→ 本 skill（打包发布）→
-    `rockbase-ota`（真机 apply，优先用生产域名 `https://ota.nmminer.com/rockbase/manifest.json`
+    - 同时确认 Release 页面 body 已显示 `RELEASE_NOTES.md` 的内容
+      （`curl -sfL "https://api.github.com/repos/$RELEASE_REPO/releases/tags/$VERSION"`
+      检查 `body` 字段非空且与本地文件一致）。
+12. 发布只是这条链路的中间一环：`rockbase-build`（编译）→ 本 skill（打包发布）→
     或本文 curl 验证过的 GitHub 直链触发 `rockbase-ota.sh check/apply`）。
 
 ## 约束
@@ -103,6 +110,77 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
 - 源码仓库和发布仓库要分开。
 - 没有发布仓库写权限时，不要尝试绕过流程。
 - **签名密钥必须与源码固化公钥配对**，发布前核对不一致就先处理，不要带着不匹配的密钥发布。
+- **每个 release 必须带用户向变更说明**（`RELEASE_NOTES.md`），不允许发空 body 的 release。
+
+## GitHub API Token（删/改已发布 release 用）
+
+workflow 本身用默认 `GITHUB_TOKEN` 就能发布（含自动删旧 release），但**本地手动操作**
+（删除已发布的 release、修补 body、查 run 日志等）需要个人 token：
+
+- **存放位置（固定）**：`~/.rockbase-ota-keys/github-api-token`（chmod 600，纯 token 无换行）。
+  读取方式：`TOKEN=$(cat ~/.rockbase-ota-keys/github-api-token)`，**不要把 token 内容打印到终端输出或贴进聊天**。
+- **缺失时让用户创建**（不要自己猜/找）：
+  - Classic：https://github.com/settings/tokens/new ，勾 `repo` scope；
+  - Fine-grained：https://github.com/settings/personal/access-tokens ，选仓库
+    `btc-solo-node-release`，Permissions → Contents: Read and write。
+  - 让用户自己在终端执行落盘（避免 token 经过模型上下文）：
+    `printf '%s' '<TOKEN>' > ~/.rockbase-ota-keys/github-api-token && chmod 600 ~/.rockbase-ota-keys/github-api-token`
+- **常用 API 操作**：
+  ```bash
+  TOKEN=$(cat ~/.rockbase-ota-keys/github-api-token)
+  # 查 release id
+  RID=$(curl -sf "https://api.github.com/repos/$RELEASE_REPO/releases/tags/$VERSION" \
+    -H "Authorization: token $TOKEN" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+  # 删 release（tag 不会跟着删，需另行 git push origin :refs/tags/$VERSION）
+  curl -s -o /dev/null -w "%{http_code}\n" -X DELETE \
+    "https://api.github.com/repos/$RELEASE_REPO/releases/$RID" -H "Authorization: token $TOKEN"   # 期望 204
+  ```
+- **重发同一版本号的完整流程**（同名 tag 已发布过、需要换包或补 body 时）：
+  1. 更新 `release-packages/$VERSION/` 下的文件（含 `RELEASE_NOTES.md`）并 push main；
+  2. 用 API 删掉远端旧 release（上面 DELETE 命令）；
+  3. `git push origin :refs/tags/$VERSION && git push origin $VERSION` 重推 tag；
+  4. 等 workflow 跑完（约 1 分钟），按收尾检查验证 body + 资产 sha256。
+  注意：workflow 里已有「删旧 release」步骤（用默认 GITHUB_TOKEN），所以只重推 tag
+  也能覆盖式重发；手动 DELETE 是在不想等 workflow 或 workflow 失败时的备用手段。
+
+## Release 说明规则（RELEASE_NOTES.md）
+
+每个 OTA release 的 GitHub Release 页面必须有一段面向**最终用户**的变更说明，
+由 `release-packages/$VERSION/RELEASE_NOTES.md` 提供（workflow 通过
+`body_path` 写入 release body；注意 `action-gh-release@v2` 的输入名是
+`body_path`，不是 `body_file`，写错会被静默忽略导致 release body 为空）。规则：
+
+- **范围**：总结从**上一个 OTA tag** 到**当前版本**之间的所有改动
+  （在源码仓库用 `git log <prev-tag>..HEAD --oneline` 拉全量 commit 列表作为素材，
+  上一个 tag 用 `git describe --tags --abbrev=0 HEAD~` 或发布仓库里上一个
+  `v*-ota` tag 确定）。
+- **只写用户能感知到的东西**：性能优化（更快/更流畅/更省电/更省 SD 卡）、
+  操作方式变化（新按钮、新页面、新设置项、交互流程变化）、功能新增/移除、
+  稳定性修复（用户之前遇到过的卡顿、闪退、断连等）。**不写技术细节**
+  （不提 commit hash、内核配置、驱动、编译参数、内部模块名）。
+- **分点描述**，按类别分组，用以下小标题（没有的类别就省略）：
+  - `### Added` — 新功能
+  - `### Improved` — 性能/体验优化
+  - `### Fixed` — 问题修复
+  - `### Removed` — 移除的功能或行为
+- 每条一句话，用户视角措辞（"LCD 页面切换更流畅" 而不是
+  "lvgl tileview 刷新间隔从 500ms 调到 2s"）。
+- 语言：英文（发布仓库面向海外用户）；如有必要可附中文，但英文在前。
+- 示例：
+  ```markdown
+  ### Improved
+  - LCD UI page switching is noticeably smoother and uses less power.
+  - Boot time reduced by about 10 seconds.
+
+  ### Fixed
+  - WiFi no longer drops after long idle periods.
+  - Stratum page now shows the correct hashrate after reconnect.
+
+  ### Removed
+  - The old SD-card swap is removed; swap now runs in RAM (no SD wear).
+  ```
+- 写完自查：把说明读给不懂技术的用户听，他能否明白"这版升级对我有什么用"。
+  如果某条改动用户完全无感（纯内部重构、构建系统调整），就不要写进去。
 
 ## README 双语规则（发布仓库）
 
@@ -134,6 +212,7 @@ tools/mk-ota-package.sh \
   --base-url "https://github.com/$RELEASE_REPO/releases/download/$VERSION" \
   --out-dir "$PKG_DIR"
 
+# 写 release-packages/$VERSION/RELEASE_NOTES.md（见「Release 说明规则」）
 git add -A
 git commit -m "feat: publish OTA release $VERSION"
 git tag -a "$VERSION" -m "$VERSION"
