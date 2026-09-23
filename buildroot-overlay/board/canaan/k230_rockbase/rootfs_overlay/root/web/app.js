@@ -17,6 +17,7 @@
       productVersion: "--"
     },
     bitcoin: {
+      running: 0,
       syncBadge: "...",
       syncDetail: "...",
       ibdStageKey: "",
@@ -34,6 +35,8 @@
     stratum: {
       badge: "...",
       badgeClass: "status-soft",
+      state: "stopped",
+      waitReason: "",
       url: "--",
       user: "wallet.workername",
       pass: "(leave blank)",
@@ -81,7 +84,8 @@
     },
     stratum: {
       running: "Running",
-      stopped: "Stopped"
+      stopped: "Stopped",
+      waiting: "Waiting for Bitcoind\u2026"
     }
   };
 
@@ -619,6 +623,7 @@
         productVersion: toText(system.product_version, mock.system.productVersion)
       },
       bitcoin: {
+        running: toNumber(bitcoin.running, 0),
         syncBadge: syncLabel,
         syncDetail: toText(bitcoin.sync_detail, mock.bitcoin.syncDetail),
         ibdStageKey: toText(bitcoin.ibd_stage_key, mock.bitcoin.ibdStageKey),
@@ -640,6 +645,8 @@
       stratum: {
         badge: stratumLabel,
         badgeClass: mapStatusClass(toText(mining.ckpool_class, ""), "status-ok"),
+        state: toText(mining.ckpool_state, "stopped"),
+        waitReason: toText(mining.ckpool_wait_reason, ""),
         url: toText(mining.stratum_url, mock.stratum.url),
         user: toText(mining.user_hint, mock.stratum.user),
         pass: toText(mining.pass_hint, mock.stratum.pass),
@@ -1633,6 +1640,12 @@
     setBadgeState("cardStratumBadge", data.stratum.badge, data.stratum.badgeClass);
     var cardVer = String(data.bitcoin.version || "").replace(/^Satoshi:/i, "").replace(/\//g, "").trim();
     setText("cardBitcoindVersion", cardVer && cardVer !== "--" ? cardVer : "");
+
+    /* service control buttons — label follows live state */
+    var btcSvcBtn = document.getElementById("svcBitcoindToggleBtn");
+    if (btcSvcBtn) btcSvcBtn.textContent = t(data.bitcoin.running ? "svc.stopBitcoind" : "svc.startBitcoind");
+    var stSvcBtn = document.getElementById("svcStratumToggleBtn");
+    if (stSvcBtn) stSvcBtn.textContent = t(data.stratum.state === "running" ? "svc.stopStratum" : "svc.startStratum");
 
     setText("sysCpu", "Canaan K230 \u00b7 RISC-V");
     setText("sysTemp", data.system.temperature);
@@ -2758,6 +2771,19 @@
       "label.prune.full_mode": "Full Node",
       "label.stratum.running": "Running",
       "label.stratum.stopped": "Stopped",
+      "label.stratum.waiting": "Waiting for Bitcoind…",
+      "svc.stopBitcoind": "Stop Bitcoind",
+      "svc.startBitcoind": "Start Bitcoind",
+      "svc.stopStratum": "Stop Stratum",
+      "svc.startStratum": "Start Stratum",
+      "svc.stopBitcoind.title": "Stop Bitcoind",
+      "svc.stopBitcoind.warn": "Stopping Bitcoind pauses block sync and mining. Do not power off.",
+      "svc.stopStratum.title": "Stop Stratum",
+      "svc.stopStratum.warn": "Mining will stop until Stratum is started again.",
+      "svc.stopConfirm": "Stop",
+      "svc.startBlocked.title": "Cannot Start Stratum",
+      "svc.startBlocked.note": "Stratum will start automatically once Bitcoind is ready.",
+      "svc.startBlocked.fallback": "Bitcoind is not ready yet.",
       "wifi.idle": "Idle",
       "theme.dark": "Dark",
       "theme.light": "Light",
@@ -2939,6 +2965,19 @@
       "label.prune.full_mode": "完整节点",
       "label.stratum.running": "运行中",
       "label.stratum.stopped": "已停止",
+      "label.stratum.waiting": "等待 Bitcoind…",
+      "svc.stopBitcoind": "停止 Bitcoind",
+      "svc.startBitcoind": "启动 Bitcoind",
+      "svc.stopStratum": "停止 Stratum",
+      "svc.startStratum": "启动 Stratum",
+      "svc.stopBitcoind.title": "停止 Bitcoind",
+      "svc.stopBitcoind.warn": "停止 Bitcoind 会暂停区块同步和挖矿。请勿断电。",
+      "svc.stopStratum.title": "停止 Stratum",
+      "svc.stopStratum.warn": "挖矿将停止，直到再次启动 Stratum。",
+      "svc.stopConfirm": "停止",
+      "svc.startBlocked.title": "无法启动 Stratum",
+      "svc.startBlocked.note": "Bitcoind 就绪后 Stratum 会自动启动。",
+      "svc.startBlocked.fallback": "Bitcoind 尚未就绪。",
       "wifi.idle": "空闲",
       "theme.dark": "深色",
       "theme.light": "浅色",
@@ -3109,6 +3148,19 @@
       "label.prune.full_mode": "Nodo completo",
       "label.stratum.running": "En ejecución",
       "label.stratum.stopped": "Detenido",
+      "label.stratum.waiting": "Esperando a Bitcoind…",
+      "svc.stopBitcoind": "Detener Bitcoind",
+      "svc.startBitcoind": "Iniciar Bitcoind",
+      "svc.stopStratum": "Detener Stratum",
+      "svc.startStratum": "Iniciar Stratum",
+      "svc.stopBitcoind.title": "Detener Bitcoind",
+      "svc.stopBitcoind.warn": "Detener Bitcoind pausa la sincronización de bloques y la minería. No apague el equipo.",
+      "svc.stopStratum.title": "Detener Stratum",
+      "svc.stopStratum.warn": "La minería se detendrá hasta que Stratum se vuelva a iniciar.",
+      "svc.stopConfirm": "Detener",
+      "svc.startBlocked.title": "No se puede iniciar Stratum",
+      "svc.startBlocked.note": "Stratum se iniciará automáticamente cuando Bitcoind esté listo.",
+      "svc.startBlocked.fallback": "Bitcoind aún no está listo.",
       "wifi.idle": "Inactivo",
       "theme.dark": "Oscuro",
       "theme.light": "Claro",
@@ -3277,6 +3329,19 @@
       "label.prune.full_mode": "Nœud complet",
       "label.stratum.running": "En cours",
       "label.stratum.stopped": "Arrêté",
+      "label.stratum.waiting": "En attente de Bitcoind…",
+      "svc.stopBitcoind": "Arrêter Bitcoind",
+      "svc.startBitcoind": "Démarrer Bitcoind",
+      "svc.stopStratum": "Arrêter Stratum",
+      "svc.startStratum": "Démarrer Stratum",
+      "svc.stopBitcoind.title": "Arrêter Bitcoind",
+      "svc.stopBitcoind.warn": "L'arrêt de Bitcoind met en pause la synchronisation des blocs et le minage. Ne coupez pas l'alimentation.",
+      "svc.stopStratum.title": "Arrêter Stratum",
+      "svc.stopStratum.warn": "Le minage sera arrêté jusqu'à ce que Stratum soit relancé.",
+      "svc.stopConfirm": "Arrêter",
+      "svc.startBlocked.title": "Impossible de démarrer Stratum",
+      "svc.startBlocked.note": "Stratum démarrera automatiquement une fois Bitcoind prêt.",
+      "svc.startBlocked.fallback": "Bitcoind n'est pas encore prêt.",
       "wifi.idle": "Inactif",
       "theme.dark": "Sombre",
       "theme.light": "Clair",
@@ -3445,6 +3510,19 @@
       "label.prune.full_mode": "Vollknoten",
       "label.stratum.running": "Läuft",
       "label.stratum.stopped": "Gestoppt",
+      "label.stratum.waiting": "Warte auf Bitcoind…",
+      "svc.stopBitcoind": "Bitcoind stoppen",
+      "svc.startBitcoind": "Bitcoind starten",
+      "svc.stopStratum": "Stratum stoppen",
+      "svc.startStratum": "Stratum starten",
+      "svc.stopBitcoind.title": "Bitcoind stoppen",
+      "svc.stopBitcoind.warn": "Das Stoppen von Bitcoind pausiert die Block-Synchronisation und das Mining. Bitte nicht ausschalten.",
+      "svc.stopStratum.title": "Stratum stoppen",
+      "svc.stopStratum.warn": "Das Mining wird angehalten, bis Stratum erneut gestartet wird.",
+      "svc.stopConfirm": "Stoppen",
+      "svc.startBlocked.title": "Stratum kann nicht gestartet werden",
+      "svc.startBlocked.note": "Stratum startet automatisch, sobald Bitcoind bereit ist.",
+      "svc.startBlocked.fallback": "Bitcoind ist noch nicht bereit.",
       "wifi.idle": "Leerlauf",
       "theme.dark": "Dunkel",
       "theme.light": "Hell",
@@ -3613,6 +3691,19 @@
       "label.prune.full_mode": "Nó completo",
       "label.stratum.running": "Em execução",
       "label.stratum.stopped": "Parado",
+      "label.stratum.waiting": "Aguardando o Bitcoind…",
+      "svc.stopBitcoind": "Parar Bitcoind",
+      "svc.startBitcoind": "Iniciar Bitcoind",
+      "svc.stopStratum": "Parar Stratum",
+      "svc.startStratum": "Iniciar Stratum",
+      "svc.stopBitcoind.title": "Parar Bitcoind",
+      "svc.stopBitcoind.warn": "Parar o Bitcoind pausa a sincronização de blocos e a mineração. Não desligue o aparelho.",
+      "svc.stopStratum.title": "Parar Stratum",
+      "svc.stopStratum.warn": "A mineração será interrompida até que o Stratum seja iniciado novamente.",
+      "svc.stopConfirm": "Parar",
+      "svc.startBlocked.title": "Não é possível iniciar o Stratum",
+      "svc.startBlocked.note": "O Stratum será iniciado automaticamente quando o Bitcoind estiver pronto.",
+      "svc.startBlocked.fallback": "O Bitcoind ainda não está pronto.",
       "wifi.idle": "Ocioso",
       "theme.dark": "Escuro",
       "theme.light": "Claro",
@@ -3781,6 +3872,19 @@
       "label.prune.full_mode": "Полный узел",
       "label.stratum.running": "Работает",
       "label.stratum.stopped": "Остановлен",
+      "label.stratum.waiting": "Ожидание Bitcoind…",
+      "svc.stopBitcoind": "Остановить Bitcoind",
+      "svc.startBitcoind": "Запустить Bitcoind",
+      "svc.stopStratum": "Остановить Stratum",
+      "svc.startStratum": "Запустить Stratum",
+      "svc.stopBitcoind.title": "Остановить Bitcoind",
+      "svc.stopBitcoind.warn": "Остановка Bitcoind приостанавливает синхронизацию блоков и майнинг. Не выключайте питание.",
+      "svc.stopStratum.title": "Остановить Stratum",
+      "svc.stopStratum.warn": "Майнинг будет остановлен, пока Stratum не будет запущен снова.",
+      "svc.stopConfirm": "Остановить",
+      "svc.startBlocked.title": "Невозможно запустить Stratum",
+      "svc.startBlocked.note": "Stratum запустится автоматически, как только Bitcoind будет готов.",
+      "svc.startBlocked.fallback": "Bitcoind ещё не готов.",
       "wifi.idle": "Ожидание",
       "theme.dark": "Тёмная",
       "theme.light": "Светлая",
@@ -3949,6 +4053,19 @@
       "label.prune.full_mode": "フルノード",
       "label.stratum.running": "実行中",
       "label.stratum.stopped": "停止中",
+      "label.stratum.waiting": "Bitcoind を待機中…",
+      "svc.stopBitcoind": "Bitcoind を停止",
+      "svc.startBitcoind": "Bitcoind を起動",
+      "svc.stopStratum": "Stratum を停止",
+      "svc.startStratum": "Stratum を起動",
+      "svc.stopBitcoind.title": "Bitcoind を停止",
+      "svc.stopBitcoind.warn": "Bitcoind を停止するとブロック同期とマイニングが一時停止します。電源を切らないでください。",
+      "svc.stopStratum.title": "Stratum を停止",
+      "svc.stopStratum.warn": "Stratum が再度起動されるまでマイニングは停止します。",
+      "svc.stopConfirm": "停止",
+      "svc.startBlocked.title": "Stratum を起動できません",
+      "svc.startBlocked.note": "Bitcoind が準備できると Stratum は自動的に起動します。",
+      "svc.startBlocked.fallback": "Bitcoind はまだ準備できていません。",
       "wifi.idle": "アイドル",
       "theme.dark": "ダーク",
       "theme.light": "ライト",
@@ -4117,6 +4234,19 @@
       "label.prune.full_mode": "풀 노드",
       "label.stratum.running": "실행 중",
       "label.stratum.stopped": "정지됨",
+      "label.stratum.waiting": "Bitcoind 대기 중…",
+      "svc.stopBitcoind": "Bitcoind 중지",
+      "svc.startBitcoind": "Bitcoind 시작",
+      "svc.stopStratum": "Stratum 중지",
+      "svc.startStratum": "Stratum 시작",
+      "svc.stopBitcoind.title": "Bitcoind 중지",
+      "svc.stopBitcoind.warn": "Bitcoind를 중지하면 블록 동기화와 채굴이 일시 중단됩니다. 전원을 끄지 마세요.",
+      "svc.stopStratum.title": "Stratum 중지",
+      "svc.stopStratum.warn": "Stratum이 다시 시작될 때까지 채굴이 중단됩니다.",
+      "svc.stopConfirm": "중지",
+      "svc.startBlocked.title": "Stratum을 시작할 수 없습니다",
+      "svc.startBlocked.note": "Bitcoind가 준비되면 Stratum이 자동으로 시작됩니다.",
+      "svc.startBlocked.fallback": "Bitcoind가 아직 준비되지 않았습니다.",
       "wifi.idle": "유휴",
       "theme.dark": "다크",
       "theme.light": "라이트",
@@ -4285,6 +4415,19 @@
       "label.prune.full_mode": "عقدة كاملة",
       "label.stratum.running": "قيد التشغيل",
       "label.stratum.stopped": "متوقف",
+      "label.stratum.waiting": "بانتظار Bitcoind…",
+      "svc.stopBitcoind": "إيقاف Bitcoind",
+      "svc.startBitcoind": "تشغيل Bitcoind",
+      "svc.stopStratum": "إيقاف Stratum",
+      "svc.startStratum": "تشغيل Stratum",
+      "svc.stopBitcoind.title": "إيقاف Bitcoind",
+      "svc.stopBitcoind.warn": "إيقاف Bitcoind يوقف مزامنة الكتل والتعدين مؤقتًا. لا تقطع الطاقة.",
+      "svc.stopStratum.title": "إيقاف Stratum",
+      "svc.stopStratum.warn": "سيتم إيقاف التعدين حتى يتم تشغيل Stratum مرة أخرى.",
+      "svc.stopConfirm": "إيقاف",
+      "svc.startBlocked.title": "تعذر تشغيل Stratum",
+      "svc.startBlocked.note": "سيتم تشغيل Stratum تلقائيًا بمجرد جاهزية Bitcoind.",
+      "svc.startBlocked.fallback": "Bitcoind غير جاهز بعد.",
       "wifi.idle": "خامل",
       "theme.dark": "داكن",
       "theme.light": "فاتح",
@@ -4785,6 +4928,162 @@
     if (confirmBtn) confirmBtn.disabled = false;
   }
 
+  /* ── Service control (Bitcoind / Stratum start-stop) ────────────────
+   * Kebab buttons on the two dashboard cards. Stop asks for confirmation
+   * (mining pauses); Start is direct — except Stratum in "waiting" state,
+   * which opens a dialog explaining why it cannot start yet (the S62ckpool
+   * waiter auto-starts it once bitcoind is ready). Progress is tracked via
+   * the regular 30s status refresh; a fast poll is started right after an
+   * action so the button label flips promptly. */
+  var svcStopTarget = null; // "bitcoind" | "ckpool" while the confirm dialog is open
+  var svcBusy = { bitcoind: false, ckpool: false };
+  var svcPollTimer = null;
+
+  function svcSetBusy(svc, busy) {
+    svcBusy[svc] = busy;
+    var btn = document.getElementById(svc === "bitcoind" ? "svcBitcoindToggleBtn" : "svcStratumToggleBtn");
+    if (btn) btn.disabled = busy;
+  }
+
+  function svcStopShow(target) {
+    svcStopTarget = target;
+    var overlay = document.getElementById("svcStopOverlay");
+    var title = document.getElementById("svcStopTitle");
+    var note = document.getElementById("svcStopNote");
+    if (!overlay || !title || !note) return;
+    title.textContent = t(target === "bitcoind" ? "svc.stopBitcoind.title" : "svc.stopStratum.title");
+    note.textContent = t(target === "bitcoind" ? "svc.stopBitcoind.warn" : "svc.stopStratum.warn");
+    overlay.hidden = false;
+  }
+
+  function svcStopHide() {
+    svcStopTarget = null;
+    var overlay = document.getElementById("svcStopOverlay");
+    if (overlay) overlay.hidden = true;
+  }
+
+  function svcStartBlockedShow(reason) {
+    var overlay = document.getElementById("svcStartBlockedOverlay");
+    var el = document.getElementById("svcStartBlockedReason");
+    if (!overlay) return;
+    if (el) el.textContent = reason || t("svc.startBlocked.fallback");
+    overlay.hidden = false;
+  }
+
+  function svcStartBlockedHide() {
+    var overlay = document.getElementById("svcStartBlockedOverlay");
+    if (overlay) overlay.hidden = true;
+  }
+
+  function svcStopPollState() {
+    return window.fetch("/api/service.cgi?action=state&_ts=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (st) {
+        if (!st) return;
+        var btcDone = st.bitcoind && st.bitcoind.running === 0;
+        var ckDone = st.ckpool && st.ckpool.running === 0;
+        if (btcDone && ckDone) {
+          window.clearInterval(svcPollTimer);
+          svcPollTimer = null;
+          svcSetBusy("bitcoind", false);
+          svcSetBusy("ckpool", false);
+          fetchDashboardData();
+        }
+      })
+      .catch(function () {});
+  }
+
+  function svcStartPolling() {
+    if (svcPollTimer) return;
+    svcPollTimer = window.setInterval(svcStopPollState, 3000);
+    svcStopPollState();
+  }
+
+  function svcPost(action, svc) {
+    return window.fetch("/api/service.cgi?action=" + action + "&service=" + svc, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: ""
+    }).then(function (r) { return r.json(); });
+  }
+
+  function svcDoStop(svc) {
+    svcSetBusy(svc, true);
+    svcPost("stop", svc)
+      .then(function (res) {
+        if (res && res.ok) {
+          svcStartPolling();
+        } else {
+          svcSetBusy(svc, false);
+          fetchDashboardData();
+        }
+      })
+      .catch(function () {
+        svcSetBusy(svc, false);
+        fetchDashboardData();
+      });
+  }
+
+  function svcDoStart(svc) {
+    svcSetBusy(svc, true);
+    svcPost("start", svc)
+      .then(function (res) {
+        if (res && res.ok) {
+          svcStartPolling();
+        } else if (res && res.error === "not_ready") {
+          // only reachable for ckpool when state raced between render and click
+          svcSetBusy(svc, false);
+          svcStartBlockedShow(res.reason);
+          fetchDashboardData();
+        } else {
+          svcSetBusy(svc, false);
+          fetchDashboardData();
+        }
+      })
+      .catch(function () {
+        svcSetBusy(svc, false);
+        fetchDashboardData();
+      });
+  }
+
+  function bindServiceControls() {
+    var btcBtn = document.getElementById("svcBitcoindToggleBtn");
+    if (btcBtn) {
+      btcBtn.addEventListener("click", function () {
+        var api = lastDashboardApi;
+        var running = api && api.bitcoin && api.bitcoin.running === 1;
+        if (running) svcStopShow("bitcoind");
+        else svcDoStart("bitcoind");
+      });
+    }
+    var stBtn = document.getElementById("svcStratumToggleBtn");
+    if (stBtn) {
+      stBtn.addEventListener("click", function () {
+        var api = lastDashboardApi;
+        var state = api && api.mining ? api.mining.ckpool_state : "stopped";
+        if (state === "running") {
+          svcStopShow("ckpool");
+        } else if (state === "waiting") {
+          svcStartBlockedShow(api.mining.ckpool_wait_reason || "");
+        } else {
+          svcDoStart("ckpool");
+        }
+      });
+    }
+    var stopCancel = document.getElementById("svcStopCancelBtn");
+    if (stopCancel) stopCancel.addEventListener("click", svcStopHide);
+    var stopConfirm = document.getElementById("svcStopConfirmBtn");
+    if (stopConfirm) {
+      stopConfirm.addEventListener("click", function () {
+        var target = svcStopTarget;
+        svcStopHide();
+        if (target) svcDoStop(target);
+      });
+    }
+    var blockedClose = document.getElementById("svcStartBlockedCloseBtn");
+    if (blockedClose) blockedClose.addEventListener("click", svcStartBlockedHide);
+  }
+
   /* Card kebab (three-dot) action menus: toggle on click, close on outside
    * click / Escape. Each .kebab-menu contains a .kebab-btn + .kebab-panel;
    * items are plain buttons that keep their own handlers (e.g. cleanBlockBtn). */
@@ -4875,6 +5174,7 @@
     applyI18n();
     bindKebabMenus();
     bindCleanBlockControls();
+    bindServiceControls();
     bindPeerMap();
     setTheme(getStoredTheme());
     fetchDashboardData();

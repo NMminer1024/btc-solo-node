@@ -13,6 +13,9 @@ RESTART_COOLDOWN=${ROCKBASE_SUPERVISOR_RESTART_COOLDOWN:-120}
 STARTUP_GRACE=${ROCKBASE_SUPERVISOR_STARTUP_GRACE:-180}
 LOG_MAX_KB=${ROCKBASE_SUPERVISOR_LOG_MAX_KB:-512}
 LOG_ROTATIONS=${ROCKBASE_SUPERVISOR_LOG_ROTATIONS:-5}
+# Set by the web UI when the operator stops bitcoind manually; while present
+# the supervisor must NOT restart bitcoind (it is down on purpose).
+BTC_USER_STOPPED_FLAG=${ROCKBASE_SUPERVISOR_USER_STOP_FLAG:-/run/rockbase/bitcoind-user-stopped}
 
 SERVICES="
 bitcoind|bitcoind -conf|/etc/init.d/S61bitcoind
@@ -78,6 +81,12 @@ check_service() {
     init_script=$3
 
     if is_running_pattern "$pattern"; then
+        return 0
+    fi
+
+    # operator stopped this service from the web UI: leave it down
+    if [ "$name" = "bitcoind" ] && [ -f "$BTC_USER_STOPPED_FLAG" ]; then
+        log_msg "skip ${name}: user-stopped flag present"
         return 0
     fi
 

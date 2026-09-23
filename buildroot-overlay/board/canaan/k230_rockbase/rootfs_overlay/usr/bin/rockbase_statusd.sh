@@ -819,9 +819,32 @@ collect_stratum() {
     if [ "${ckpool_running}" = "1" ]; then
         ckpool_class=ok
         ckpool_state=running
+        ckpool_wait_reason=""
     else
-        ckpool_class=err
-        ckpool_state=stopped
+        # Three-state model: ckpool down + bitcoind not ready => "waiting"
+        # (the S62ckpool waiter auto-starts ckpool once bitcoind is ready);
+        # ckpool down + bitcoind ready => "stopped" (user stopped it).
+        # Run the ready check with an isolated STATE_DIR so we do not
+        # interfere with the waiter's own streak counter.
+        # short RPC timeout: this runs in the statusd main loop every
+        # STRATUM_INTERVAL; a hung bitcoind RPC must not stall the loop
+        BTC_CONF="${CONF}" BTC_DATADIR="${DATADIR}" \
+            STATE_DIR="${STATE_DIR}/readycheck" ONE_SHOT=1 RPC_TIMEOUT=5 \
+            /usr/bin/rockbase_bitcoind_ready.sh >/dev/null 2>&1
+        if [ $? -eq 0 ]; then
+            ckpool_class=err
+            ckpool_state=stopped
+            ckpool_wait_reason=""
+        else
+            ckpool_class=warn
+            ckpool_state=waiting
+            # reason file is written by the one-shot check into its isolated
+            # STATE_DIR (the waiter's own reason file in /run/rockbase is
+            # only present while a waiter is actually running)
+            ckpool_wait_reason=$(cat "${STATE_DIR}/readycheck/bitcoind-sync-wait.reason" 2>/dev/null)
+            [ -n "${ckpool_wait_reason}" ] || ckpool_wait_reason=$(cat /run/rockbase/bitcoind-sync-wait.reason 2>/dev/null)
+            [ -n "${ckpool_wait_reason}" ] || ckpool_wait_reason="bitcoind is not ready"
+        fi
     fi
 
     {
@@ -829,6 +852,7 @@ collect_stratum() {
         state_num ckpool_running "${ckpool_running}"
         state_str ckpool_class "${ckpool_class}"
         state_str ckpool_state "${ckpool_state}"
+        state_str ckpool_wait_reason "${ckpool_wait_reason}"
         state_str stratum_key "${stratum_key}"
         state_str stratum_port "${stratum_port}"
         state_str btc_address "${btc_address}"
@@ -888,6 +912,7 @@ render_status_json() {
     ckpool_running=0
     ckpool_class=err
     ckpool_state=stopped
+    ckpool_wait_reason=""
     stratum_key=unknown
     stratum_port=3333
     btc_address="-"
@@ -1260,6 +1285,7 @@ render_status_json() {
     printf '    "ckpool_running": %s,\n' "${ckpool_running}"
     printf '    "ckpool_class": %s,\n' "$(json_str "${ckpool_class}")"
     printf '    "ckpool_state": %s,\n' "$(json_str "${ckpool_state}")"
+    printf '    "ckpool_wait_reason": %s,\n' "$(json_str "${ckpool_wait_reason}")"
     printf '    "stratum_key": %s,\n' "$(json_str "${stratum_key}")"
     printf '    "stratum_port": %s,\n' "$(json_num "${stratum_port}")"
     printf '    "stratum_url": %s,\n' "$(json_str "${stratum_url}")"

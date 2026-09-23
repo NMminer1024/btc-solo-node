@@ -78,6 +78,7 @@
                   </svg>
                 </button>
                 <div class="kebab-panel" hidden>
+                  <button class="kebab-item" id="svcBitcoindToggleBtn" type="button" data-i18n="svc.stopBitcoind">Stop Bitcoind</button>
                   <button class="kebab-item kebab-item-danger" id="cleanBlockBtn" type="button" data-i18n="cleanBlock.btn">Clean Block Data</button>
                 </div>
               </div>
@@ -133,6 +134,7 @@
                 </svg>
               </button>
               <div class="kebab-panel" hidden>
+                <button class="kebab-item" id="svcStratumToggleBtn" type="button" data-i18n="svc.startStratum">Start</button>
               </div>
             </div>
           </div>
@@ -585,6 +587,32 @@
   </div>
 </div>
 
+<div class="cleanblock-overlay" id="svcStopOverlay" hidden>
+  <div class="cleanblock-modal" role="dialog" aria-modal="true" aria-label="Stop service">
+    <div class="cleanblock-view">
+      <h3 id="svcStopTitle">Stop</h3>
+      <p class="cleanblock-note" id="svcStopNote"></p>
+      <div class="cleanblock-actions">
+        <button class="action-button" id="svcStopCancelBtn" type="button" data-i18n="cleanBlock.cancel">Cancel</button>
+        <button class="action-button action-button-danger" id="svcStopConfirmBtn" type="button" data-i18n="svc.stopConfirm">Stop</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="cleanblock-overlay" id="svcStartBlockedOverlay" hidden>
+  <div class="cleanblock-modal" role="dialog" aria-modal="true" aria-label="Cannot start Stratum">
+    <div class="cleanblock-view">
+      <h3 data-i18n="svc.startBlocked.title">Cannot Start Stratum</h3>
+      <p class="cleanblock-note" data-i18n="svc.startBlocked.note">Stratum will start automatically once Bitcoind is ready.</p>
+      <p class="cleanblock-note mono" id="svcStartBlockedReason"></p>
+      <div class="cleanblock-actions">
+        <button class="action-button action-button-primary" id="svcStartBlockedCloseBtn" type="button" data-i18n="cleanBlock.close">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="peermap-overlay" id="peerMapOverlay" hidden>
   <div class="peermap-modal" role="dialog" aria-modal="true" aria-label="Peer Map">
     <div class="peermap-header">
@@ -599,7 +627,7 @@
   </div>
 </div>
 
-<script src="/world-map.js?v=20260922-cn5"></script>
-<script src="/app.js?v=20260922-cn5"></script>
+<script src="/world-map.js?v=20260923-svc1"></script>
+<script src="/app.js?v=20260923-svc1"></script>
 </body>
 </html>

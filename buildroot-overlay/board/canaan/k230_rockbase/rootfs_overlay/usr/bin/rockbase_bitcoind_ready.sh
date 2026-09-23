@@ -14,6 +14,10 @@ MAX_BLOCK_AGE=${MAX_BLOCK_AGE:-7200}
 MIN_CONNECTIONS=${MIN_CONNECTIONS:-2}
 STABLE_FILE=${STABLE_FILE:-${STATE_DIR}/bitcoind-ready-streak}
 REQUIRED_STREAK=${REQUIRED_STREAK:-3}
+# ONE_SHOT=1: single-shot check for statusd / web CGI. Skips the streak
+# counter (and does not touch the waiter's streak file) — ready iff the
+# current snapshot passes all gates.
+ONE_SHOT=${ONE_SHOT:-0}
 
 mkdir -p "${STATE_DIR}"
 
@@ -66,6 +70,22 @@ age=$((now - best_time))
 [ "${age}" -le "${MAX_BLOCK_AGE}" ] || write_wait "bitcoind best block is too old (${age}s)"
 
 [ "${connections}" -ge "${MIN_CONNECTIONS}" ] || write_wait "bitcoind has only ${connections} peer connections"
+
+if [ "${ONE_SHOT}" = "1" ]; then
+    cat > "${READY_FILE}" <<EOF
+ready=true
+blocks=${blocks}
+headers=${headers}
+lag=${lag}
+best_block_time=${best_time}
+age=${age}
+connections=${connections}
+checked_at=${now}
+EOF
+    rm -f "${REASON_FILE}"
+    echo "bitcoind ready (one-shot; blocks=${blocks}, headers=${headers}, lag=${lag}, age=${age}s, peers=${connections})"
+    exit 0
+fi
 
 streak=$(cat "${STABLE_FILE}" 2>/dev/null || echo 0)
 case "${streak}" in
