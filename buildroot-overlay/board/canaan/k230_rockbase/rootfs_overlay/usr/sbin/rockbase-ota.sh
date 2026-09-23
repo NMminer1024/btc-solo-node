@@ -135,6 +135,55 @@ die() {
     exit 1
 }
 
+# cleanup_workdir: prevent unbounded growth of /root/config/ota.
+# Called periodically (check-async) and before each apply.
+#   - ota.log: rotate when > 1 MiB (keep last 500 lines)
+#   - apply-web-*.log: keep only the 5 most recent
+#   - slot-*.img.gz / .sig: remove any stale downloads (a previous apply
+#     that was interrupted before its post-flash cleanup left them behind)
+OTA_LOG_MAX_BYTES=1048576   # 1 MiB
+OTA_LOG_KEEP_BYTES=524288   # keep last 512 KiB on rotation
+APPLY_LOG_KEEP=5
+
+cleanup_workdir() {
+    [ -d "$WORKDIR" ] || return 0
+
+    # 1) rotate ota.log (byte-based: robust even if the log has no newlines)
+    if [ -f "$LOGFILE" ]; then
+        local sz
+        sz=$(wc -c < "$LOGFILE" 2>/dev/null || echo 0)
+        if [ "$sz" -gt "$OTA_LOG_MAX_BYTES" ] 2>/dev/null; then
+            tail -c "$OTA_LOG_KEEP_BYTES" "$LOGFILE" > "$LOGFILE.tmp" 2>/dev/null \
+                && mv "$LOGFILE.tmp" "$LOGFILE"
+        fi
+    fi
+
+    # 2) keep only the N most recent apply-web-*.log files
+    local count
+    count=$(ls -1 "$WORKDIR"/apply-web-*.log 2>/dev/null | wc -l)
+    if [ "$count" -gt "$APPLY_LOG_KEEP" ] 2>/dev/null; then
+        ls -1t "$WORKDIR"/apply-web-*.log 2>/dev/null \
+            | tail -n +$((APPLY_LOG_KEEP + 1)) \
+            | while read -r old; do rm -f "$old"; done
+    fi
+
+    # 3) remove stale slot images (not part of the current manifest version)
+    #    Safe: a running apply holds the lock, so no concurrent download.
+    local mf="$WORKDIR/$MANIFEST_NAME" cur_ver
+    if [ -f "$mf" ]; then
+        cur_ver=$(mj_str version "$mf")
+        if [ -n "$cur_ver" ]; then
+            for f in "$WORKDIR"/slot-*.img.gz "$WORKDIR"/slot-*.img.gz.sig; do
+                [ -f "$f" ] || continue
+                case "$f" in
+                    *"$cur_ver"*) ;;          # keep current
+                    *) rm -f "$f" ;;          # stale
+                esac
+            done
+        fi
+    fi
+}
+
 have() { command -v "$1" >/dev/null 2>&1; }
 
 require() {
@@ -441,6 +490,7 @@ cmd_check_async() {
 
     require curl
     mkdir -p "$WORKDIR"
+    cleanup_workdir
     local mf="$WORKDIR/$MANIFEST_NAME"
     if ! curl --cacert /etc/ssl/certs/ca-certificates.crt --max-time 20 \
              --retry 2 -fSL -o "$mf" "$url" 2>>"$LOGFILE"; then
@@ -501,6 +551,7 @@ cmd_apply() {
     fi
 
     mkdir -p "$WORKDIR"
+    cleanup_workdir
     local mf="$WORKDIR/$MANIFEST_NAME"
     log "=== OTA apply start (force=$force) ==="
     log "fetching manifest: $url"
