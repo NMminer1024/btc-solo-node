@@ -1,0 +1,26 @@
+--- a/Makefile
++++ b/Makefile
+@@ -1261,6 +1261,12 @@
+ 
+ EXTRA_CFLAGS += -DDM_ODM_SUPPORT_TYPE=0x04
+ 
++# Rockbase: enable Realtek dynamic TX power (DTP). With DTP the driver
++# lowers PA output when signal is strong and raises it when weak, which
++# cuts module heat on the always-on stratum hub without hurting link
++# quality at distance.
++EXTRA_CFLAGS += -DCONFIG_SUPPORT_DYNAMIC_TXPWR
++
+ ifeq ($(CONFIG_PLATFORM_I386_PC), y)
+ EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN
+ EXTRA_CFLAGS += -DCONFIG_IOCTL_CFG80211 -DRTW_USE_CFG80211_STA_EVENT
+--- a/hal/phydm/phydm.c
++++ b/hal/phydm/phydm.c
+@@ -915,7 +915,7 @@
+ 		support_ability |=
+ 			ODM_BB_DIG |
+ 			ODM_BB_RA_MASK |
+-			/*@ODM_BB_DYNAMIC_TXPWR	|*/
++			ODM_BB_DYNAMIC_TXPWR |
+ 			ODM_BB_FA_CNT |
+ 			ODM_BB_RSSI_MONITOR |
+ 			ODM_BB_CCK_PD |
