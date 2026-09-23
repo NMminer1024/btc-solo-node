@@ -88,8 +88,10 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
    不写技术细节。该文件有两个用途：
    - workflow 用作 GitHub Release 页面的 body；
    - 通过 `--notes-file` 嵌入 manifest.json，设备 Web 端 OTA 更新弹窗中展示给用户。
-9. 把发布仓库里的 `release-packages/$VERSION/`（含 `RELEASE_NOTES.md`）和
-   GitHub Actions workflow 一起提交并推送。
+9. 把发布包目录中的**全部四个文件**提交到发布仓库：
+  `manifest.json`、`slot-$VERSION.img.gz`、`slot-$VERSION.img.gz.sig` 和
+  `RELEASE_NOTES.md`。只提交 `RELEASE_NOTES.md` 会导致 workflow 的文件校验失败。
+  同时提交必要的 GitHub Actions workflow 修改。
    提交作者也应为 `NMminer1024 <nmminer1024@users.noreply.github.com>`。
 10. 用版本 tag 触发 workflow：
     - `git tag -a "$VERSION" -m "$VERSION"`
@@ -116,10 +118,15 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
 - 没有发布仓库写权限时，不要尝试绕过流程。
 - **签名密钥必须与源码固化公钥配对**，发布前核对不一致就先处理，不要带着不匹配的密钥发布。
 - **每个 release 必须带用户向变更说明**（`RELEASE_NOTES.md`），不允许发空 body 的 release。
+- **普通发布禁止删除已有 Release 或 tag**。如果同名 Release/tag 已存在，必须停止并报告，
+  不得自动覆盖、删除或重推。
+- “删除旧 Release 后重发”只允许在用户明确提出“覆盖发布/重发同一版本”时执行，
+  且必须先说明将删除的精确 Release/tag，并获得确认。用户临时要求过一次删除，
+  不代表后续发布都允许删除。
 
-## GitHub API Token（删/改已发布 release 用）
+## GitHub API Token（仅显式授权的重发/修补用）
 
-workflow 本身用默认 `GITHUB_TOKEN` 就能发布（含自动删旧 release），但**本地手动操作**
+workflow 本身用默认 `GITHUB_TOKEN` 就能发布，但**本地手动操作**
 （删除已发布的 release、修补 body、查 run 日志等）需要个人 token：
 
 - **存放位置（固定）**：`~/.rockbase-ota-keys/github-api-token`（chmod 600，纯 token 无换行）。
@@ -140,13 +147,13 @@ workflow 本身用默认 `GITHUB_TOKEN` 就能发布（含自动删旧 release�
   curl -s -o /dev/null -w "%{http_code}\n" -X DELETE \
     "https://api.github.com/repos/$RELEASE_REPO/releases/$RID" -H "Authorization: token $TOKEN"   # 期望 204
   ```
-- **重发同一版本号的完整流程**（同名 tag 已发布过、需要换包或补 body 时）：
+- **仅在用户明确授权后，重发同一版本号的完整流程**（同名 tag 已发布过、需要换包或补 body 时）：
   1. 更新 `release-packages/$VERSION/` 下的文件（含 `RELEASE_NOTES.md`）并 push main；
   2. 用 API 删掉远端旧 release（上面 DELETE 命令）；
   3. `git push origin :refs/tags/$VERSION && git push origin $VERSION` 重推 tag；
   4. 等 workflow 跑完（约 1 分钟），按收尾检查验证 body + 资产 sha256。
-  注意：workflow 里已有「删旧 release」步骤（用默认 GITHUB_TOKEN），所以只重推 tag
-  也能覆盖式重发；手动 DELETE 是在不想等 workflow 或 workflow 失败时的备用手段。
+  注意：普通发布 workflow 不应包含自动删除 Release 的步骤。删除动作只能作为这次
+  明确授权的临时操作，完成后不得保留为默认惯例。
 
 ## Release 说明规则（RELEASE_NOTES.md）
 
