@@ -61,7 +61,7 @@ start_waiter() {
                     exit 0
                 fi
             fi
-            sleep 60
+            sleep 5
         done
     '
 }
