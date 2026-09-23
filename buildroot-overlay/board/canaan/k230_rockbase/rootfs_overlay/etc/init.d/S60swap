@@ -1,91 +1,68 @@
 #!/bin/sh
 #
-# S60swap - Ensure Rockbase has persistent 2G swap after rootfs resize
+# S60swap - Enable zram swap on boot (in-RAM compressed swap, lz4)
+#
+# Replaces the former SD-card swapfile (disabled for SDIO freeze debug).
+# zram keeps swap pages in RAM compressed, so it adds no SD I/O pressure.
+# Requires kernel CONFIG_ZRAM=y (default comp lz4).
 #
 
-SWAP_FILE=/swapfile
-SWAP_SIZE_MB=2048
-RESIZE_DONE_FLAG=/resize_done
-EXPECTED_BYTES=$((SWAP_SIZE_MB * 1024 * 1024))
+ZRAM_DEV=/dev/zram0
+ZRAM_SYS=/sys/block/zram0
+ZRAM_SIZE_MB=128
+ZRAM_COMP=lz4
 
 log() {
     echo "[S60swap] $*"
 }
 
-resize_ready() {
-    [ -f "${RESIZE_DONE_FLAG}" ]
+zram_active() {
+    grep -q "^${ZRAM_DEV}[[:space:]]" /proc/swaps 2>/dev/null
 }
 
-swap_active() {
-    grep -q "^${SWAP_FILE}[[:space:]]" /proc/swaps 2>/dev/null
-}
-
-swap_size_ok() {
-    [ -f "${SWAP_FILE}" ] || return 1
-
-    actual_bytes=$(ls -ln "${SWAP_FILE}" 2>/dev/null | awk 'NR==1 {print $5}')
-    [ "${actual_bytes}" = "${EXPECTED_BYTES}" ]
-}
-
-create_swapfile() {
-    log "creating ${SWAP_SIZE_MB}MB swapfile"
-    rm -f "${SWAP_FILE}"
-
-    if ! dd if=/dev/zero of="${SWAP_FILE}" bs=1M count="${SWAP_SIZE_MB}" conv=fsync >/dev/null 2>&1; then
-        log "ERROR: failed to allocate ${SWAP_FILE}"
-        rm -f "${SWAP_FILE}"
+enable_zram() {
+    if [ ! -d "${ZRAM_SYS}" ]; then
+        log "ERROR: ${ZRAM_SYS} not present (kernel built without zram?)"
         return 1
     fi
 
-    chmod 600 "${SWAP_FILE}" || return 1
-    mkswap "${SWAP_FILE}" >/dev/null 2>&1 || return 1
+    if zram_active; then
+        log "already active"
+        return 0
+    fi
+
+    # Clear any stale state left over from a previous boot
+    swapoff "${ZRAM_DEV}" >/dev/null 2>&1 || true
+    echo 1 > "${ZRAM_SYS}/reset" 2>/dev/null || true
+
+    echo "${ZRAM_COMP}" > "${ZRAM_SYS}/comp_algorithm" 2>/dev/null || true
+    echo $((ZRAM_SIZE_MB * 1024 * 1024)) > "${ZRAM_SYS}/disksize" || return 1
+    mkswap "${ZRAM_DEV}" >/dev/null 2>&1 || return 1
+    swapon "${ZRAM_DEV}" >/dev/null 2>&1 || return 1
     return 0
 }
 
 case "$1" in
   start)
-        printf "Starting swap: "
-        echo "disabled for SDIO freeze debug"
-        exit 0
-
-        if ! resize_ready; then
-                echo "deferred (waiting for resize_done)"
-                exit 0
-        fi
-
-        if swap_active; then
-                echo "already active"
-                exit 0
-        fi
-
-        if ! swap_size_ok; then
-                if ! create_swapfile; then
-                        echo "FAIL"
-                        exit 1
-                fi
-        fi
-
-        chmod 600 "${SWAP_FILE}" >/dev/null 2>&1 || true
-        if swapon "${SWAP_FILE}" >/dev/null 2>&1; then
-                echo "OK"
+        printf "Starting zram swap: "
+        if enable_zram; then
+                echo "OK (${ZRAM_SIZE_MB}MB ${ZRAM_COMP})"
         else
                 echo "FAIL"
                 exit 1
         fi
         ;;
   stop)
-        printf "Stopping swap: "
-
-        if ! swap_active; then
-                echo "already stopped"
-                exit 0
-        fi
-
-        if swapoff "${SWAP_FILE}" >/dev/null 2>&1; then
-                echo "OK"
+        printf "Stopping zram swap: "
+        if zram_active; then
+                if swapoff "${ZRAM_DEV}" >/dev/null 2>&1; then
+                        echo "OK"
+                else
+                        echo "FAIL"
+                        exit 1
+                fi
         else
-                echo "FAIL"
-                exit 1
+                echo "already stopped"
         fi
         ;;
   restart|reload)
