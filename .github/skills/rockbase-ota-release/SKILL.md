@@ -78,11 +78,16 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
    - `openssl dgst -sha256 -verify <(openssl pkey -in "$PRIVATE_KEY" -pubout) -signature "$PKG_DIR/slot-$VERSION.img.gz.sig" "$PKG_DIR/slot-$VERSION.img.gz"`
    - `sha256sum` 必须和 `manifest.json` 里的值一致。
 7. 如果包不存在、已过期，或 `manifest` 指向了错误仓库，就重新生成：
-   - `tools/mk-ota-package.sh --version "$VERSION" --key "$PRIVATE_KEY" --slot-img "$SLOT_IMG" --base-url "https://github.com/$RELEASE_REPO/releases/download/$VERSION" --out-dir "$PKG_DIR"`
+   - `tools/mk-ota-package.sh --version "$VERSION" --key "$PRIVATE_KEY" --slot-img "$SLOT_IMG" --base-url "https://github.com/$RELEASE_REPO/releases/download/$VERSION" --min-version v0.0.01 --notes-file "$RELEASE_WORKDIR/release-packages/$VERSION/RELEASE_NOTES.md" --out-dir "$PKG_DIR"`
+   - `--notes-file` 会将 RELEASE_NOTES.md 内容嵌入 `manifest.json` 的 `notes` 字段，
+     设备 Web 端 OTA 弹窗会自动渲染显示（简易 markdown：`###` 标题 + `-` 列表）。
+   - 如果 RELEASE_NOTES.md 尚未写好，先写再打包（见下一步）。
 8. **写发布说明 `RELEASE_NOTES.md`**（必须，见下方「Release 说明规则」）：
    在 `release-packages/$VERSION/RELEASE_NOTES.md` 里总结**从上一个 OTA tag 到当前版本**
    所有影响用户使用的改动（性能优化、操作方式变化、功能增删等），分点描述，
-   不写技术细节。该文件会被 workflow 用作 GitHub Release 的 body。
+   不写技术细节。该文件有两个用途：
+   - workflow 用作 GitHub Release 页面的 body；
+   - 通过 `--notes-file` 嵌入 manifest.json，设备 Web 端 OTA 更新弹窗中展示给用户。
 9. 把发布仓库里的 `release-packages/$VERSION/`（含 `RELEASE_NOTES.md`）和
    GitHub Actions workflow 一起提交并推送。
    提交作者也应为 `NMminer1024 <nmminer1024@users.noreply.github.com>`。
@@ -205,14 +210,17 @@ workflow 本身用默认 `GITHUB_TOKEN` 就能发布（含自动删旧 release�
 ## 常用命令
 
 ```bash
+# 先写 release-packages/$VERSION/RELEASE_NOTES.md（见「Release 说明规则」），
+# 再打包（--notes-file 把说明嵌入 manifest.json，设备 Web OTA 弹窗会展示）
 tools/mk-ota-package.sh \
   --version "$VERSION" \
   --key "$PRIVATE_KEY" \
   --slot-img "$SLOT_IMG" \
   --base-url "https://github.com/$RELEASE_REPO/releases/download/$VERSION" \
+  --min-version v0.0.01 \
+  --notes-file "$RELEASE_WORKDIR/release-packages/$VERSION/RELEASE_NOTES.md" \
   --out-dir "$PKG_DIR"
 
-# 写 release-packages/$VERSION/RELEASE_NOTES.md（见「Release 说明规则」）
 git add -A
 git commit -m "feat: publish OTA release $VERSION"
 git tag -a "$VERSION" -m "$VERSION"
