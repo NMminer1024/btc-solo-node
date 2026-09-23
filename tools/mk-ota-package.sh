@@ -16,7 +16,8 @@
 #       [--kernel-images-dir output/k230_rockbase_defconfig/images] \
 #       [--base-url https://github.com/<owner>/<repo>/releases/download/v1.2.0] \
 #       [--out-dir ota-dist/v1.2.0] \
-#       [--hw rockbase] [--min-version v1.0.0]
+#       [--hw rockbase] [--min-version v1.0.0] \
+#       [--notes-file RELEASE_NOTES.md]
 #
 # NOTE: the private key must be kept OFFLINE and never committed to git.
 
@@ -37,6 +38,7 @@ HW="rockbase"
 # manifest "version" against /etc/version/product_version, but a too-high
 # min_version is still misleading for future gating logic.
 MIN_VERSION="v0.0.01"
+NOTES_FILE=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -48,6 +50,7 @@ while [ $# -gt 0 ]; do
         --out-dir)      OUT_DIR=$2; shift 2 ;;
         --hw)           HW=$2; shift 2 ;;
         --min-version)  MIN_VERSION=$2; shift 2 ;;
+        --notes-file)   NOTES_FILE=$2; shift 2 ;;
         -h|--help)      sed -n '2,25p' "$0"; exit 0 ;;
         *) die "unknown arg: $1" ;;
     esac
@@ -88,6 +91,31 @@ openssl dgst -sha256 -verify <(openssl pkey -in "$KEY" -pubout 2>/dev/null) \
     && echo "    self-verify: OK" || echo "    self-verify: (skipped, pubout mismatch tolerated)"
 
 echo "==> [4/4] manifest.json"
+# Build optional notes field (JSON-escaped) if --notes-file is provided
+NOTES_JSON=""
+if [ -n "$NOTES_FILE" ] && [ -r "$NOTES_FILE" ]; then
+    NOTES_JSON=$(python3 -c "import json,sys; print(json.dumps(open(sys.argv[1]).read()))" "$NOTES_FILE")
+    echo "    notes: embedded from $NOTES_FILE"
+fi
+
+if [ -n "$NOTES_JSON" ]; then
+cat > "$MANIFEST_OUT" <<EOF
+{
+  "product": "rockbase",
+  "hw": ["$HW"],
+  "version": "$VERSION",
+  "min_version": "$MIN_VERSION",
+  "released": "$(date +%F)",
+  "notes": $NOTES_JSON,
+  "slot": {
+    "url": "$BASE_URL/$IMG_NAME",
+    "sha256": "$SHA256",
+    "size": $SIZE,
+    "sig_url": "$BASE_URL/$IMG_NAME.sig"
+  }
+}
+EOF
+else
 cat > "$MANIFEST_OUT" <<EOF
 {
   "product": "rockbase",
@@ -103,6 +131,7 @@ cat > "$MANIFEST_OUT" <<EOF
   }
 }
 EOF
+fi
 cat "$MANIFEST_OUT"
 
 echo

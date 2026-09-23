@@ -1787,6 +1787,52 @@ html[data-theme="light"] .miners-history-grid {
   font-size: 12px;
 }
 
+.ota-notes {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.ota-notes[hidden] {
+  display: none;
+}
+
+.ota-notes h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ota-notes-body {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.ota-notes-body h5 {
+  margin: 8px 0 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.ota-notes-body p {
+  margin: 4px 0;
+}
+
+.ota-notes-body ul {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.ota-notes-body li {
+  margin: 2px 0;
+}
+
 .ota-note {
   margin: 0 0 16px;
   color: var(--muted);

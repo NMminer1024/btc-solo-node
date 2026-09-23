@@ -2166,12 +2166,49 @@
     label.textContent = Math.round(num) + "%";
   }
 
-  function otaShowOffer(latest, released) {
+  function otaRenderNotes(notes) {
+    var container = document.getElementById("otaNotes");
+    var body = document.getElementById("otaNotesBody");
+    if (!container || !body) return;
+    if (!notes || typeof notes !== "string" || !notes.trim()) {
+      container.hidden = true;
+      return;
+    }
+    // Simple markdown: ### headers, - bullets, plain text
+    var html = "";
+    var lines = notes.split("\n");
+    var inList = false;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line) {
+        if (inList) { html += "</ul>"; inList = false; }
+        continue;
+      }
+      if (/^#{1,6}\s+/.test(line)) {
+        if (inList) { html += "</ul>"; inList = false; }
+        var level = line.match(/^#+/)[0].length;
+        var tag = level <= 3 ? "h5" : "p";
+        html += "<" + tag + ">" + escapeHtml(line.replace(/^#+\s+/, "")) + "</" + tag + ">";
+      } else if (/^[-*]\s+/.test(line)) {
+        if (!inList) { html += "<ul>"; inList = true; }
+        html += "<li>" + escapeHtml(line.replace(/^[-*]\s+/, "")) + "</li>";
+      } else {
+        if (inList) { html += "</ul>"; inList = false; }
+        html += "<p>" + escapeHtml(line) + "</p>";
+      }
+    }
+    if (inList) html += "</ul>";
+    body.innerHTML = html;
+    container.hidden = false;
+  }
+
+  function otaShowOffer(latest, released, notes) {
     if (otaApplying) return;
     otaOfferedVersion = latest;
     setText("otaCurrentVer", currentProductVersion);
     setText("otaLatestVer", latest);
     setText("otaReleaseDate", released ? t("ota.releasedPrefix") + released : "");
+    otaRenderNotes(notes);
     otaShowView("offer");
   }
 
@@ -2190,7 +2227,7 @@
         if (!/^v\d+\.\d+\.\d+$/.test(currentProductVersion)) return null;
         if (!otaVersionGt(latest, currentProductVersion)) return null;
         if (otaShouldSuppress(latest)) return null;
-        otaShowOffer(latest, manifest.released);
+        otaShowOffer(latest, manifest.released, manifest.notes);
         return manifest;
       })
       .catch(function () {
@@ -2684,6 +2721,7 @@
       "peerMap.self": "This node",
       /* ota */
       "ota.available": "Firmware Update Available",
+      "ota.whatsNew": "What's New",
       "ota.note": "The update is downloaded, verified and written to the standby system slot. Syncing and mining pause during the upgrade. When writing finishes the node reboots automatically. Do not power off.",
       "ota.remindTomorrow": "Remind me tomorrow",
       "ota.updating": "Updating Firmware",
@@ -2864,6 +2902,7 @@
       "peerMap.self": "本节点",
       /* ota */
       "ota.available": "有可用固件更新",
+      "ota.whatsNew": "更新内容",
       "ota.note": "更新包将被下载、校验并写入备用系统槽位。升级期间同步和挖矿会暂停。写入完成后节点会自动重启。请勿断电。",
       "ota.remindTomorrow": "明天提醒我",
       "ota.updating": "正在更新固件",
@@ -3034,6 +3073,7 @@
       "peerMap.unknown": "Ubicación desconocida",
       "peerMap.self": "Este nodo",
       "ota.available": "Actualización de firmware disponible",
+      "ota.whatsNew": "Novedades",
       "ota.note": "La actualización se descarga, se verifica y se escribe en la ranura de sistema en espera. La sincronización y el minado se pausan durante la actualización. Al terminar, el nodo se reinicia automáticamente. No apagues el equipo.",
       "ota.remindTomorrow": "Recordármelo mañana",
       "ota.updating": "Actualizando firmware",
@@ -3201,6 +3241,7 @@
       "peerMap.unknown": "Emplacement inconnu",
       "peerMap.self": "Ce nœud",
       "ota.available": "Mise à jour du firmware disponible",
+      "ota.whatsNew": "Nouveautés",
       "ota.note": "La mise à jour est téléchargée, vérifiée et écrite dans la baie système en attente. La synchronisation et le minage sont en pause pendant la mise à jour. À la fin, le nœud redémarre automatiquement. Ne coupez pas le courant.",
       "ota.remindTomorrow": "Me le rappeler demain",
       "ota.updating": "Mise à jour du firmware",
@@ -3368,6 +3409,7 @@
       "peerMap.unknown": "Unbekannter Standort",
       "peerMap.self": "Dieser Knoten",
       "ota.available": "Firmware-Update verfügbar",
+      "ota.whatsNew": "Neuigkeiten",
       "ota.note": "Das Update wird heruntergeladen, geprüft und in den Standby-Systemslot geschrieben. Synchronisation und Mining werden während des Updates pausiert. Nach Abschluss startet der Knoten automatisch neu. Nicht ausschalten.",
       "ota.remindTomorrow": "Morgen daran erinnern",
       "ota.updating": "Firmware wird aktualisiert",
@@ -3535,6 +3577,7 @@
       "peerMap.unknown": "Localização desconhecida",
       "peerMap.self": "Este nó",
       "ota.available": "Atualização de firmware disponível",
+      "ota.whatsNew": "Novidades",
       "ota.note": "A atualização é baixada, verificada e gravada no slot de sistema em espera. A sincronização e a mineração ficam em pausa durante a atualização. Ao terminar, o nó reinicia automaticamente. Não desligue.",
       "ota.remindTomorrow": "Lembrar-me amanhã",
       "ota.updating": "Atualizando firmware",
@@ -3702,6 +3745,7 @@
       "peerMap.unknown": "Неизвестное местоположение",
       "peerMap.self": "Этот узел",
       "ota.available": "Доступно обновление прошивки",
+      "ota.whatsNew": "Что нового",
       "ota.note": "Обновление скачивается, проверяется и записывается в резервный системный слот. Синхронизация и майнинг приостанавливаются во время обновления. После записи узел автоматически перезагрузится. Не отключайте питание.",
       "ota.remindTomorrow": "Напомнить завтра",
       "ota.updating": "Обновление прошивки",
@@ -3869,6 +3913,7 @@
       "peerMap.unknown": "位置不明",
       "peerMap.self": "このノード",
       "ota.available": "ファームウェア更新があります",
+      "ota.whatsNew": "新機能",
       "ota.note": "更新はダウンロードされ、検証されて、スタンバイのシステムスロットに書き込まれます。アップグレード中は同期とマイニングが一時停止されます。書き込みが完了するとノードは自動的に再起動します。電源を切らないでください。",
       "ota.remindTomorrow": "明日リマインド",
       "ota.updating": "ファームウェアを更新中",
@@ -4036,6 +4081,7 @@
       "peerMap.unknown": "위치 미상",
       "peerMap.self": "이 노드",
       "ota.available": "펌웨어 업데이트가 있습니다",
+      "ota.whatsNew": "새로운 내용",
       "ota.note": "업데이트는 다운로드되고 검증된 뒤 대기 시스템 슬롯에 기록됩니다. 업그레이드 동안 동기화 및 채굴이 일시 중지됩니다. 기록이 끝나면 노드가 자동으로 재부팅됩니다. 전원을 끄지 마세요.",
       "ota.remindTomorrow": "내일 알림",
       "ota.updating": "펌웨어 업데이트 중",
@@ -4203,6 +4249,7 @@
       "peerMap.unknown": "موقع غير معروف",
       "peerMap.self": "هذا العقد",
       "ota.available": "تحديث البرنامج الثابت متاح",
+      "ota.whatsNew": "ما الجديد",
       "ota.note": "يتم تنزيل التحديث وتحققه وكتابته في فتحة النظام الاحتياطية. يتوقف المزامنة والتعدين أثناء الترقية. عند انتهاء الكتابة تعاد تشغيل العقدة تلقائيًا. لا تقطع الطاقة.",
       "ota.remindTomorrow": "ذكّرني غدًا",
       "ota.updating": "جارٍ تحديث البرنامج الثابت",
