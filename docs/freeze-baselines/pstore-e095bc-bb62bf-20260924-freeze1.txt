@@ -1,0 +1,726 @@
+[    0.000000] Linux version 6.6.36 (bitpony@DESKTOP-KC5S6JM) (riscv64-unknown-linux-gnu-gcc (Xuantie-900 linux-6.6.0 glibc gcc Toolchain V3.0.2 B-20250410) 14.1.1 20240710, GNU ld (GNU Binutils) 2.42.0.20240618) #2 SMP Wed Sep 23 11:49:33 CST 2026
+[    0.000000] Machine model: RockBase K230
+[    0.000000] SBI specification v2.0 detected
+[    0.000000] SBI implementation ID=0x1 Version=0x10004
+[    0.000000] SBI TIME extension detected
+[    0.000000] SBI IPI extension detected
+[    0.000000] SBI RFENCE extension detected
+[    0.000000] printk: debug: ignoring loglevel setting.
+[    0.000000] printk: debug: skip boot console de-registration.
+[    0.000000] efi: UEFI not found.
+[    0.000000] OF: reserved mem: 0x0000000000000000..0x000000000003ffff (256 KiB) nomap non-reusable mmode_resv1@0
+[    0.000000] OF: reserved mem: 0x0000000000040000..0x000000000005ffff (128 KiB) nomap non-reusable mmode_resv0@40000
+[    0.000000] OF: reserved mem: 0x000000003fc00000..0x000000003fffffff (4096 KiB) nomap non-reusable ramoops@3fc00000
+[    0.000000] cma: Reserved 64 MiB at 0x000000003bc00000 on node -1
+[    0.000000] Zone ranges:
+[    0.000000]   DMA32    [mem 0x0000000000000000-0x000000003fdfffff]
+[    0.000000]   Normal   empty
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000000000000-0x000000000005ffff]
+[    0.000000]   node   0: [mem 0x0000000000060000-0x000000003fbfffff]
+[    0.000000]   node   0: [mem 0x000000003fc00000-0x000000003fdfffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000000000000-0x000000003fdfffff]
+[    0.000000] On node 0, zone DMA32: 512 pages in unavailable ranges
+[    0.000000] SBI HSM extension detected
+[    0.000000] riscv: base ISA extensions acdfimv
+[    0.000000] riscv: ELF capabilities acdfimv
+[    0.000000] percpu: Embedded 20 pages/cpu s41528 r8192 d32200 u81920
+[    0.000000] pcpu-alloc: s41528 r8192 d32200 u81920 alloc=20*4096
+[    0.000000] pcpu-alloc: [0] 0 
+[    0.000000] Kernel command line: root=/dev/mmcblk1p1 rw rootwait rootfstype=ext4 console=ttyS0,115200 earlycon=sbi ignore_loglevel log_buf_len=4M keep_bootcon printk.always_kmsg_dump=1
+[    0.000000] printk: log_buf_len: 4194304 bytes
+[    0.000000] printk: early log buf free: 1046536(99%)
+[    0.000000] Dentry cache hash table entries: 131072 (order: 8, 1048576 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 65536 (order: 7, 524288 bytes, linear)
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 257544
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] Virtual kernel memory layout:
+[    0.000000]       fixmap : 0xffffffc6fea00000 - 0xffffffc6ff000000   (6144 kB)
+[    0.000000]       pci io : 0xffffffc6ff000000 - 0xffffffc700000000   (  16 MB)
+[    0.000000]      vmemmap : 0xffffffc700000000 - 0xffffffc800000000   (4096 MB)
+[    0.000000]      vmalloc : 0xffffffc800000000 - 0xffffffd800000000   (  64 GB)
+[    0.000000]      modules : 0xffffffff0170f000 - 0xffffffff80000000   (2024 MB)
+[    0.000000]       lowmem : 0xffffffd800000000 - 0xffffffd83fe00000   (1022 MB)
+[    0.000000]       kernel : 0xffffffff80000000 - 0xffffffffffffffff   (2047 MB)
+[    0.000000] Memory: 901692K/1046528K available (11659K kernel code, 4450K rwdata, 5630K rodata, 456K init, 1401K bss, 79300K reserved, 65536K cma-reserved)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] rcu: Hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU restricting CPUs from NR_CPUS=64 to nr_cpu_ids=1.
+[    0.000000] rcu: 	RCU debug extended QS entry/exit.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=1
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] riscv-intc: 64 local interrupts mapped
+[    0.000000] plic: interrupt-controller@f00000000: mapped 208 interrupts with 1 handlers for 2 contexts.
+[    0.000000] riscv: providing IPIs using SBI IPI extension
+[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] clocksource: riscv_clocksource: mask: 0xffffffffffffffff max_cycles: 0x63a1e71a3, max_idle_ns: 440795203123 ns
+[    0.000000] sched_clock: 64 bits at 27MHz, resolution 37ns, wraps every 4398046511093ns
+[    0.000374] Console: colour dummy device 80x25
+[    0.000421] Calibrating delay loop (skipped), value calculated using timer frequency.. 54.00 BogoMIPS (lpj=108000)
+[    0.000432] pid_max: default: 32768 minimum: 301
+[    0.000501] LSM: initializing lsm=capability,integrity
+[    0.000581] Mount-cache hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.000591] Mountpoint-cache hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.002176] RCU Tasks Trace: Setting shift to 0 and lim to 1 rcu_task_cb_adjust=1.
+[    0.002260] riscv: ELF compat mode supported
+[    0.002287] ASID allocator using 16 bits (65536 entries)
+[    0.002426] rcu: Hierarchical SRCU implementation.
+[    0.002431] rcu: 	Max phase no-delay instances is 1000.
+[    0.002829] EFI services will not be available.
+[    0.003029] smp: Bringing up secondary CPUs ...
+[    0.003046] smp: Brought up 1 node, 1 CPU
+[    0.003686] devtmpfs: initialized
+[    0.012354] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.012374] futex hash table entries: 256 (order: 2, 16384 bytes, linear)
+[    0.013758] pinctrl core: initialized pinctrl subsystem
+[    0.014508] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.015668] DMA: preallocated 128 KiB GFP_KERNEL pool for atomic allocations
+[    0.015818] DMA: preallocated 128 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+[    0.015880] audit: initializing netlink subsys (disabled)
+[    0.016490] thermal_sys: Registered thermal governor 'step_wise'
+[    0.016557] audit: type=2000 audit(0.012:1): state=initialized audit_enabled=0 res=1
+[    0.016571] cpuidle: using governor menu
+[    0.040156] cpu0: Ratio of byte access time to unaligned word access is 6.32, unaligned accesses are fast
+[    0.041580] pstore: Using crash dump compression: deflate
+[    0.041592] printk: console [ramoops-1] enabled
+[    0.042011] pstore: Registered ramoops as persistent store backend
+[    0.042025] ramoops: using 0x400000@0x3fc00000, ecc: 0
+[    0.047084] platform soc: Fixed dependency cycle(s) with /soc/interrupt-controller@f00000000
+[    0.102941] platform 90840000.vo: Fixed dependency cycle(s) with /soc/dsi@90850000
+[    0.103079] platform 90840000.vo: Fixed dependency cycle(s) with /soc/dsi@90850000
+[    0.103138] platform 90850000.dsi: Fixed dependency cycle(s) with /soc/dsi@90850000/panel@0
+[    0.103156] platform 90850000.dsi: Fixed dependency cycle(s) with /soc/vo@90840000
+[    0.105429] HugeTLB: registered 1.00 GiB page size, pre-allocated 0 pages
+[    0.105447] HugeTLB: 16380 KiB vmemmap can be freed for a 1.00 GiB page
+[    0.105457] HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
+[    0.105463] HugeTLB: 28 KiB vmemmap can be freed for a 2.00 MiB page
+[    0.106030] ACPI: Interpreter disabled.
+[    0.106428] k230-powerdomain 91103000.sysctl_power: powerdomain init ok
+[    0.106957] iommu: Default domain type: Translated
+[    0.106975] iommu: DMA domain TLB invalidation policy: strict mode
+[    0.107365] SCSI subsystem initialized
+[    0.107579] libata version 3.00 loaded.
+[    0.107753] usbcore: registered new interface driver usbfs
+[    0.107786] usbcore: registered new interface driver hub
+[    0.107821] usbcore: registered new device driver usb
+[    0.108815] mc: Linux media interface: v0.10
+[    0.108888] videodev: Linux video capture interface: v2.00
+[    0.109143] Advanced Linux Sound Architecture Driver Initialized.
+[    0.109885] vgaarb: loaded
+[    0.110312] clocksource: Switched to clocksource riscv_clocksource
+[    0.110713] pnp: PnP ACPI: disabled
+[    0.118058] NET: Registered PF_INET protocol family
+[    0.118194] IP idents hash table entries: 16384 (order: 5, 131072 bytes, linear)
+[    0.119296] tcp_listen_portaddr_hash hash table entries: 512 (order: 2, 16384 bytes, linear)
+[    0.119346] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    0.119362] TCP established hash table entries: 8192 (order: 4, 65536 bytes, linear)
+[    0.119416] TCP bind hash table entries: 8192 (order: 7, 524288 bytes, linear)
+[    0.120951] TCP: Hash tables configured (established 8192 bind 8192)
+[    0.121078] UDP hash table entries: 512 (order: 3, 49152 bytes, linear)
+[    0.121178] UDP-Lite hash table entries: 512 (order: 3, 49152 bytes, linear)
+[    0.121400] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.121977] RPC: Registered named UNIX socket transport module.
+[    0.121997] RPC: Registered udp transport module.
+[    0.122005] RPC: Registered tcp transport module.
+[    0.122010] RPC: Registered tcp-with-tls transport module.
+[    0.122015] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    0.122987] PCI: CLS 0 bytes, default 64
+[    0.123863] Initialise system trusted keyrings
+[    0.124246] workingset: timestamp_bits=46 max_order=18 bucket_order=0
+[    0.124869] NFS: Registering the id_resolver key type
+[    0.124929] Key type id_resolver registered
+[    0.124938] Key type id_legacy registered
+[    0.124963] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
+[    0.124972] nfs4flexfilelayout_init: NFSv4 Flexfile Layout Driver Registering...
+[    0.125170] fuse: init (API version 7.39)
+[    0.125324] 9p: Installing v9fs 9p2000 file system support
+[    0.125518] NET: Registered PF_ALG protocol family
+[    0.125534] Key type asymmetric registered
+[    0.125542] Asymmetric key parser 'x509' registered
+[    0.125593] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 242)
+[    0.125604] io scheduler mq-deadline registered
+[    0.125612] io scheduler kyber registered
+[    0.125642] io scheduler bfq registered
+[    0.128491] k230-iomux 91105000.iomux: K230 IOMUX driver registered
+[    0.128854] k230-iomux 91000080.pmuiomux: K230 IOMUX driver registered
+[    0.142127] [K230_RESET]:sysctl reset phy addr 0x91101000
+[    0.142140] [K230_RESET]: ok!
+[    0.184688] Serial: 8250/16550 driver, 4 ports, IRQ sharing disabled
+[    0.187129] printk: console [ttyS0] disabled
+[    0.207495] 91400000.serial: ttyS0 at MMIO 0x91400000 (irq = 78, base_baud = 3125000) is a 16550A
+[    0.207535] printk: console [ttyS0] enabled
+[    1.166854] 91403000.serial: ttyS3 at MMIO 0x91403000 (irq = 79, base_baud = 3125000) is a 16550A
+[    1.176991] SuperH (H)SCI(F) driver initialized
+[    1.183327] random: crng init done
+[    1.186798] k230-rng 91213000.trng: K230 TRNG driver register!
+[    1.193987] canaan-vo 90840000.vo: probe
+[    1.198641] canaan-mipi-dsi 90850000.dsi: Fixed dependency cycle(s) with /soc/dsi@90850000/panel@0
+[    1.207727] mipi-dsi 90850000.dsi.0: Fixed dependency cycle(s) with /soc/dsi@90850000
+[    1.215680] canaan-panel-dsi 90850000.dsi.0: Couldn't get our reset GPIO, error: -2
+[    1.223368] canaan-panel-dsi 90850000.dsi.0: Couldn't get our backlight_gpio GPIO, error: -2
+[    1.231844] canaan-mipi-dsi 90850000.dsi: Attached device universal
+[    1.239407] canaan-vo 90840000.vo: background color is 808000
+[    1.245387] canaan-drm soc:display-subsystem: bound 90840000.vo (ops 0xffffffff80c7b528)
+[    1.253556] canaan-drm soc:display-subsystem: bound 90850000.dsi (ops 0xffffffff80c7ba48)
+[    1.262852] [drm] Initialized canaan-drm 1.0.0 20230501 for soc:display-subsystem on minor 0
+[    1.271441] canaan-drm soc:display-subsystem: [drm] bpp/depth value of 32/24 not supported
+[    1.279739] canaan-drm soc:display-subsystem: [drm] No compatible format found
+[    1.288671] canaan-drm soc:display-subsystem: [drm] *ERROR* fbdev: Failed to setup generic emulation (ret=-22)
+[    1.298747] canaan-drm soc:display-subsystem: [drm:canaan_drm_bind] Canaan K230 DRM driver register successfully
+[    1.309819] canaan-drm soc:display-subsystem: [drm] bpp/depth value of 32/24 not supported
+[    1.318146] canaan-drm soc:display-subsystem: [drm] No compatible format found
+[    1.330289] loop: module loaded
+[    1.335383] canaan-drm soc:display-subsystem: [drm] *ERROR* fbdev: Failed to setup generic emulation (ret=-22)
+[    1.361798] zram: Added device: zram0
+[    1.367143] misc mmz: registered.
+[    1.374253] e1000e: Intel(R) PRO/1000 Network Driver
+[    1.379275] e1000e: Copyright(c) 1999 - 2015 Intel Corporation.
+[    1.386653] usbcore: registered new device driver r8152-cfgselector
+[    1.392992] usbcore: registered new interface driver r8152
+[    1.398514] usbcore: registered new interface driver asix
+[    1.403953] usbcore: registered new interface driver ax88179_178a
+[    1.410079] usbcore: registered new interface driver cdc_ether
+[    1.415950] usbcore: registered new interface driver net1080
+[    1.421640] usbcore: registered new interface driver cdc_subset
+[    1.427592] usbcore: registered new interface driver zaurus
+[    1.433203] usbcore: registered new interface driver cdc_ncm
+[    1.438897] usbcore: registered new interface driver r8153_ecm
+[    1.445758] dwc2 91500000.usb: supply vusb_d not found, using dummy regulator
+[    1.453083] dwc2 91500000.usb: supply vusb_a not found, using dummy regulator
+[    1.460477] dwc2 91500000.usb: Configuration mismatch. dr_mode forced to host
+[    1.483874] dwc2 91500000.usb: DWC OTG Controller
+[    1.488631] dwc2 91500000.usb: new USB bus registered, assigned bus number 1
+[    1.495723] dwc2 91500000.usb: irq 84, io mem 0x91500000
+[    1.501187] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.06
+[    1.509470] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    1.516703] usb usb1: Product: DWC OTG Controller
+[    1.521416] usb usb1: Manufacturer: Linux 6.6.36 dwc2_hsotg
+[    1.526989] usb usb1: SerialNumber: 91500000.usb
+[    1.532103] hub 1-0:1.0: USB hub found
+[    1.535945] hub 1-0:1.0: 1 port detected
+[    1.540415] dwc2 91540000.usb: supply vusb_d not found, using dummy regulator
+[    1.547771] dwc2 91540000.usb: supply vusb_a not found, using dummy regulator
+[    1.555215] dwc2 91540000.usb: Configuration mismatch. dr_mode forced to host
+[    1.580409] dwc2 91540000.usb: DWC OTG Controller
+[    1.585166] dwc2 91540000.usb: new USB bus registered, assigned bus number 2
+[    1.592253] dwc2 91540000.usb: irq 85, io mem 0x91540000
+[    1.597717] usb usb2: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.06
+[    1.606005] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    1.613239] usb usb2: Product: DWC OTG Controller
+[    1.617952] usb usb2: Manufacturer: Linux 6.6.36 dwc2_hsotg
+[    1.623532] usb usb2: SerialNumber: 91540000.usb
+[    1.628621] hub 2-0:1.0: USB hub found
+[    1.632462] hub 2-0:1.0: 1 port detected
+[    1.637219] usbcore: registered new interface driver uas
+[    1.642646] usbcore: registered new interface driver usb-storage
+[    1.648967] mousedev: PS/2 mouse device common for all mice
+[    1.655577] i2c_dev: i2c /dev entries driver
+[    1.661606] MVX dev: Linlon v5276 identified. cores=1, nlsid=4, id=0. (mvx_dev.c:416)
+[    1.669768] usbcore: registered new interface driver uvcvideo
+[    1.704682] sdhci: Secure Digital Host Controller Interface driver
+[    1.710930] sdhci: Copyright(c) Pierre Ossman
+[    1.715886] sdhci-pltfm: SDHCI platform and OF driver helper
+[    1.724369] Kendryte crypto driver probe!
+[    1.728937] Kendryte sha256 driver probe!
+[    1.733537] Kendryte RSA driver probe!
+[    1.737554] usbcore: registered new interface driver usbhid
+[    1.743163] usbhid: USB HID core driver
+[    1.750401] riscv-pmu-sbi: SBI PMU extension is available
+[    1.755865] riscv-pmu-sbi: 16 firmware and 18 hardware counters
+[    1.786321] mmc0: SDHCI controller on 91580000.sdhci0 [91580000.sdhci0] using ADMA
+[    1.793990] mmc1: SDHCI controller on 91581000.sdhci1 [91581000.sdhci1] using ADMA
+[    1.807324] mmc1: Got command interrupt 0x00000001 even though no command operation was in progress.
+[    1.816470] mmc1: sdhci: ============ SDHCI REGISTER DUMP ===========
+[    1.822913] mmc1: sdhci: Sys addr:  0x00000000 | Version:  0x00000005
+[    1.829355] mmc1: sdhci: Blk size:  0x00000000 | Blk cnt:  0x00000000
+[    1.835797] mmc1: sdhci: Argument:  0x00000000 | Trn mode: 0x00000000
+[    1.842238] mmc1: sdhci: Present:   0x03ff0000 | Host ctl: 0x00000001
+[    1.848678] mmc1: sdhci: Power:     0x0000000f | Blk gap:  0x00000000
+[    1.855120] mmc1: sdhci: Wake-up:   0x00000000 | Clock:    0x00007d27
+[    1.861560] mmc1: sdhci: Timeout:   0x00000000 | Int stat: 0x00000000
+[    1.868001] mmc1: sdhci: Int enab:  0x00ff1083 | Sig enab: 0x00ff1083
+[    1.874441] mmc1: sdhci: ACmd stat: 0x00000000 | Slot int: 0x00000000
+[    1.880882] mmc1: sdhci: Caps:      0x276a6481 | Caps_1:   0x08008071
+[    1.887321] mmc1: sdhci: Cmd:       0x00000502 | Max curr: 0x00000000
+[    1.893762] mmc1: sdhci: Resp[0]:   0x000001aa | Resp[1]:  0x00000000
+[    1.900202] mmc1: sdhci: Resp[2]:   0x00000000 | Resp[3]:  0x00000000
+[    1.906642] mmc1: sdhci: Host ctl2: 0x00000000
+[    1.911085] mmc1: sdhci: ADMA Err:  0x00000000 | ADMA Ptr: 0x00000000
+[    1.917526] mmc1: sdhci: ============================================
+[    1.928526] mmc0: new high speed SDIO card at address 0001
+[    1.955853] mmc1: new high speed SDXC card at address 5048
+[    1.961815] mmcblk1: mmc1:5048 SD64G 58.0 GiB
+[    1.967889]  mmcblk1: p1 p2 p3 p4
+[    2.186193] NET: Registered PF_INET6 protocol family
+[    2.191978] Segment Routing with IPv6
+[    2.195722] In-situ OAM (IOAM) with IPv6
+[    2.199711] sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
+[    2.206109] NET: Registered PF_PACKET protocol family
+[    2.211301] 9pnet: Installing 9P2000 support
+[    2.215664] Key type dns_resolver registered
+[    2.219997] start plist test
+[    2.226605] end plist test
+[    2.237292] Loading compiled-in X.509 certificates
+[    2.247537] debug_vm_pgtable: [debug_vm_pgtable         ]: Validating architecture page table helpers
+[    2.268054] edt_ft5x06 1-0038: supply vcc not found, using dummy regulator
+[    2.275130] edt_ft5x06 1-0038: supply iovcc not found, using dummy regulator
+[    2.283380] cfg80211: Loading compiled-in X.509 certificates for regulatory database
+[    2.292600] Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+[    2.298942] Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+[    2.306280] clk: Disabling unused clocks
+[    2.310322] ALSA device list:
+[    2.313298]   #0: K230_I2S_INNO
+[    2.316760] platform regulatory.0: Direct firmware load for regulatory.db failed with error -2
+[    2.325448] cfg80211: failed to load regulatory.db
+[    2.631260] input: generic ft5x06 (79) as /devices/platform/soc/91408000.i2c/i2c-1/1-0038/input/input0
+[    2.828418] EXT4-fs (mmcblk1p1): recovery complete
+[    2.834327] EXT4-fs (mmcblk1p1): mounted filesystem 35a7e5c3-9ff5-4aca-9a72-0a0920535362 r/w with ordered data mode. Quota mode: disabled.
+[    2.846838] VFS: Mounted root (ext4 filesystem) on device 179:1.
+[    2.853032] devtmpfs: mounted
+[    2.856130] Freeing unused kernel image (initmem) memory: 452K
+[    2.861978] Kernel memory protection not selected by kernel config.
+[    2.868263] Run /sbin/init as init process
+[    2.872369]   with arguments:
+[    2.875344]     /sbin/init
+[    2.878053]   with environment:
+[    2.881200]     HOME=/
+[    2.883567]     TERM=linux
+[    2.998332] EXT4-fs (mmcblk1p1): re-mounted 35a7e5c3-9ff5-4aca-9a72-0a0920535362 r/w. Quota mode: disabled.
+[    4.631531] EXT4-fs (mmcblk1p3): recovery complete
+[    4.637423] EXT4-fs (mmcblk1p3): mounted filesystem 189352a0-4346-42b3-96d5-25e19c2ade85 r/w with ordered data mode. Quota mode: disabled.
+[   10.601522] 8189fs: loading out-of-tree module taints kernel.
+[   13.372998] warning: `iwconfig' uses wireless extensions which will stop working for Wi-Fi 7 hardware; use nl80211
+[   28.994073] EXT4-fs (mmcblk1p4): recovery complete
+[   29.003056] EXT4-fs (mmcblk1p4): mounted filesystem c6560dcc-7680-4362-b942-85f7ea3ede68 r/w with ordered data mode. Quota mode: disabled.
+[   29.056211] zram0: detected capacity change from 0 to 262144
+[   29.080613] Adding 131068k swap on /dev/zram0.  Priority:-2 extents:1 across:131068k SS
+[  186.805037] sysrq: Show Blocked State
+[  186.808845] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[  186.817242] Call Trace:
+[  186.819717] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[  186.824965] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[  186.829856] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[  186.835020] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[  186.841226] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[  186.846725] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[  186.851877] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[  186.857727] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[  186.863318] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[  186.869176] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[  186.874501] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[  372.696635] sysrq: Show Blocked State
+[  372.700447] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[  372.708862] Call Trace:
+[  372.711312] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[  372.716570] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[  372.721475] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[  372.726633] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[  372.732834] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[  372.738332] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[  372.743488] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[  372.749333] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[  372.754916] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[  372.760767] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[  372.766090] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[  463.959573] [rb-mmc-diag] claim release host=mmc1 releaser=13993:kworker/0:2H owner=11:kworker/u2:0 claim_cnt=1 held_ms=536 contended=0
+[  497.004267] sysrq: Show Blocked State
+[  497.008073] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[  497.016474] Call Trace:
+[  497.018935] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[  497.024183] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[  497.029079] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[  497.034242] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[  497.040438] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[  497.045941] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[  497.051093] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[  497.057003] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[  497.062600] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[  497.068449] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[  497.073774] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[  566.880741] [rb-mmc-diag] claim release host=mmc1 releaser=13993:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=812 contended=0
+[  627.373805] sysrq: Show Blocked State
+[  627.377625] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[  627.386029] Call Trace:
+[  627.388487] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[  627.393735] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[  627.398629] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[  627.403780] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[  627.409974] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[  627.415479] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[  627.420631] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[  627.426480] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[  627.432068] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[  627.437917] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[  627.443239] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[  686.928849] [rb-mmc-diag] claim release host=mmc1 releaser=24920:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=580 contended=0
+[  718.349860] [rb-mmc-diag] claim release host=mmc1 releaser=13993:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=732 contended=0
+[  751.279127] [rb-mmc-diag] claim release host=mmc1 releaser=13993:kworker/0:2H owner=11:kworker/u2:0 claim_cnt=1 held_ms=632 contended=0
+[  753.949135] sysrq: Show Blocked State
+[  885.761240] sysrq: Show Blocked State
+[  885.765059] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[  885.773477] Call Trace:
+[  885.775928] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[  885.781197] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[  885.786095] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[  885.791251] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[  885.797453] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[  885.802952] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[  885.808107] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[  885.813952] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[  885.819543] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[  885.825395] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[  885.830719] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 1053.806691] sysrq: Show Blocked State
+[ 1053.810489] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[ 1053.818930] Call Trace:
+[ 1053.821380] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 1053.826640] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 1053.831534] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 1053.836686] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 1053.842887] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 1053.848385] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 1053.853542] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 1053.859391] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 1053.864975] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 1053.870836] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 1053.876164] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 1178.464551] sysrq: Show Blocked State
+[ 1220.238647] [rb-mmc-diag] claim release host=mmc1 releaser=8411:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=620 contended=0
+[ 1308.528137] sysrq: Show Blocked State
+[ 1308.531932] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[ 1308.540358] Call Trace:
+[ 1308.542823] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 1308.548076] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 1308.552967] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 1308.558118] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 1308.564318] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 1308.569820] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 1308.574973] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 1308.580818] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 1308.586404] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 1308.592251] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 1308.597574] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 1438.838119] sysrq: Show Blocked State
+[ 1438.841939] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[ 1438.850339] Call Trace:
+[ 1438.852809] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 1438.858057] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 1438.862946] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 1438.868100] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 1438.874300] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 1438.879797] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 1438.884953] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 1438.890798] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 1438.896397] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 1438.902249] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 1438.907579] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 1582.117107] sysrq: Show Blocked State
+[ 1721.169452] sysrq: Show Blocked State
+[ 1721.173273] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[ 1721.181685] Call Trace:
+[ 1721.184148] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 1721.189394] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 1721.194289] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 1721.199440] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 1721.205647] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 1721.211155] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 1721.216321] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 1721.222167] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 1721.227756] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 1721.233605] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 1721.238927] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 1843.438155] sysrq: Show Blocked State
+[ 1843.441963] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[ 1843.450370] Call Trace:
+[ 1843.452834] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 1843.458079] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 1843.462974] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 1843.468127] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 1843.474323] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 1843.479829] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 1843.484983] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 1843.490828] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 1843.496420] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 1843.502269] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 1843.507601] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 2054.584527] sysrq: Show Blocked State
+[ 2054.588302] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[ 2054.596740] Call Trace:
+[ 2054.599210] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 2054.604467] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 2054.609364] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 2054.614521] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 2054.620721] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 2054.626221] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 2054.631371] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 2054.637231] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 2054.642816] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 2054.648664] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 2054.653992] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 2208.327149] sysrq: Show Blocked State
+[ 2208.330958] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[ 2208.339376] Call Trace:
+[ 2208.341835] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 2208.347088] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 2208.351984] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 2208.357145] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 2208.363347] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 2208.368845] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 2208.374001] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 2208.379846] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 2208.385430] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 2208.391283] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 2208.396606] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 2288.228948] [rb-mmc-diag] claim release host=mmc1 releaser=28756:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=1880 contended=0
+[ 2386.516685] sysrq: Show Blocked State
+[ 2444.589019] [rb-mmc-diag] claim wait begin host=mmc0 waiter=10268:kworker/0:1 owner=869:RTW_CMD_THREAD claimed=1 claim_cnt=1 waited_ms=208
+[ 2444.640357] [rb-mmc-diag] claim acquired host=mmc0 owner=10268:kworker/0:1 claim_cnt=1 waited_ms=260 contended=1
+[ 2554.383853] sysrq: Show Blocked State
+[ 2964.344477] sysrq: Show Blocked State
+[ 3266.383113] sysrq: Show Blocked State
+[ 3391.593670] sysrq: Show Blocked State
+[ 3391.597491] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[ 3391.605903] Call Trace:
+[ 3391.608353] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 3391.613608] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 3391.618504] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 3391.623655] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 3391.629859] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 3391.635363] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 3391.640516] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 3391.646360] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 3391.651949] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 3391.657798] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 3391.663122] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 3606.333626] sysrq: Show Blocked State
+[ 3780.465453] sysrq: Show Blocked State
+[ 3918.507113] sysrq: Show Blocked State
+[ 4073.399439] sysrq: Show Blocked State
+[ 4237.129241] sysrq: Show Blocked State
+[ 4723.567143] sysrq: Show Blocked State
+[ 5007.941696] sysrq: Show Blocked State
+[ 5176.899743] sysrq: Show Blocked State
+[ 5176.903558] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[ 5176.911965] Call Trace:
+[ 5176.914434] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 5176.919691] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 5176.924591] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 5176.929749] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 5176.935952] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 5176.941451] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 5176.946615] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 5176.952465] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 5176.958059] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 5176.963912] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 5176.969240] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 5354.348095] sysrq: Show Blocked State
+[ 5486.469463] sysrq: Show Blocked State
+[ 5486.473286] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[ 5486.481696] Call Trace:
+[ 5486.484165] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 5486.489421] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 5486.494313] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 5486.499463] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 5486.505663] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 5486.511161] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 5486.516313] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 5486.522196] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 5486.527784] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 5486.533638] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 5486.538966] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 5825.833015] sysrq: Show Blocked State
+[ 5894.352236] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11:kworker/u2:0 claim_cnt=1 held_ms=1564 contended=0
+[ 5895.165913] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=580 contended=0
+[ 5960.899792] sysrq: Show Blocked State
+[ 6084.526886] sysrq: Show Blocked State
+[ 6150.793356] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=660 contended=0
+[ 6152.474327] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=147:rockbase-lcdui claim_cnt=1 held_ms=1036 contended=0
+[ 6154.232161] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=3911:b-http_pool_13 claim_cnt=1 held_ms=904 contended=0
+[ 6186.152507] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=664 contended=0
+[ 6188.399021] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=808 contended=0
+[ 6192.937509] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=1800 contended=0
+[ 6193.472997] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=524 contended=0
+[ 6198.768068] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=14476:bitcoin-cli claim_cnt=1 held_ms=2428 contended=0
+[ 6201.222615] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=2440 contended=0
+[ 6203.047068] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=30337:kworker/0:1H claim_cnt=1 held_ms=1792 contended=0
+[ 6203.958444] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=520 contended=0
+[ 6205.570131] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=1216 contended=0
+[ 6207.471248] sysrq: Show Blocked State
+[ 6207.475078] task:b-msghand       state:D stack:0     pid:11506 ppid:1      flags:0x00000000
+[ 6207.483488] Call Trace:
+[ 6207.485948] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 6207.491206] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 6207.496098] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 6207.501248] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 6207.507453] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 6207.512952] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 6207.518103] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 6207.523948] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 6207.529536] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 6207.535383] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 6207.540723] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 6209.022231] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=776 contended=0
+[ 6211.169839] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=592 contended=0
+[ 6214.300586] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=1064 contended=0
+[ 6215.046754] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=15758:cat claim_cnt=1 held_ms=732 contended=0
+[ 6220.152125] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=560 contended=0
+[ 6228.833963] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=544 contended=0
+[ 6234.269399] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=1356 contended=0
+[ 6236.138076] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=888 contended=0
+[ 6240.639298] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=568 contended=0
+[ 6242.580935] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=628 contended=0
+[ 6249.510269] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=3892 contended=0
+[ 6250.946229] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=30337:kworker/0:1H claim_cnt=1 held_ms=1412 contended=0
+[ 6252.185009] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=19417:bitcoin-cli claim_cnt=1 held_ms=808 contended=0
+[ 6256.239010] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=147:rockbase-lcdui claim_cnt=1 held_ms=3396 contended=0
+[ 6257.117594] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=30337:kworker/0:1H claim_cnt=1 held_ms=812 contended=0
+[ 6263.185900] [rb-mmc-diag] claim release host=mmc1 releaser=11506:b-msghand owner=30337:kworker/0:1H claim_cnt=1 held_ms=6040 contended=0
+[ 6264.414550] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=23618:kworker/0:0H claim_cnt=1 held_ms=1212 contended=0
+[ 6265.765910] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=1072 contended=0
+[ 6266.562369] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=744 contended=0
+[ 6267.635867] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=852 contended=0
+[ 6268.739601] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=1028 contended=0
+[ 6269.956234] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=23618:kworker/0:0H claim_cnt=1 held_ms=1184 contended=0
+[ 6272.571298] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=672 contended=0
+[ 6274.753323] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=968 contended=0
+[ 6278.856798] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=616 contended=0
+[ 6279.380371] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=508 contended=0
+[ 6283.039271] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=30337:kworker/0:1H claim_cnt=1 held_ms=1516 contended=0
+[ 6286.144253] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=1660 contended=0
+[ 6289.134623] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=576 contended=0
+[ 6291.171663] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=604 contended=0
+[ 6294.522354] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=11506:b-msghand claim_cnt=1 held_ms=992 contended=0
+[ 6301.108793] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=30337:kworker/0:1H claim_cnt=1 held_ms=6548 contended=0
+[ 6303.868568] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=30337:kworker/0:1H claim_cnt=1 held_ms=2732 contended=0
+[ 6306.592543] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=30337:kworker/0:1H claim_cnt=1 held_ms=2400 contended=0
+[ 6308.204558] [rb-mmc-diag] claim release host=mmc1 releaser=30337:kworker/0:1H owner=22624:bitcoin-cli claim_cnt=1 held_ms=1368 contended=0
+[ 6313.621029] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=30337:kworker/0:1H claim_cnt=1 held_ms=5404 contended=0
+[ 6315.564433] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=1800 contended=0
+[ 6316.959160] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=1108 contended=0
+[ 6319.941876] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=2868 contended=0
+[ 6321.427706] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=1332 contended=0
+[ 6322.442346] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=876 contended=0
+[ 6323.369561] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=832 contended=0
+[ 6324.221357] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=126:klogd claim_cnt=1 held_ms=836 contended=0
+[ 6325.726928] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=3907:b-http_pool_9 claim_cnt=1 held_ms=1136 contended=0
+[ 6327.794143] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=15956:ckp@stratifier claim_cnt=1 held_ms=924 contended=0
+[ 6330.603207] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=23518:rockbase_serial claim_cnt=1 held_ms=712 contended=0
+[ 6331.273215] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=528 contended=0
+[ 6332.596040] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=23618:kworker/0:0H claim_cnt=1 held_ms=572 contended=0
+[ 6333.571778] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=720 contended=0
+[ 6335.167398] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=23618:kworker/0:0H claim_cnt=1 held_ms=1036 contended=0
+[ 6336.640634] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=552 contended=0
+[ 6337.706345] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=944 contended=0
+[ 6338.283422] sysrq: Show Blocked State
+[ 6338.287218] task:rockbase-lcdui  state:D stack:0     pid:147   ppid:1      flags:0x00000000
+[ 6338.295627] Call Trace:
+[ 6338.298078] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 6338.303335] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 6338.308225] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 6338.313380] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 6338.319576] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 6338.325075] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 6338.330239] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 6338.336091] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 6338.341677] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 6338.347531] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 6338.352853] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 6341.724922] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=1068 contended=0
+[ 6347.707214] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=664 contended=0
+[ 6357.220512] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=5088 contended=0
+[ 6363.033352] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11502:b-net claim_cnt=1 held_ms=5760 contended=0
+[ 6368.577025] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=24970:kworker/0:2H claim_cnt=1 held_ms=5524 contended=0
+[ 6375.324024] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=5344 contended=0
+[ 6376.330837] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=572 contended=0
+[ 6377.994936] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=672 contended=0
+[ 6379.526511] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=872 contended=0
+[ 6383.359624] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=1312 contended=0
+[ 6384.428516] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=24970:kworker/0:2H claim_cnt=1 held_ms=600 contended=0
+[ 6385.694504] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=844 contended=0
+[ 6389.572900] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=580 contended=0
+[ 6393.065133] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=147:rockbase-lcdui claim_cnt=1 held_ms=1068 contended=0
+[ 6397.609146] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=556 contended=0
+[ 6399.907238] [rb-mmc-diag] claim release host=mmc1 releaser=11502:b-net owner=11506:b-msghand claim_cnt=1 held_ms=1964 contended=0
+[ 6406.091806] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=23618:kworker/0:0H claim_cnt=1 held_ms=6156 contended=0
+[ 6411.708208] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=24970:kworker/0:2H claim_cnt=1 held_ms=5600 contended=0
+[ 6412.701600] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=24970:kworker/0:2H claim_cnt=1 held_ms=980 contended=0
+[ 6415.267909] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=24970:kworker/0:2H claim_cnt=1 held_ms=2536 contended=0
+[ 6415.840569] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=24970:kworker/0:2H claim_cnt=1 held_ms=556 contended=0
+[ 6418.092684] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=29022:awk claim_cnt=1 held_ms=1652 contended=0
+[ 6419.599135] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=29026:tr claim_cnt=1 held_ms=1488 contended=0
+[ 6420.420132] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=29044:tr claim_cnt=1 held_ms=808 contended=0
+[ 6423.526433] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=3092 contended=0
+[ 6424.094030] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=15964:ckp@creceiver claim_cnt=1 held_ms=556 contended=0
+[ 6424.662743] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=23618:kworker/0:0H claim_cnt=1 held_ms=544 contended=0
+[ 6426.415803] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=1712 contended=0
+[ 6429.025918] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=2520 contended=0
+[ 6430.467438] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=1356 contended=0
+[ 6431.255731] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=24970:kworker/0:2H claim_cnt=1 held_ms=540 contended=0
+[ 6432.400372] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=1124 contended=0
+[ 6435.539116] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=29536:sleep claim_cnt=1 held_ms=1144 contended=0
+[ 6437.737513] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=24970:kworker/0:2H claim_cnt=1 held_ms=1456 contended=0
+[ 6438.614710] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=520 contended=0
+[ 6439.632758] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=516 contended=0
+[ 6441.150387] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=147:rockbase-lcdui claim_cnt=1 held_ms=1320 contended=0
+[ 6445.426217] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=1676 contended=0
+[ 6446.960137] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=1176 contended=0
+[ 6448.439202] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=1248 contended=0
+[ 6453.129540] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=1052 contended=0
+[ 6460.765378] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=1552 contended=0
+[ 6464.621373] sysrq: Show Blocked State
+[ 6464.625202] task:bitcoin-cli     state:D stack:0     pid:32157 ppid:32156  flags:0x00000000
+[ 6464.633625] Call Trace:
+[ 6464.636104] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 6464.641352] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 6464.646250] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 6464.651408] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 6464.657605] [<ffffffff80147372>] filemap_get_pages+0x54c/0x572
+[ 6464.663450] [<ffffffff80147470>] filemap_read+0xd8/0x310
+[ 6464.668779] [<ffffffff80149250>] generic_file_read_iter+0x30/0xfc
+[ 6464.674898] [<ffffffff8025d4b2>] ext4_file_read_iter+0x3c/0x140
+[ 6464.680851] [<ffffffff801d4552>] vfs_read+0x1c6/0x264
+[ 6464.685925] [<ffffffff801d4da4>] ksys_read+0x58/0xcc
+[ 6464.690904] [<ffffffff801d4e2c>] __riscv_sys_read+0x14/0x1c
+[ 6464.696498] [<ffffffff80b5b946>] do_trap_ecall_u+0x124/0x136
+[ 6464.702175] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 6467.217103] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=23618:kworker/0:0H claim_cnt=1 held_ms=6428 contended=0
+[ 6468.761423] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=24970:kworker/0:2H claim_cnt=1 held_ms=1524 contended=0
+[ 6471.015082] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=24970:kworker/0:2H claim_cnt=1 held_ms=788 contended=0
+[ 6472.560905] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=1536 contended=0
+[ 6474.887075] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=23618:kworker/0:0H claim_cnt=1 held_ms=1932 contended=0
+[ 6476.550143] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=536 contended=0
+[ 6485.952144] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=608 contended=0
+[ 6495.109153] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=596 contended=0
+[ 6496.063099] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=756 contended=0
+[ 6498.154511] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=952 contended=0
+[ 6505.141441] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=147:rockbase-lcdui claim_cnt=1 held_ms=508 contended=0
+[ 6506.057315] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=508 contended=0
+[ 6512.359847] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=147:rockbase-lcdui claim_cnt=1 held_ms=624 contended=0
+[ 6517.713390] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=1460 contended=0
+[ 6521.232841] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11506:b-msghand claim_cnt=1 held_ms=872 contended=0
+[ 6526.985053] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=147:rockbase-lcdui claim_cnt=1 held_ms=5732 contended=0
+[ 6531.006252] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=24970:kworker/0:2H claim_cnt=1 held_ms=3996 contended=0
+[ 6534.202672] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=660 contended=0
+[ 6536.136978] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=596 contended=0
+[ 6538.706011] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=980 contended=0
+[ 6541.550680] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=500 contended=0
+[ 6542.691483] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=4880:ps claim_cnt=1 held_ms=976 contended=0
+[ 6543.363562] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11504:b-addcon claim_cnt=1 held_ms=660 contended=0
+[ 6546.122682] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=640 contended=0
+[ 6549.179904] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=1448 contended=0
+[ 6550.552487] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=828 contended=0
+[ 6552.107988] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=877:wpa_supplicant claim_cnt=1 held_ms=1372 contended=0
+[ 6556.171444] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=11506:b-msghand claim_cnt=1 held_ms=556 contended=0
+[ 6561.171419] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=23618:kworker/0:0H claim_cnt=1 held_ms=2016 contended=0
+[ 6564.270562] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=23618:kworker/0:0H claim_cnt=1 held_ms=3084 contended=0
+[ 6565.426561] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=3913:b-http_pool_15 claim_cnt=1 held_ms=836 contended=0
+[ 6567.219655] [rb-mmc-diag] claim release host=mmc1 releaser=23618:kworker/0:0H owner=3899:b-http_pool_2 claim_cnt=1 held_ms=1636 contended=0
+[ 6587.034630] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=11502:b-net claim_cnt=1 held_ms=19776 contended=0
+[ 6587.676431] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=24970:kworker/0:2H claim_cnt=1 held_ms=616 contended=0
+[ 6588.971498] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=6029:wpa_cli claim_cnt=1 held_ms=1148 contended=0
+[ 6593.394933] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=6059:sed claim_cnt=1 held_ms=4392 contended=0
+[ 6594.001513] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=24970:kworker/0:2H claim_cnt=1 held_ms=568 contended=0
+[ 6599.180120] [rb-mmc-diag] claim release host=mmc1 releaser=24970:kworker/0:2H owner=16026:ckp@statsupdat claim_cnt=1 held_ms=5080 contended=0

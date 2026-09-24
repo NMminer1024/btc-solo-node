@@ -16,16 +16,10 @@
 4. 如果串口完全无输出，SSH/网页都无响应，硬复位。
 5. 复位启动后，不要先跑测试，第一时间捞 pstore。
 
-1G / `124.28`：
+所有板子（2026-09-24 起局域网仅 6 台 1G 真机，MAC/IP 对照见 AGENTS.md 板子基线表）：
 
 ```bash
-ssh root@192.168.124.28 'ls -lah /root/log/pstore-archive/latest; cat /root/log/pstore-archive/latest/* 2>/dev/null' > pstore-124.28.txt
-```
-
-2G / `124.23`：
-
-```bash
-ssh root@192.168.124.23 'ls -lah /root/log/pstore-archive/latest; cat /root/log/pstore-archive/latest/* 2>/dev/null' > pstore-124.23.txt
+ssh root@<IP> 'ls -lah /root/log/pstore-archive/latest; cat /root/log/pstore-archive/latest/* 2>/dev/null' > pstore-<IP>.txt
 ```
 
 同时保存完整串口日志，例如 `COM5_*.txt` 或 `COM21_*.txt`。

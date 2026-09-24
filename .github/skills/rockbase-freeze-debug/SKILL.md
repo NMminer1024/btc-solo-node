@@ -22,17 +22,13 @@ description: 'Debug Rockbase board freeze/lockup/hang issues. Collect logs, psto
 
 ### 2. 硬复位后第一时间捞 pstore
 
-**1G 板子 (124.15/124.30/124.35)**：
+**所有板子（2026-09-24 起局域网仅 6 台 1G 真机，MAC 见 AGENTS.md 板子基线表）**：
 
 ```bash
 ssh root@<IP> 'ls -lah /root/log/pstore-archive/latest; cat /root/log/pstore-archive/latest/* 2>/dev/null' > pstore-<IP>.txt
 ```
 
-**2G 板子 (124.23)**：
-
-```bash
-ssh root@192.168.124.23 'ls -lah /root/log/pstore-archive/latest; cat /root/log/pstore-archive/latest/* 2>/dev/null' > pstore-124.23.txt
-```
+**注意**：`latest` 软链指向**当前这次启动**的 archive；上一次卡死的证据在**倒数第二个** `pstore-boot-*` 目录（按目录内 console-ramoops-0 大小判断，几百字节的是硬 lockup 空记录）。
 
 ### 3. 验证 pstore 是否正常
 

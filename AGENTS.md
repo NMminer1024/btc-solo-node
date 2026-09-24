@@ -9,12 +9,23 @@
 
 ## 板子基线
 
-| IP | 型号 | MMC 拓扑 |
-|----|------|----------|
-| `192.168.124.15` | 1G | mmc0=SDIO WiFi, mmc1=SD card |
-| `192.168.124.23` | 2G | mmc0=SDIO WiFi, mmc1=SD card（已统一接线） |
-| `192.168.124.30` | 1G | mmc0=SDIO WiFi, mmc1=SD card；当前烧 usb 模式镜像 |
-| `192.168.124.35` | 1G | mmc0=SDIO WiFi, mmc1=SD card (SD64G) |
+**真机对比必须用 MAC（wlan0，不变）做唯一标识，IP 是 DHCP 会变。**
+freeze 优化基线与采集命令见 repo memory `freeze-baseline.md`。
+
+| MAC (wlan0) | 当前 IP | 型号 | MMC 拓扑 |
+|-------------|---------|------|----------|
+| `e0:95:bc:bb:62:bf` | 192.168.124.31 | 1G | mmc0=SDIO WiFi, mmc1=SD card (SD64G)；freeze 优化实验机 |
+| `e0:ca:fa:cd:d6:b3` | 192.168.124.9 | 1G | mmc0=SDIO WiFi, mmc1=SD card (SK32G) |
+| `e0:60:19:30:32:bc` | 192.168.124.15 | 1G | mmc0=SDIO WiFi, mmc1=SD card (SD64G)；hung_task_panic 自愈重启 |
+| `e0:a2:01:6a:99:35` | 192.168.124.29 | 1G | mmc0=SDIO WiFi, mmc1=SD card (SD64G)；硬卡死 held_ms 峰值 704s |
+| `e0:eb:4e:2c:2d:70` | 192.168.124.34 | 1G | mmc0=SDIO WiFi, mmc1=SD card |
+| `e0:d9:1b:92:d8:56` | 192.168.124.38 | 1G | mmc0=SDIO WiFi, mmc1=SD card |
+
+> **2026-09-24 起局域网只有以上 6 台真机**（已全部 1G，不再测试 2G 板）。
+> **124.9 是唯一接入真实矿机的板子**，其余 5 台空闲无矿机负载。
+> .1/.5/.12 非 Rockbase（.12 是 RDK X5 seed 源）。
+> 历史文档中出现的 124.23(2G)/124.28/124.30/124.35 等 IP 为旧板/旧 DHCP 地址，已不在网。
+> 批量检查脚本见 repo memory `freeze-baseline.md`「批量真机巡检」。
 
 ## Seed 源设备
 
