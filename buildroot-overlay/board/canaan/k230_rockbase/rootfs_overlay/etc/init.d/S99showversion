@@ -1,5 +1,2 @@
 #!/bin/sh
-# NOTE: the boot-screen "system ready" signal (stage 5) is written by
-# S62ckpool once ckpool is actually running — NOT here. Writing it here
-# would let the boot screen exit while bitcoind is still IBD.
 cat /etc/version/release_version

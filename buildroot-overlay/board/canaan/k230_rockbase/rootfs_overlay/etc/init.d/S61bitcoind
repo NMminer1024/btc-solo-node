@@ -36,7 +36,6 @@ wait_for_sane_clock() {
 case "$1" in
   start)
         printf "Starting bitcoind: "
-        /usr/bin/rockbase_boot_progress.sh 3 6 55 "#f0b44c" "Starting bitcoind..." 2>/dev/null || true
 
         if is_running; then
                 echo "already running"
@@ -45,13 +44,11 @@ case "$1" in
 
         if ! resize_ready; then
                 echo "deferred (waiting for resize_done)"
-                /usr/bin/rockbase_boot_progress.sh 3 6 70 "#f0b44c" "Bitcoind deferred (resize)" 2>/dev/null || true
                 exit 0
         fi
 
         if ! blockdata_ready; then
                 echo "deferred (waiting for blockdata mount)"
-                /usr/bin/rockbase_boot_progress.sh 3 6 70 "#f0b44c" "Bitcoind deferred (blockdata)" 2>/dev/null || true
                 exit 0
         fi
 
@@ -68,7 +65,6 @@ case "$1" in
         sleep 3
         if is_running; then
                 echo "OK${warn}"
-                /usr/bin/rockbase_boot_progress.sh 3 6 70 "#ffffff" "Bitcoind running (RPC 8332)" 2>/dev/null || true
         else
                 echo "FAIL${warn}"
                 exit 1
