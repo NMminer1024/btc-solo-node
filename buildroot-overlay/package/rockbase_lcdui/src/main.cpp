@@ -17,6 +17,7 @@
 #include <linux/input.h>
 #include <string>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
@@ -71,8 +72,10 @@ constexpr const char* kProductVersionPath = "/etc/version/product_version";
 constexpr const char* kStatusCachePath = "/tmp/status-api.json";
 constexpr const char* kBootProgressPath = "/run/rockbase/boot-progress.json";
 constexpr uint32_t kBootMinHoldMs = 2000;      // logo 最短显示时间
-constexpr uint32_t kBootMaxWaitMs = 60000;     // 等待系统就绪的最长时间（兜底）
-constexpr uint32_t kBootStageStallMs = 20000;  // 进度停滞超时（某阶段卡住时兜底退出）
+// No hard max-wait: IBD can take minutes to hours, and the boot screen must
+// stay up showing live progress until stratum is actually ready. The only
+// fallback is "statusd is dead" (system wedged) — see statusd_alive().
+constexpr uint32_t kStatusdAliveMs = 30000;    // statusd 心跳超时（兜底退出）
 constexpr uint32_t kBootStageMinHoldMs = 500;  // 每条进度最短停留时间（保证可见）
 constexpr const char* kMinersCachePath = "/run/rockbase/miners.json";
 constexpr const char* kMinersHistoryCachePath = "/run/rockbase/miners-history-node.json";
@@ -3959,6 +3962,37 @@ struct BootProgressState {
 
 BootProgressState g_boot_progress {};
 
+// The boot-screen exit gate is the SAME signal as the Stratum page's green
+// dot: statusd's mining.ckpool_class == "ok" (ckpool actually running).
+// This guarantees that once the boot screen exits, the Stratum page shows
+// green — the two can never disagree.
+bool stratum_ready_from_status() {
+    std::string json;
+    if (!read_text_file(kStatusCachePath, json)) {
+        return false;
+    }
+    const std::string mining = json_object(json, "mining");
+    return json_value(mining, "ckpool_class", "") == "ok";
+}
+
+// Fallback liveness probe: statusd rewrites /tmp/status-api.json every loop
+// (~15s for the system section) regardless of bitcoind/ckpool state. If the
+// file EXISTS but its mtime stops advancing, the system is wedged and we
+// must not block boot forever. During a normal (possibly long) IBD statusd
+// keeps updating, so the boot screen stays up showing live progress.
+// IMPORTANT: if the file does NOT exist yet (early boot, statusd hasn't
+// started), that is NOT "dead" — it just means statusd is still starting.
+bool statusd_dead() {
+    struct stat st {};
+    if (stat(kStatusCachePath, &st) != 0) {
+        // File doesn't exist yet: statusd hasn't started. Not dead.
+        return false;
+    }
+    const time_t age_s = time(nullptr) - st.st_mtime;
+    // File exists but is stale: statusd crashed or system wedged.
+    return age_s > static_cast<time_t>(kStatusdAliveMs / 1000);
+}
+
 void poll_boot_progress() {
     std::string json;
     if (!read_text_file(kBootProgressPath, json, 4096)) {
@@ -4266,29 +4300,16 @@ int main() {
         lv_obj_delete(fade_mask);
         fade_mask = nullptr;
     }
-    // Wait for system readiness (boot-progress.json, final stage = S99),
-    // with a minimum logo hold, a per-stage minimum hold (so every stage is
-    // visible), a stall timeout (a stage that never advances), and a maximum
-    // wait as final fallback.
+    // Wait for stratum to be actually up (same gate as the Stratum page's
+    // green dot), with a minimum logo hold and a per-stage minimum hold so
+    // every stage is visible. The only fallback exit is statusd being dead
+    // (system wedged); a long IBD keeps the boot screen up with live height.
     {
         const uint32_t boot_start = tick_ms();
-        uint32_t last_update_ms = boot_start;
-        size_t last_entry_count = 0;
         while (!g_stop) {
             const uint32_t now = tick_ms();
             const uint32_t elapsed = now - boot_start;
             poll_boot_progress();
-            // Stall detection is based on NEW REPLAY ENTRIES, not the stage
-            // number: during IBD the stage stays at 4 while the stratum
-            // waiter appends a live-height entry every 5s — that counts as
-            // progress and keeps the boot screen up. Only a truly frozen
-            // JSON (no new entry for kBootStageStallMs) triggers the
-            // fallback exit to the dashboard.
-            if (g_boot_progress.stages.size() != last_entry_count) {
-                last_entry_count = g_boot_progress.stages.size();
-                last_update_ms = now;
-            }
-            const bool stalled = (now - last_update_ms) >= kBootStageStallMs;
             // Advance the replay playback (hold each stage for the min hold).
             advance_boot_playback(now);
             const bool playback_done =
@@ -4296,8 +4317,12 @@ int main() {
             const bool current_held =
                 (g_boot_progress.play_start_ms != 0 &&
                  now - g_boot_progress.play_start_ms >= kBootStageMinHoldMs);
+            // Exit gate: stratum actually up (same signal as the Stratum
+            // page's green dot). The only fallback is statusd being dead
+            // (system wedged) — a long IBD must NOT force an early exit.
+            const bool stratum_up = stratum_ready_from_status();
             if (elapsed >= kBootMinHoldMs && playback_done && current_held &&
-                (g_boot_progress.ready || stalled || elapsed >= kBootMaxWaitMs)) {
+                (stratum_up || statusd_dead())) {
                 break;
             }
             if (g_boot_bar != nullptr) {
