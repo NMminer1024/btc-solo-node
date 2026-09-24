@@ -77,6 +77,14 @@ case "$1" in
 
         if is_mounted; then
                 seed_configs
+                # One-time cleanup of stale OTA slot images left by an
+                # interrupted apply (freeze / power-loss).  Safe: a live
+                # apply holds a lock and finishes within ~30 min; 6 h is a
+                # 12x margin.  Runs at every boot so residue is removed even
+                # if check-async never fires.
+                # NOTE: busybox find has no -delete; use -exec rm instead.
+                find "${MOUNT_POINT}/ota" -maxdepth 1 -name 'slot-*.img.gz' -mmin +360 -exec rm -f {} \; 2>/dev/null
+                find "${MOUNT_POINT}/ota" -maxdepth 1 -name 'slot-*.img.gz.sig' -mmin +360 -exec rm -f {} \; 2>/dev/null
         else
                 # Degraded: keep the system bootable from rootfs copies.
                 mkdir -p "${MOUNT_POINT}"

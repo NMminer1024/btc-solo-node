@@ -931,7 +931,7 @@ textarea {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 /* Firmware Update (left) + Storage (right) on row 1;
@@ -1380,8 +1380,10 @@ textarea {
 
 /* ── About: firmware update card ─────────────────────────── */
 
+/* No margin-bottom: the .about-cards grid gap already provides row
+   spacing; an extra margin would break bottom-edge alignment with the
+   Storage card on the same row. */
 .about-update-card {
-  margin-bottom: 16px;
   border-color: var(--accent);
 }
 

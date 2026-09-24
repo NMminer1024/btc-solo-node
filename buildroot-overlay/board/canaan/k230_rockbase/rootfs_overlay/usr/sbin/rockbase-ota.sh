@@ -182,6 +182,15 @@ cleanup_workdir() {
             done
         fi
     fi
+
+    # 4) remove slot images older than 6 h (interrupted apply: freeze/power-loss
+    #    left a download that matches the manifest version so step 3 won't catch it).
+    #    A healthy apply (download + verify + dd) completes within ~30 min and
+    #    holds the apply lock the whole time, so a 6 h mtime threshold is a
+    #    12x safety margin and never touches an in-flight download.
+    #    NOTE: busybox find has no -delete; use -exec rm instead.
+    find "$WORKDIR" -maxdepth 1 -name 'slot-*.img.gz' -mmin +360 -exec rm -f {} \; 2>/dev/null
+    find "$WORKDIR" -maxdepth 1 -name 'slot-*.img.gz.sig' -mmin +360 -exec rm -f {} \; 2>/dev/null
 }
 
 have() { command -v "$1" >/dev/null 2>&1; }
