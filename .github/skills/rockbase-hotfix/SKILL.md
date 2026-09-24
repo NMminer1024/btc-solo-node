@@ -17,14 +17,11 @@ description: 'Hot-deploy files to live Rockbase boards for validation, then soli
 
 ### Step 1: 确认目标板子
 
-板子 IP（详见 `AGENTS.md` 或 `docs/rockbase-project-overview.md`）：
+**板子 IP 以 `AGENTS.md`「板子基线」表为准（唯一权威源）。**
 
-| IP | 型号 | MMC 拓扑 |
-|----|------|----------|
-| `192.168.124.15` | 1G | mmc0=WiFi, mmc1=SD |
-| `192.168.124.23` | 2G | mmc0=WiFi, mmc1=SD（已统一接线） |
-| `192.168.124.30` | 1G | mmc0=WiFi, mmc1=SD（usb 模式镜像） |
-| `192.168.124.35` | 1G | mmc0=WiFi, mmc1=SD (SD64G) |
+> ⚠️ IP 是 DHCP 会变，**不要**在这里维护硬编码 IP 表（历史曾因 IP 过期连错板子）。
+> 真机必须用 **MAC（wlan0，不变）做唯一标识**，每次部署前先确认目标 MAC 当前 IP。
+> 局域网 6 台真机（2026-09-24 起全部 1G）：IP 用 22 端口扫描 + MAC 采集定位，见 `AGENTS.md` 或 repo memory `freeze-baseline.md`「批量真机巡检」。
 
 ### Step 2: 部署 Web 文件到板子
 
@@ -36,7 +33,8 @@ scp buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/root/web/<file> 
 ### Step 3: 部署脚本/配置
 
 ```bash
-scp <local_file> root@192.168.124.X:<target_path>
+# 部署脚本/守护进程/init.d 文件时用 -p 保留权限，否则 scp 默认会丢 +x 位
+scp -p <local_file> root@192.168.124.X:<target_path>
 ```
 
 ### Step 4: 在线验证
@@ -44,6 +42,18 @@ scp <local_file> root@192.168.124.X:<target_path>
 ```bash
 ssh root@192.168.124.X '<验证命令>'
 ```
+
+#### ⚠️ 部署脚本/守护进程后必查清单（2026-09-24 踩坑固化）
+
+1. **执行权限丢失**：`scp`（不带 `-p`）覆盖脚本后权限会变 `-rw-r--r--`，init.d `start` 报 `Permission denied` 但**不显示**（被 `>/dev/null 2>&1` 吞掉），daemon 静默起不来。
+   - **症状**：web 卡片/功能无数据，`/tmp/*.json` 产物文件不存在，`pgrep` 查不到进程。
+   - **修复**：`ssh root@<IP> 'ls -l <target_path>'` 核对 x 位，丢了就 `chmod +x <target_path>` 后重启对应 init.d 服务。
+2. **init.d `start` 是静默失败的**：`Sxx<name> start` 报错被重定向吞掉，只返回 0。必须靠**查进程 + 查产物文件**双重确认真的起来了，不能只看 `start` 返回 OK。
+3. **busybox `pgrep -f` 不可靠**（会误报进程不存在）：核实守护进程改用
+   ```bash
+   ssh root@<IP> 'ps -eo pid,ppid,args | grep <name> | grep -v grep'
+   ```
+   判读：`ppid=1` 才是被 init 收养的常驻 daemon；`ppid` 还是 SSH 会话 PID 的只是 `nohup ... &` 临时存活，会话退出后可能还在但不算规范启动。
 
 ### Step 5: 验证通过后固化
 
