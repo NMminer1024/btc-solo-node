@@ -112,6 +112,78 @@ $CC -mcpu=c908v -mabi=lp64d -O2 -I$SYSROOT/usr/include/drm \
 - 板子无 python3/gcc/fbgrab，drmshot 必须本地交叉编译后 scp
 - 本地需要 PIL（`python3 -c "import PIL"` 验证）
 
+## Web 端截图（网页控制台）
+
+截 web 控制台页面（About/Dashboard 等）用于 README 附图。浏览器工具沙箱
+**无 `fs`/`window`/`require`**，`page.screenshot()` 拿到的 buffer 无法直接落盘，
+需借本地临时 HTTP 服务中转。
+
+### 关键事实（踩坑记录）
+
+- **浏览器跑在 Windows 侧，WSL 的 LAN IP（如 192.168.124.28）不通**，
+  必须走 `http://127.0.0.1:<port>`（WSL2 localhost 转发可达）。
+- 收图服务做成**一次性**（收完 `os._exit(0)`），每次截图前重启。
+- OTA 更新弹窗会挡页面：先点 `#otaLaterBtn`（用 `evaluate(el => el.click())`，
+  普通 `click()` 常超时）。
+- 视口设 `1440x900` 与历史附图一致。
+
+### Step 1: 起本地收图服务
+
+```bash
+cat > /tmp/shot_receiver.py <<'EOF'
+import http.server, os
+class H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        n = int(self.headers.get('Content-Length', 0))
+        open('/tmp/web-shot.png','wb').write(self.rfile.read(n))
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin','*')
+        self.end_headers(); self.wfile.write(b'OK')
+        print(f'received {n} bytes', flush=True); os._exit(0)
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header('Access-Control-Allow-Origin','*')
+        self.send_header('Access-Control-Allow-Headers','*')
+        self.end_headers()
+    def log_message(self,*a): pass
+http.server.HTTPServer(('0.0.0.0',8877),H).handle_request()
+EOF
+rm -f /tmp/web-shot.png
+(python3 /tmp/shot_receiver.py >/tmp/shot_receiver.log 2>&1 &)
+sleep 1; ss -ltn | grep 8877 && echo up
+```
+
+### Step 2: 浏览器内截图并 POST 回本地
+
+用 `run_playwright_code`（pageId 为目标页）：
+
+```js
+await page.setViewportSize({ width: 1440, height: 900 });
+const btn = page.locator('#otaLaterBtn');
+if (await btn.count()) await btn.evaluate(el => el.click());
+await page.waitForTimeout(500);
+const buf = await page.screenshot({ type: 'png' });
+const b64 = buf.toString('base64');
+const resp = await page.evaluate(async (b64) => {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const r = await fetch('http://127.0.0.1:8877/shot', {
+    method: 'POST', body: bytes,
+    headers: { 'Content-Type': 'application/octet-stream' }
+  });
+  return r.status + ' ' + (await r.text());
+}, b64);
+return 'POST: ' + resp;   // 期望 "POST: 200 OK"
+```
+
+### Step 3: 目视验证
+
+`view_image` 看 `/tmp/web-shot.png`，确认无遮挡、关键卡片完整。
+不满意 → 调视口/滚动/关弹窗后重截（记得重启收图服务）。
+
+> PNG 通常 <100KB，无需分片；将来传大图再考虑 base64 分片。
+
 ## 相关 skill
 
 - 需要**切页/点按钮**再截屏（如验证 Stratum/System 页）→ 用 `rockbase-swipe`
