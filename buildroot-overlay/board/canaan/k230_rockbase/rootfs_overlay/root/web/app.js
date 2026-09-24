@@ -13,6 +13,10 @@
       cpuModel: "--",
       temperature: "--",
       rootfsUsage: "--",
+      storage: [],
+      diskTotalUsed: "--",
+      diskTotalSize: "--",
+      diskTotalPct: null,
       uptime: "--",
       productVersion: "--"
     },
@@ -174,6 +178,68 @@
   function setText(id, value) {
     var el = document.getElementById(id);
     if (el) el.textContent = value;
+  }
+
+  function storageBarClass(pct) {
+    if (pct >= 90) return "is-danger";
+    if (pct >= 75) return "is-warn";
+    return "";
+  }
+
+  function renderStorage(data) {
+    var list = document.getElementById("storageList");
+    if (!list) return;
+    var sys = data.system || {};
+    var rows = [];
+
+    // Total disk row (aggregate)
+    var totalPct = Number.isFinite(Number(sys.diskTotalPct)) ? Number(sys.diskTotalPct) : 0;
+    rows.push({
+      label: t("about.totalDisk"),
+      value: sys.diskTotalUsed + " / " + sys.diskTotalSize,
+      pct: totalPct,
+      barId: "storageTotalBar"
+    });
+
+    // Per-partition rows
+    var parts = Array.isArray(sys.storage) ? sys.storage : [];
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i] || {};
+      var pct = Number.isFinite(Number(p.pct)) ? Number(p.pct) : 0;
+      rows.push({
+        label: t("storage." + p.label),
+        value: (p.used || "--") + " / " + (p.total || "--"),
+        pct: pct,
+        barId: "storageBar_" + p.label
+      });
+    }
+
+    list.innerHTML = "";
+    for (var r = 0; r < rows.length; r++) {
+      var row = rows[r];
+      var wrap = document.createElement("div");
+      wrap.className = "storage-row";
+
+      var label = document.createElement("span");
+      label.className = "storage-label";
+      label.textContent = row.label;
+
+      var bar = document.createElement("div");
+      bar.className = "storage-bar";
+      var fill = document.createElement("div");
+      fill.className = "storage-bar-fill" + (storageBarClass(row.pct) ? " " + storageBarClass(row.pct) : "");
+      fill.style.width = Math.max(0, Math.min(100, row.pct)) + "%";
+      bar.appendChild(fill);
+
+      var val = document.createElement("strong");
+      val.className = "storage-value mono";
+      val.textContent = row.value;
+
+      wrap.appendChild(label);
+      wrap.appendChild(bar);
+      wrap.appendChild(val);
+      list.appendChild(wrap);
+    }
   }
 
   function getLogState(service) {
@@ -619,6 +685,10 @@
         cpuModel: toText(system.cpu_model, mock.system.cpuModel),
         temperature: toText(system.temp, mock.system.temperature),
         rootfsUsage: toText(system.rootfs_size_info, mock.system.rootfsUsage),
+        storage: Array.isArray(system.storage) ? system.storage : [],
+        diskTotalUsed: toText(system.disk_total_used, mock.system.diskTotalUsed),
+        diskTotalSize: toText(system.disk_total_size, mock.system.diskTotalSize),
+        diskTotalPct: toNumber(system.disk_total_pct, mock.system.diskTotalPct),
         uptime: toText(system.uptime, mock.system.uptime),
         productVersion: toText(system.product_version, mock.system.productVersion)
       },
@@ -1653,7 +1723,8 @@
     var tempValid = Number.isFinite(tempNum);
     setText("tempPct", tempValid ? Math.round(tempNum) + "°" : "--");
     setProgress("tempOrb", tempValid ? Math.max(0, Math.min(100, tempNum)) : 0);
-    setText("sysBlock", data.system.rootfsUsage);
+    setText("sysTotalStorage", data.system.diskTotalUsed + " / " + data.system.diskTotalSize);
+    renderStorage(data);
 
     setText("netIp", data.network.ip);
     setText("netSsid", data.network.ssid);
@@ -2711,6 +2782,12 @@
       "about.system": "System",
       "about.productVersion": "Product Version",
       "about.lastUpdated": "Last Updated",
+      "sys.totalStorage": "Total Storage",
+      "about.storage": "Storage",
+      "about.totalDisk": "Total Disk",
+      "storage.rootfs": "Root FS",
+      "storage.config": "Config",
+      "storage.block": "Block Data",
       "about.checking": "Checking\u2026",
       "about.checkingNote": "Checking for updates\u2026",
       "about.contacting": "Contacting update server\u2026",
@@ -2906,6 +2983,12 @@
       "about.system": "系统",
       "about.productVersion": "产品版本",
       "about.lastUpdated": "最近更新",
+      "sys.totalStorage": "总存储",
+      "about.storage": "存储",
+      "about.totalDisk": "磁盘总量",
+      "storage.rootfs": "根文件系统",
+      "storage.config": "配置",
+      "storage.block": "区块数据",
       "about.checking": "检查中…",
       "about.checkingNote": "正在检查更新…",
       "about.contacting": "正在连接更新服务器…",
@@ -3091,6 +3174,12 @@
       "about.system": "Sistema",
       "about.productVersion": "Versión del producto",
       "about.lastUpdated": "Última actualización",
+      "sys.totalStorage": "Almacenamiento total",
+      "about.storage": "Almacenamiento",
+      "about.totalDisk": "Disco total",
+      "storage.rootfs": "FS raíz",
+      "storage.config": "Config",
+      "storage.block": "Datos de bloque",
       "about.checking": "Comprobando…",
       "about.checkingNote": "Comprobando actualizaciones…",
       "about.contacting": "Contactando con el servidor de actualizaciones…",
@@ -3272,6 +3361,12 @@
       "about.system": "Système",
       "about.productVersion": "Version produit",
       "about.lastUpdated": "Dernière mise à jour",
+      "sys.totalStorage": "Stockage total",
+      "about.storage": "Stockage",
+      "about.totalDisk": "Disque total",
+      "storage.rootfs": "FS racine",
+      "storage.config": "Config",
+      "storage.block": "Données de bloc",
       "about.checking": "Vérification…",
       "about.checkingNote": "Vérification des mises à jour…",
       "about.contacting": "Connexion au serveur de mise à jour…",
@@ -3453,6 +3548,12 @@
       "about.system": "System",
       "about.productVersion": "Produktversion",
       "about.lastUpdated": "Zuletzt aktualisiert",
+      "sys.totalStorage": "Gesamtspeicher",
+      "about.storage": "Speicher",
+      "about.totalDisk": "Gesamtdatenträger",
+      "storage.rootfs": "Root-FS",
+      "storage.config": "Konfig",
+      "storage.block": "Blockdaten",
       "about.checking": "Prüfe…",
       "about.checkingNote": "Suche nach Updates…",
       "about.contacting": "Verbinde mit Update-Server…",
@@ -3634,6 +3735,12 @@
       "about.system": "Sistema",
       "about.productVersion": "Versão do produto",
       "about.lastUpdated": "Última atualização",
+      "sys.totalStorage": "Armazenamento total",
+      "about.storage": "Armazenamento",
+      "about.totalDisk": "Disco total",
+      "storage.rootfs": "FS raiz",
+      "storage.config": "Config",
+      "storage.block": "Dados de bloco",
       "about.checking": "Verificando…",
       "about.checkingNote": "Verificando atualizações…",
       "about.contacting": "Contatando o servidor de atualizações…",
@@ -3815,6 +3922,12 @@
       "about.system": "Система",
       "about.productVersion": "Версия продукта",
       "about.lastUpdated": "Последнее обновление",
+      "sys.totalStorage": "Всего хранилища",
+      "about.storage": "Хранилище",
+      "about.totalDisk": "Всего диска",
+      "storage.rootfs": "Корневая ФС",
+      "storage.config": "Конфиг",
+      "storage.block": "Данные блоков",
       "about.checking": "Проверка…",
       "about.checkingNote": "Проверка обновлений…",
       "about.contacting": "Соединение с сервером обновлений…",
@@ -3996,6 +4109,12 @@
       "about.system": "システム",
       "about.productVersion": "製品バージョン",
       "about.lastUpdated": "最終更新",
+      "sys.totalStorage": "総ストレージ",
+      "about.storage": "ストレージ",
+      "about.totalDisk": "ディスク合計",
+      "storage.rootfs": "ルート FS",
+      "storage.config": "設定",
+      "storage.block": "ブロックデータ",
       "about.checking": "確認中…",
       "about.checkingNote": "アップデートを確認中…",
       "about.contacting": "更新サーバーに接続中…",
@@ -4177,6 +4296,12 @@
       "about.system": "시스템",
       "about.productVersion": "제품 버전",
       "about.lastUpdated": "마지막 업데이트",
+      "sys.totalStorage": "총 저장 공간",
+      "about.storage": "저장 공간",
+      "about.totalDisk": "디스크 전체",
+      "storage.rootfs": "루트 FS",
+      "storage.config": "설정",
+      "storage.block": "블록 데이터",
       "about.checking": "확인 중…",
       "about.checkingNote": "업데이트 확인 중…",
       "about.contacting": "업데이트 서버에 연결하는 중…",
@@ -4358,6 +4483,12 @@
       "about.system": "النظام",
       "about.productVersion": "إصدار المنتج",
       "about.lastUpdated": "آخر تحديث",
+      "sys.totalStorage": "التخزين الإجمالي",
+      "about.storage": "التخزين",
+      "about.totalDisk": "إجمالي القرص",
+      "storage.rootfs": "نظام الملفات الجذري",
+      "storage.config": "الإعدادات",
+      "storage.block": "بيانات الكتلة",
       "about.checking": "جارٍ التحقق…",
       "about.checkingNote": "جارٍ التحقق من التحديثات…",
       "about.contacting": "جارٍ الاتصال بخادم التحديثات…",

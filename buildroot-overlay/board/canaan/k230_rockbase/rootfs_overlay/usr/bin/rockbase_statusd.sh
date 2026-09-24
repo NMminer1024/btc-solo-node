@@ -884,6 +884,10 @@ render_status_json() {
     block_disk_path="${DATADIR}"
     product_version="-"
     build_date="-"
+    storage_json="[]"
+    disk_total_used="-"
+    disk_total_size="-"
+    disk_total_pct=0
 
     headers="-"
     blocks="-"
@@ -1223,6 +1227,39 @@ render_status_json() {
     stratum_recommended="LAN miners -> local Stratum"
     ckpool_tail="-"
 
+    # --- storage: all mounted data partitions + aggregate total ---
+    storage_json="["
+    _st_first=1
+    _st_used_kb_sum=0
+    _st_total_kb_sum=0
+    for _st_spec in "rootfs:/" "config:/root/config" "block:/root/block"; do
+        _st_label="${_st_spec%%:*}"
+        _st_mp="${_st_spec#*:}"
+        _st_h=$(df -hP "${_st_mp}" 2>/dev/null | awk 'NR==2{print $3" "$2" "$5}')
+        _st_k=$(df -kP "${_st_mp}" 2>/dev/null | awk 'NR==2{print $3" "$2}')
+        [ -n "${_st_h}" ] || continue
+        _st_used=$(echo "${_st_h}" | awk '{print $1}')
+        _st_tot=$(echo "${_st_h}" | awk '{print $2}')
+        _st_pct=$(echo "${_st_h}" | awk '{gsub("%","",$3);print $3}')
+        case "${_st_pct}" in ''|*[!0-9]*) _st_pct=0 ;; esac
+        _st_used_kb=$(echo "${_st_k}" | awk '{print $1}')
+        _st_tot_kb=$(echo "${_st_k}" | awk '{print $2}')
+        case "${_st_used_kb}" in ''|*[!0-9]*) _st_used_kb=0 ;; esac
+        case "${_st_tot_kb}" in ''|*[!0-9]*) _st_tot_kb=0 ;; esac
+        if [ "${_st_first}" -eq 1 ]; then _st_first=0; else storage_json="${storage_json},"; fi
+        storage_json="${storage_json}{\"label\":\"${_st_label}\",\"used\":\"${_st_used}\",\"total\":\"${_st_tot}\",\"pct\":${_st_pct}}"
+        _st_used_kb_sum=$(( _st_used_kb_sum + _st_used_kb ))
+        _st_total_kb_sum=$(( _st_total_kb_sum + _st_tot_kb ))
+    done
+    storage_json="${storage_json}]"
+    disk_total_used=$(compact_size_mb $(( _st_used_kb_sum / 1024 )))
+    disk_total_size=$(compact_size_mb $(( _st_total_kb_sum / 1024 )))
+    if [ "${_st_total_kb_sum}" -gt 0 ]; then
+        disk_total_pct=$(( _st_used_kb_sum * 100 / _st_total_kb_sum ))
+    else
+        disk_total_pct=0
+    fi
+
     printf '{\n'
     printf '  "system": {\n'
     printf '    "cpu_model": %s,\n' "$(json_str "${cpu_model}")"
@@ -1249,7 +1286,11 @@ render_status_json() {
     printf '    "block_disk_value": %s,\n' "$(json_str "${block_disk_value}")"
     printf '    "block_disk_path": %s,\n' "$(json_str "${block_disk_path}")"
     printf '    "product_version": %s,\n' "$(json_str "${product_version}")"
-    printf '    "build_date": %s\n' "$(json_str "${build_date}")"
+    printf '    "build_date": %s,\n' "$(json_str "${build_date}")"
+    printf '    "storage": %s,\n' "${storage_json}"
+    printf '    "disk_total_used": %s,\n' "$(json_str "${disk_total_used}")"
+    printf '    "disk_total_size": %s,\n' "$(json_str "${disk_total_size}")"
+    printf '    "disk_total_pct": %s\n' "$(json_num "${disk_total_pct}")"
     printf '  },\n'
 
     printf '  "bitcoin": {\n'

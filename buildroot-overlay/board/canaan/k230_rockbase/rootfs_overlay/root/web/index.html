@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NM Bitcoin Node Monitor</title>
-<link rel="stylesheet" href="/style.css?v=20260922-cn5">
+<link rel="stylesheet" href="/style.css?v=20260924-stor1">
 </head>
 <body>
 <div class="site-shell">
@@ -232,8 +232,8 @@
                 <strong id="sysCpu">Canaan K230 &middot; RISC-V</strong>
               </div>
               <div class="stack-row">
-                <span data-i18n="sys.rootfs">Root FS</span>
-                <strong id="sysBlock">2.1G / 5.8G</strong>
+                <span data-i18n="sys.totalStorage">Total Storage</span>
+                <strong id="sysTotalStorage">--</strong>
               </div>
             </div>
             <div class="stack-list">
@@ -482,6 +482,7 @@
           <div class="stack-row"><span data-i18n="about.current">Current</span><strong class="mono" id="aboutCurrentVer">--</strong></div>
           <div class="stack-row"><span data-i18n="about.latest">Latest</span><strong class="mono" id="aboutLatestVer">--</strong></div>
           <div class="stack-row"><span data-i18n="about.released">Released</span><strong id="aboutReleased">--</strong></div>
+          <div class="stack-row"><span data-i18n="about.lastUpdated">Last Updated</span><strong id="aboutUpdated">--</strong></div>
         </div>
         <p class="wifi-note" id="aboutUpdateNote" data-i18n="about.checkingNote">Checking for updates&hellip;</p>
         <div class="about-update-actions">
@@ -491,24 +492,18 @@
         </div>
       </article>
 
-      <section class="subpage-grid">
-        <article class="surface-card">
-          <h3 data-i18n="about.firmware">Firmware</h3>
-          <div class="stack-list">
-            <div class="stack-row"><span data-i18n="about.board">Board</span><strong>Rockbase</strong></div>
-            <div class="stack-row"><span data-i18n="about.firmware">Firmware</span><strong id="aboutFirmware">--</strong></div>
-            <div class="stack-row"><span data-i18n="about.api">API</span><strong>preview-v1</strong></div>
+      <article class="surface-card about-storage-card">
+        <div class="surface-head">
+          <h3 data-i18n="about.storage">Storage</h3>
+        </div>
+        <div class="storage-list" id="storageList">
+          <div class="storage-row">
+            <span class="storage-label" data-i18n="about.totalDisk">Total Disk</span>
+            <div class="storage-bar"><div class="storage-bar-fill" id="storageTotalBar"></div></div>
+            <strong class="storage-value mono" id="storageTotalValue">--</strong>
           </div>
-        </article>
-        <article class="surface-card">
-          <h3 data-i18n="about.system">System</h3>
-          <div class="stack-list">
-            <div class="stack-row"><span data-i18n="about.productVersion">Product Version</span><strong class="mono" id="aboutProductVer">--</strong></div>
-            <div class="stack-row"><span data-i18n="topbar.uptime">Uptime</span><strong id="aboutUptime">--</strong></div>
-            <div class="stack-row"><span data-i18n="about.lastUpdated">Last Updated</span><strong id="aboutUpdated">--</strong></div>
-          </div>
-        </article>
-      </section>
+        </div>
+      </article>
     </section>
   </main>
 </div>
@@ -628,6 +623,6 @@
 </div>
 
 <script src="/world-map.js?v=20260923-svc1"></script>
-<script src="/app.js?v=20260923-svc1"></script>
+<script src="/app.js?v=20260924-stor1"></script>
 </body>
 </html>
