@@ -71,7 +71,9 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
 4. 先确认对 `RELEASE_REPO` 有写权限；用 `git push --dry-run origin main` 或等价操作验证。
    如果 `Permission denied`，立刻停止并让用户补写权限，不要继续试发布。
    发布仓库提交必须使用 `NMminer1024` 身份，不要走默认 `github.com` 的 `betterpony` 身份。
-   推送时应显式使用 `github.com-NMminer1024` 这个 SSH host。
+   推送时应显式使用 `github-nmminer1024` 这个 SSH host（发布仓库 remote 为 `origin`，
+   即 `git@github-nmminer1024:NMminer1024/btc-solo-node-release.git`；注意不是
+   `github.com-NMminer1024`，2026-09-24 实测该写法 push 会报 "does not appear to be a git repository"）。
    所有发布仓库操作都在 `RELEASE_WORKDIR` 内进行；如果目录不存在，先 clone 到这里再继续。
 5. 优先复用 `~/ota-dist/<version>/` 下已经生成好的包。
 6. 发布前先本地验签：
