@@ -52,6 +52,16 @@ start_waiter() {
                 exit 0
             fi
 
+            # Update boot progress with live block height BEFORE the ready
+            # check, so even if bitcoind catches up on the very first
+            # iteration the LCD still shows the height briefly.
+            _info=$(bitcoin-cli -conf="${_BTC_CONF}" getblockchaininfo 2>/dev/null)
+            _blocks=$(printf "%s" "${_info}" | sed -n "s/.*\"blocks\": *\([0-9][0-9]*\).*/\1/p" | head -1)
+            _headers=$(printf "%s" "${_info}" | sed -n "s/.*\"headers\": *\([0-9][0-9]*\).*/\1/p" | head -1)
+            if [ -n "${_blocks}" ] && [ -n "${_headers}" ]; then
+                /usr/bin/rockbase_boot_progress.sh 4 6 90 "#f0b44c" "Stratum waiting: ${_blocks}/${_headers}" 2>/dev/null || true
+            fi
+
             if BTC_CONF="${_BTC_CONF}" BTC_DATADIR="'"${BTC_DATADIR}"'" "'"${BTC_READY_CHECK}"'" >/dev/null 2>&1; then
                 mkdir -p "'"${LOGDIR}"'"
                 # trim oversized log before redirect (board has no `stat`; use `wc -c`)
@@ -67,14 +77,6 @@ start_waiter() {
                     rm -f "'"${WAIT_PID_FILE}"'"
                     exit 0
                 fi
-            fi
-            # Update boot progress with live block height so the LCD shows
-            # e.g. "Stratum waiting: 968399/968400" instead of a static msg.
-            _info=$(bitcoin-cli -conf="${_BTC_CONF}" getblockchaininfo 2>/dev/null)
-            _blocks=$(printf "%s" "${_info}" | sed -n "s/.*\"blocks\": *\([0-9][0-9]*\).*/\1/p" | head -1)
-            _headers=$(printf "%s" "${_info}" | sed -n "s/.*\"headers\": *\([0-9][0-9]*\).*/\1/p" | head -1)
-            if [ -n "${_blocks}" ] && [ -n "${_headers}" ]; then
-                /usr/bin/rockbase_boot_progress.sh 4 6 90 "#f0b44c" "Stratum waiting: ${_blocks}/${_headers}" 2>/dev/null || true
             fi
             sleep 5
         done
@@ -143,7 +145,16 @@ case "$1" in
 
         start_waiter
         echo "deferred (waiting for bitcoind sync)"
-        /usr/bin/rockbase_boot_progress.sh 4 6 90 "#f0b44c" "Stratum waiting (bitcoind sync)" 2>/dev/null || true
+        # Show current block height immediately so the LCD doesn't show a
+        # static message before the waiter's first 5s tick.
+        _info=$(bitcoin-cli -conf="${BTC_CONF}" getblockchaininfo 2>/dev/null)
+        _blocks=$(printf "%s" "${_info}" | sed -n "s/.*\"blocks\": *\([0-9][0-9]*\).*/\1/p" | head -1)
+        _headers=$(printf "%s" "${_info}" | sed -n "s/.*\"headers\": *\([0-9][0-9]*\).*/\1/p" | head -1)
+        if [ -n "${_blocks}" ] && [ -n "${_headers}" ]; then
+            /usr/bin/rockbase_boot_progress.sh 4 6 90 "#f0b44c" "Stratum waiting: ${_blocks}/${_headers}" 2>/dev/null || true
+        else
+            /usr/bin/rockbase_boot_progress.sh 4 6 90 "#f0b44c" "Stratum waiting (bitcoind sync)" 2>/dev/null || true
+        fi
         ;;
   stop)
         printf "Stopping ckpool: "
