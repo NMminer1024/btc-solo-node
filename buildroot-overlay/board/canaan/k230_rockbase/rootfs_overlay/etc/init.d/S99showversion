@@ -1,4 +1,5 @@
 #!/bin/sh
-_VER=$(grep '^product:' /etc/version/release_version 2>/dev/null | cut -d: -f2)
-/usr/bin/rockbase_boot_progress.sh 5 6 100 "#00ff00" "All systems go${_VER:+ (${_VER})}" 2>/dev/null || true
+# NOTE: the boot-screen "system ready" signal (stage 5) is written by
+# S62ckpool once ckpool is actually running — NOT here. Writing it here
+# would let the boot screen exit while bitcoind is still IBD.
 cat /etc/version/release_version

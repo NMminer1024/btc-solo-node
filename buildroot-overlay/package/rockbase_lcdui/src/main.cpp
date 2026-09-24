@@ -3943,7 +3943,10 @@ struct BootProgressState {
     float display_progress = 0.0f;
     std::string message = "Booting...";
     uint32_t color = 0xffffff;
-    bool ready = false;  // all init stages done (S99) -> enter dashboard
+    // True once S62ckpool reports ckpool actually running (stage 5). This is
+    // the real "system ready" gate: init scripts alone finishing (S99) does
+    // NOT mean stratum is up — bitcoind may still be IBD.
+    bool ready = false;  // stratum up (S62: ckpool running) -> enter dashboard
 
     // Replay buffer: every stage that has arrived, in arrival order. The UI
     // plays them back one at a time (each held for kBootStageMinHoldMs) so
@@ -3974,7 +3977,7 @@ void poll_boot_progress() {
     if (color.size() == 7 && color[0] == '#') {
         g_boot_progress.color = static_cast<uint32_t>(std::stoul(color.substr(1), nullptr, 16));
     }
-    // S99showversion writes stage 5 -> all init scripts have run.
+    // S62ckpool writes stage 5 once ckpool is actually running (stratum up).
     const int stage = atoi(json_value(json, "stage", "0").c_str());
     g_boot_progress.stage = stage;
     const int total = atoi(json_value(json, "total_stages", "6").c_str());
@@ -3998,6 +4001,15 @@ void poll_boot_progress() {
             e.message = g_boot_progress.message;
             e.color = g_boot_progress.color;
             g_boot_progress.stages.push_back(e);
+            // Cap the buffer: during IBD the stratum waiter appends a new
+            // live-height entry every 5s for hours. Drop already-played
+            // entries once the buffer grows large.
+            if (g_boot_progress.stages.size() > 64) {
+                g_boot_progress.stages.erase(g_boot_progress.stages.begin(),
+                                             g_boot_progress.stages.begin() +
+                                                 g_boot_progress.play_index);
+                g_boot_progress.play_index = 0;
+            }
         }
     }
 }
@@ -4260,20 +4272,23 @@ int main() {
     // wait as final fallback.
     {
         const uint32_t boot_start = tick_ms();
-        int last_seen_stage = -1;
-        uint32_t last_stage_change_ms = boot_start;
+        uint32_t last_update_ms = boot_start;
+        size_t last_entry_count = 0;
         while (!g_stop) {
             const uint32_t now = tick_ms();
             const uint32_t elapsed = now - boot_start;
             poll_boot_progress();
-            // Detect stage stalls: if the stage value stops advancing for
-            // kBootStageStallMs (e.g. bitcoind deferred waiting for resize),
-            // fall through to the dashboard instead of blocking forever.
-            if (g_boot_progress.stage != last_seen_stage) {
-                last_seen_stage = g_boot_progress.stage;
-                last_stage_change_ms = now;
+            // Stall detection is based on NEW REPLAY ENTRIES, not the stage
+            // number: during IBD the stage stays at 4 while the stratum
+            // waiter appends a live-height entry every 5s — that counts as
+            // progress and keeps the boot screen up. Only a truly frozen
+            // JSON (no new entry for kBootStageStallMs) triggers the
+            // fallback exit to the dashboard.
+            if (g_boot_progress.stages.size() != last_entry_count) {
+                last_entry_count = g_boot_progress.stages.size();
+                last_update_ms = now;
             }
-            const bool stalled = (now - last_stage_change_ms) >= kBootStageStallMs;
+            const bool stalled = (now - last_update_ms) >= kBootStageStallMs;
             // Advance the replay playback (hold each stage for the min hold).
             advance_boot_playback(now);
             const bool playback_done =
