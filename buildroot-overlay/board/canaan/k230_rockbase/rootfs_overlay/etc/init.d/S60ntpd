@@ -1,38 +1,39 @@
 #!/bin/sh
 #
-# S60ntpd - BusyBox NTP 时间同步 daemon
-# K230 无 RTC 电池，开机从网络同步时间
-# bitcoind 要求时间误差 < 10 分钟，否则共识失败
+# S60ntpd - One-shot NTP time sync (NOT a persistent daemon)
+# K230 has no RTC battery; sync from network at boot.
+# bitcoind requires time error < 10 min, otherwise consensus fails.
+# Daily re-sync is handled by rockbase_heartbeatd.sh (checks every 60s,
+# triggers at most once per 24h).
 #
+
+NTP_SYNC_STAMP=/tmp/rockbase-ntp-last-sync
+# 3 servers: domestic + global redundancy (was 12; overkill for single-core)
+NTP_SERVERS="-p cn.pool.ntp.org -p time.cloudflare.com -p pool.ntp.org"
+
+do_sync() {
+    ntpd -q ${NTP_SERVERS} 2>/dev/null
+    if [ $? -eq 0 ]; then
+        date +%s > "${NTP_SYNC_STAMP}"
+        return 0
+    fi
+    return 1
+}
 
 case "$1" in
   start)
-    printf "Starting ntpd: "
-    # -d daemon  -l syslog  -p NTP server
-    # 全球各洲 NTP 服务器，冗余确保时间同步可用
-    ntpd -d -l \
-      -p pool.ntp.org \
-      -p time.cloudflare.com \
-      -p cn.pool.ntp.org \
-      -p jp.pool.ntp.org \
-      -p sg.pool.ntp.org \
-      -p de.pool.ntp.org \
-      -p uk.pool.ntp.org \
-      -p us.pool.ntp.org \
-      -p ca.pool.ntp.org \
-      -p br.pool.ntp.org \
-      -p za.pool.ntp.org \
-      -p au.pool.ntp.org
-    [ $? = 0 ] && echo "OK" || echo "FAIL"
+    printf "NTP sync: "
+    if do_sync; then
+        echo "OK"
+    else
+        echo "FAIL (heartbeatd will retry)"
+    fi
     ;;
   stop)
-    printf "Stopping ntpd: "
-    killall ntpd 2>/dev/null
-    [ $? = 0 ] && echo "OK" || echo "FAIL"
+    # No persistent daemon to stop
+    echo "OK"
     ;;
   restart|reload)
-    "$0" stop
-    sleep 1
     "$0" start
     ;;
   *)
@@ -41,4 +42,4 @@ case "$1" in
     ;;
 esac
 
-exit $?
+exit 0

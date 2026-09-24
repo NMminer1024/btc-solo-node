@@ -183,10 +183,32 @@ write_heartbeat() {
         >> "${HEARTBEAT_LOG}"
 }
 
+# --- Daily NTP re-sync (one-shot ntpd, not a persistent daemon) ---
+NTP_SYNC_STAMP=/tmp/rockbase-ntp-last-sync
+NTP_RESYNC_SECS=86400
+NTP_SERVERS="-p cn.pool.ntp.org -p time.cloudflare.com -p pool.ntp.org"
+
+ntp_maybe_resync() {
+    now=$(date +%s 2>/dev/null)
+    [ -n "${now}" ] || return 0
+    last=0
+    [ -r "${NTP_SYNC_STAMP}" ] && last=$(cat "${NTP_SYNC_STAMP}" 2>/dev/null)
+    case "${last}" in ''|*[!0-9]*) last=0 ;; esac
+    # Clock not sane yet (epoch) or never synced: try every heartbeat
+    if [ "${now}" -lt 1704067200 ] || [ "${last}" -eq 0 ]; then
+        ntpd -q ${NTP_SERVERS} >/dev/null 2>&1 && date +%s > "${NTP_SYNC_STAMP}"
+        return 0
+    fi
+    # Otherwise re-sync at most once per 24h
+    [ $((now - last)) -ge ${NTP_RESYNC_SECS} ] || return 0
+    ntpd -q ${NTP_SERVERS} >/dev/null 2>&1 && date +%s > "${NTP_SYNC_STAMP}"
+}
+
 case "$1" in
     daemon)
         while true; do
             write_heartbeat
+            ntp_maybe_resync
             sleep "${HEARTBEAT_INTERVAL}"
         done
         ;;

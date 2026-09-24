@@ -485,9 +485,20 @@ collect_network() {
         fi
     fi
 
-    ntp_running=0
-    ps | grep -v grep | grep -q ntpd && ntp_running=1
-    if [ "${ntp_running}" = "1" ]; then
+    # NTP is one-shot (no persistent daemon); judge by last-sync stamp.
+    # Fresh = synced within 26h (daily re-sync + 2h clock-drift margin).
+    ntp_fresh=0
+    _ntp_now=$(date +%s 2>/dev/null)
+    _ntp_last=$(cat /tmp/rockbase-ntp-last-sync 2>/dev/null)
+    case "${_ntp_last}" in ''|*[!0-9]*) _ntp_last=0 ;; esac
+    if [ -n "${_ntp_now}" ] && [ "${_ntp_last}" -gt 0 ] 2>/dev/null \
+       && [ $((_ntp_now - _ntp_last)) -lt 93600 ]; then
+        ntp_fresh=1
+    fi
+    # NOTE: "running" is a display token consumed by lcdui ntp_label()
+    # (main.cpp: key=="running" -> "NTP Ready"). Keep this value stable;
+    # NTP itself is one-shot, not a persistent daemon.
+    if [ "${ntp_fresh}" = "1" ]; then
         ntp_key=running
         ntp_class=ok
     else
