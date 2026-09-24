@@ -125,9 +125,13 @@ detect_sd_dev() {
     SD_DEV="mmcblk1"
 }
 
-# Read one diskstats line: read_sectors write_sectors io_ms weighted_ms inflight
+# Read one diskstats line:
+#   read_sectors($6) write_sectors($10) ms_writing($11) io_ms($13) inflight($12)
+# NOTE: write-busy must use ms_writing ($11, write time only). weighted_io_ms
+# ($14) counts BOTH reads and writes, so during IBD/read-heavy phases it spikes
+# and would falsely look like "write busy".
 read_disk() {
-    awk -v dev="$SD_DEV" '$3 == dev { print $6, $10, $13, $14, $12 }' /proc/diskstats 2>/dev/null
+    awk -v dev="$SD_DEV" '$3 == dev { print $6, $10, $11, $13, $12 }' /proc/diskstats 2>/dev/null
 }
 
 # ---------- state ----------
@@ -137,7 +141,7 @@ load_state() {
     total_read_sectors=0
     last_written_sectors=0
     last_read_sectors=0
-    last_weighted_ms=0
+    last_ms_writing=0
     last_sample_epoch=0
     last_uptime_sec=0
     total_uptime_sec=0
@@ -156,7 +160,7 @@ write_state() {
         echo "total_read_sectors=$total_read_sectors"
         echo "last_written_sectors=$last_written_sectors"
         echo "last_read_sectors=$last_read_sectors"
-        echo "last_weighted_ms=$last_weighted_ms"
+        echo "last_ms_writing=$last_ms_writing"
         echo "last_sample_epoch=$last_sample_epoch"
         echo "last_uptime_sec=$last_uptime_sec"
         echo "total_uptime_sec=$total_uptime_sec"
@@ -194,16 +198,27 @@ sample() {
     set -- $(read_disk)
     r_sectors=$(num_or_zero "${1:-0}")
     w_sectors=$(num_or_zero "${2:-0}")
-    weighted=$(num_or_zero "${4:-0}")
+    ms_writing=$(num_or_zero "${3:-0}")
     inflight=$(num_or_zero "${5:-0}")
 
     # Reboot detection: uptime went backwards -> diskstats reset.
     if [ "$uptime" -lt "$last_uptime_sec" ]; then
         last_written_sectors=0
         last_read_sectors=0
-        last_weighted_ms=0
+        last_ms_writing=0
         last_sample_epoch=0
         io_err_marker=0
+    fi
+
+    # First-ever sample (fresh install): seed the baseline to the CURRENT
+    # diskstats values so we do NOT attribute the whole boot's prior I/O
+    # (e.g. bitcoind IBD reading tens of GB) to our sampling. Cumulative
+    # read/write then starts exactly from deployment time, consistent with
+    # `baseline_since`.
+    if [ "$first_install_epoch" -eq 0 ]; then
+        last_written_sectors=$w_sectors
+        last_read_sectors=$r_sectors
+        last_ms_writing=$ms_writing
     fi
 
     # Cumulative written/read sectors (correct across reboot).
@@ -233,10 +248,10 @@ sample() {
             window=$INTERVAL
         fi
 
-        # Write busy % from weighted_io_ms delta.
-        dweighted=$((weighted - last_weighted_ms))
-        [ "$dweighted" -lt 0 ] && dweighted=0
-        wbusy=$(awk -v d="$dweighted" -v w="$window" 'BEGIN{if(w>0){p=d/(w*1000)*100; if(p>100)p=100; printf "%.0f", p} else print 0}')
+        # Write busy % from ms_writing (f11, write time only) delta.
+        dwrite_ms=$((ms_writing - last_ms_writing))
+        [ "$dwrite_ms" -lt 0 ] && dwrite_ms=0
+        wbusy=$(awk -v d="$dwrite_ms" -v w="$window" 'BEGIN{if(w>0){p=d/(w*1000)*100; if(p>100)p=100; printf "%.0f", p} else print 0}')
 
         # Write rate bytes/sec over the window.
         write_rate_bps=$(awk -v dw="$dw" -v w="$window" 'BEGIN{if(w>0)printf "%.0f", dw*512/w; else print 0}')
@@ -253,7 +268,7 @@ sample() {
     # Persist current sample as the new "last".
     last_written_sectors=$w_sectors
     last_read_sectors=$r_sectors
-    last_weighted_ms=$weighted
+    last_ms_writing=$ms_writing
     last_sample_epoch=$now
     last_uptime_sec=$uptime
     [ "$first_install_epoch" -eq 0 ] && first_install_epoch=$now
