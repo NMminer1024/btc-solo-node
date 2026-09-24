@@ -926,6 +926,31 @@ textarea {
   }
 }
 
+/* --- About cards: two-column layout (2x2 grid) --- */
+.about-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+/* Firmware Update (left) + Storage (right) on row 1;
+   SD Card Health (left) on row 2, right cell reserved for future cards. */
+
+/* --- SD Card Health (About) --- */
+.about-sdhealth-card .wifi-note {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg3);
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
 /* ── Stratum connect panel ───────────────────────────────── */
 
 .stratum-connect {
@@ -2294,6 +2319,14 @@ html[data-theme="light"] .miners-history-grid {
 
   .data-table {
     font-size: 12px;
+  }
+
+  .about-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .about-cards .about-sdhealth-card {
+    grid-column: auto;
   }
 }
 

@@ -899,6 +899,7 @@ render_status_json() {
     disk_total_used="-"
     disk_total_size="-"
     disk_total_pct=0
+    sd_health_json="null"
 
     headers="-"
     blocks="-"
@@ -1271,6 +1272,16 @@ render_status_json() {
         disk_total_pct=0
     fi
 
+    # Merge the SD health sampler output (rendered independently by
+    # rockbase_sdhealthd.sh) into the system object. Absent -> null.
+    if [ -s /tmp/sdhealth.json ]; then
+        sd_health_json=$(cat /tmp/sdhealth.json 2>/dev/null)
+        case "${sd_health_json}" in
+            '{'*) : ;;
+            *) sd_health_json="null" ;;
+        esac
+    fi
+
     printf '{\n'
     printf '  "system": {\n'
     printf '    "cpu_model": %s,\n' "$(json_str "${cpu_model}")"
@@ -1301,7 +1312,8 @@ render_status_json() {
     printf '    "storage": %s,\n' "${storage_json}"
     printf '    "disk_total_used": %s,\n' "$(json_str "${disk_total_used}")"
     printf '    "disk_total_size": %s,\n' "$(json_str "${disk_total_size}")"
-    printf '    "disk_total_pct": %s\n' "$(json_num "${disk_total_pct}")"
+    printf '    "disk_total_pct": %s,\n' "$(json_num "${disk_total_pct}")"
+    printf '    "sd_health": %s\n' "${sd_health_json}"
     printf '  },\n'
 
     printf '  "bitcoin": {\n'

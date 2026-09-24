@@ -242,6 +242,46 @@
     }
   }
 
+  function renderSdHealth(sd) {
+    var badge = document.getElementById("sdHealthBadge");
+    var ids = ["sdHealthScore", "sdHealthVerdict", "sdHealthCard", "sdHealthCardDate",
+      "sdHealthSince", "sdHealthTotalWritten", "sdHealthWriteRate", "sdHealthIoErrors",
+      "sdHealthPeakWbusy", "sdHealthUptime"];
+    if (!sd) {
+      if (badge) { badge.textContent = t("sdhealth.unavailable"); badge.className = "status-badge status-soft"; }
+      for (var i = 0; i < ids.length; i++) setText(ids[i], "--");
+      setText("sdHealthEvents", t("sdhealth.noEvents"));
+      return;
+    }
+
+    var statusClass = { healthy: "status-ok", degraded: "status-warm", critical: "status-danger", unknown: "status-soft" }[sd.status] || "status-soft";
+    var statusKey = "sdhealth.status." + sd.status;
+    var statusLabel = t(statusKey) !== statusKey ? t(statusKey) : sd.status;
+    setBadgeState("sdHealthBadge", statusLabel, statusClass);
+
+    setText("sdHealthScore", sd.score === null ? "--" : sd.score + " / 100");
+
+    var verdictKey = "sdhealth.verdict." + sd.verdict;
+    var verdictLabel = t(verdictKey) !== verdictKey ? t(verdictKey) : sd.verdict;
+    setText("sdHealthVerdict", verdictLabel);
+
+    setText("sdHealthCard", sd.card);
+    setText("sdHealthCardDate", sd.cardDate);
+    setText("sdHealthSince", sd.since);
+    setText("sdHealthTotalWritten", sd.totalWritten);
+    setText("sdHealthWriteRate", sd.writeRate);
+    setText("sdHealthIoErrors", String(sd.ioErrors));
+    setText("sdHealthPeakWbusy", sd.peakWbusy > 0 ? sd.peakWbusy + "%" : "--");
+    setText("sdHealthUptime", sd.uptimeDays + " " + t("sdhealth.days"));
+
+    var eventsEl = document.getElementById("sdHealthEvents");
+    if (eventsEl) {
+      eventsEl.textContent = (sd.recentEvents && sd.recentEvents.length)
+        ? sd.recentEvents.join("\n")
+        : t("sdhealth.noEvents");
+    }
+  }
+
   function getLogState(service) {
     return logState[service] || logState.bitcoind;
   }
@@ -690,7 +730,8 @@
         diskTotalSize: toText(system.disk_total_size, mock.system.diskTotalSize),
         diskTotalPct: toNumber(system.disk_total_pct, mock.system.diskTotalPct),
         uptime: toText(system.uptime, mock.system.uptime),
-        productVersion: toText(system.product_version, mock.system.productVersion)
+        productVersion: toText(system.product_version, mock.system.productVersion),
+        sdHealth: normalizeSdHealth(system.sd_health)
       },
       bitcoin: {
         running: toNumber(bitcoin.running, 0),
@@ -733,6 +774,27 @@
         firmware: toText(system.product_version, mock.about.firmware),
         updated: toText(system.build_date, mock.about.updated)
       }
+    };
+  }
+
+  function normalizeSdHealth(sh) {
+    if (!sh || typeof sh !== "object" || sh.available !== true) return null;
+    var card = sh.card || {};
+    var cardLabel = [card.vendor, card.name].filter(Boolean).join(" ");
+    if (!cardLabel) cardLabel = card.serial || "--";
+    return {
+      score: toNumber(sh.score, null),
+      status: toText(sh.status, "unknown"),
+      verdict: toText(sh.verdict, "unknown"),
+      card: cardLabel,
+      cardDate: toText(card.date, "--"),
+      since: toText(sh.baseline_since, "--"),
+      totalWritten: toText(sh.total_written_display, "--"),
+      writeRate: toText(sh.write_rate_day_display, "--"),
+      ioErrors: toNumber(sh.io_errors, 0),
+      peakWbusy: toNumber(sh.peak_wbusy_pct, 0),
+      uptimeDays: toNumber(sh.uptime_days, 0),
+      recentEvents: Array.isArray(sh.recent_events) ? sh.recent_events : []
     };
   }
 
@@ -1726,6 +1788,7 @@
     setProgress("tempOrb", tempValid ? Math.max(0, Math.min(100, tempNum)) : 0);
     setText("sysTotalStorage", data.system.diskTotalUsed + " / " + data.system.diskTotalSize);
     renderStorage(data);
+    renderSdHealth(data.system.sdHealth);
 
     setText("netIp", data.network.ip);
     setText("netSsid", data.network.ssid);
@@ -2803,6 +2866,29 @@
       "about.upToDateLatest": "You are running the latest firmware version.",
       "about.error": "Error",
       "about.checkFailed": "Failed to check for updates.",
+      /* sd health */
+      "about.sdHealth": "SD Card Health",
+      "sdhealth.score": "Health Score",
+      "sdhealth.verdict": "Verdict",
+      "sdhealth.card": "Card",
+      "sdhealth.cardDate": "Mfg Date",
+      "sdhealth.since": "Data Since",
+      "sdhealth.totalWritten": "Total Written",
+      "sdhealth.writeRate": "Write Rate",
+      "sdhealth.ioErrors": "I/O Errors",
+      "sdhealth.peakWbusy": "Peak Write Busy",
+      "sdhealth.uptime": "Uptime on Card",
+      "sdhealth.days": "days",
+      "sdhealth.noEvents": "No recent I/O events.",
+      "sdhealth.unavailable": "Unavailable",
+      "sdhealth.status.healthy": "Healthy",
+      "sdhealth.status.degraded": "Degraded",
+      "sdhealth.status.critical": "Critical",
+      "sdhealth.status.unknown": "Unknown",
+      "sdhealth.verdict.healthy": "Healthy",
+      "sdhealth.verdict.sd_card_suspect": "SD card suspect",
+      "sdhealth.verdict.insufficient_data": "Insufficient data",
+      "sdhealth.verdict.unknown": "Unknown",
       /* peer map */
       "peerMap.title": "Peer Map",
       "peerMap.loading": "Locating peers…",
@@ -3004,6 +3090,28 @@
       "about.upToDateLatest": "你正在运行最新的固件版本。",
       "about.error": "错误",
       "about.checkFailed": "检查更新失败。",
+      "about.sdHealth": "SD 卡健康",
+      "sdhealth.score": "健康评分",
+      "sdhealth.verdict": "判定",
+      "sdhealth.card": "存储卡",
+      "sdhealth.cardDate": "生产日期",
+      "sdhealth.since": "数据自",
+      "sdhealth.totalWritten": "累计写入",
+      "sdhealth.writeRate": "写入速率",
+      "sdhealth.ioErrors": "I/O 错误",
+      "sdhealth.peakWbusy": "峰值写繁忙",
+      "sdhealth.uptime": "卡累计运行",
+      "sdhealth.days": "天",
+      "sdhealth.noEvents": "近期无 I/O 事件。",
+      "sdhealth.unavailable": "不可用",
+      "sdhealth.status.healthy": "健康",
+      "sdhealth.status.degraded": "降级",
+      "sdhealth.status.critical": "严重",
+      "sdhealth.status.unknown": "未知",
+      "sdhealth.verdict.healthy": "健康",
+      "sdhealth.verdict.sd_card_suspect": "SD 卡可疑",
+      "sdhealth.verdict.insufficient_data": "数据不足",
+      "sdhealth.verdict.unknown": "未知",
       "peerMap.title": "节点地图",
       "peerMap.loading": "正在定位节点…",
       "peerMap.status": "已定位 {n}/{total} 个节点",
@@ -3195,6 +3303,28 @@
       "about.upToDateLatest": "Estás usando la versión de firmware más reciente.",
       "about.error": "Error",
       "about.checkFailed": "No se pudieron comprobar las actualizaciones.",
+      "about.sdHealth": "Salud de la tarjeta SD",
+      "sdhealth.score": "Puntuación de salud",
+      "sdhealth.verdict": "Veredicto",
+      "sdhealth.card": "Tarjeta",
+      "sdhealth.cardDate": "Fecha de fabricación",
+      "sdhealth.since": "Datos desde",
+      "sdhealth.totalWritten": "Total escrito",
+      "sdhealth.writeRate": "Tasa de escritura",
+      "sdhealth.ioErrors": "Errores de E/S",
+      "sdhealth.peakWbusy": "Pico de escritura ocupado",
+      "sdhealth.uptime": "Tiempo activo en la tarjeta",
+      "sdhealth.days": "días",
+      "sdhealth.noEvents": "Sin eventos de E/S recientes.",
+      "sdhealth.unavailable": "No disponible",
+      "sdhealth.status.healthy": "Saludable",
+      "sdhealth.status.degraded": "Degradado",
+      "sdhealth.status.critical": "Crítico",
+      "sdhealth.status.unknown": "Desconocido",
+      "sdhealth.verdict.healthy": "Saludable",
+      "sdhealth.verdict.sd_card_suspect": "Tarjeta SD sospechosa",
+      "sdhealth.verdict.insufficient_data": "Datos insuficientes",
+      "sdhealth.verdict.unknown": "Desconocido",
       "peerMap.title": "Mapa de pares",
       "peerMap.loading": "Localizando pares…",
       "peerMap.status": "{n} de {total} pares localizados",
@@ -3382,6 +3512,28 @@
       "about.upToDateLatest": "Vous utilisez la version de firmware la plus récente.",
       "about.error": "Erreur",
       "about.checkFailed": "Échec de la vérification des mises à jour.",
+      "about.sdHealth": "Santé de la carte SD",
+      "sdhealth.score": "Score de santé",
+      "sdhealth.verdict": "Verdict",
+      "sdhealth.card": "Carte",
+      "sdhealth.cardDate": "Date de fabrication",
+      "sdhealth.since": "Données depuis",
+      "sdhealth.totalWritten": "Total écrit",
+      "sdhealth.writeRate": "Débit d'écriture",
+      "sdhealth.ioErrors": "Erreurs E/S",
+      "sdhealth.peakWbusy": "Pic d'écriture occupé",
+      "sdhealth.uptime": "Durée de vie sur la carte",
+      "sdhealth.days": "jours",
+      "sdhealth.noEvents": "Aucun événement E/S récent.",
+      "sdhealth.unavailable": "Indisponible",
+      "sdhealth.status.healthy": "Sain",
+      "sdhealth.status.degraded": "Dégradé",
+      "sdhealth.status.critical": "Critique",
+      "sdhealth.status.unknown": "Inconnu",
+      "sdhealth.verdict.healthy": "Sain",
+      "sdhealth.verdict.sd_card_suspect": "Carte SD suspecte",
+      "sdhealth.verdict.insufficient_data": "Données insuffisantes",
+      "sdhealth.verdict.unknown": "Inconnu",
       "peerMap.title": "Carte des pairs",
       "peerMap.loading": "Localisation des pairs…",
       "peerMap.status": "{n} pairs localisés sur {total}",
@@ -3569,6 +3721,28 @@
       "about.upToDateLatest": "Du nutzt die neueste Firmware-Version.",
       "about.error": "Fehler",
       "about.checkFailed": "Updates konnten nicht geprüft werden.",
+      "about.sdHealth": "SD-Karten-Gesundheit",
+      "sdhealth.score": "Gesundheitswert",
+      "sdhealth.verdict": "Urteil",
+      "sdhealth.card": "Karte",
+      "sdhealth.cardDate": "Herstellungsdatum",
+      "sdhealth.since": "Daten seit",
+      "sdhealth.totalWritten": "Insgesamt geschrieben",
+      "sdhealth.writeRate": "Schreibrate",
+      "sdhealth.ioErrors": "E/A-Fehler",
+      "sdhealth.peakWbusy": "Spitzen-Schreiblast",
+      "sdhealth.uptime": "Laufzeit auf Karte",
+      "sdhealth.days": "Tage",
+      "sdhealth.noEvents": "Keine kürzlichen E/A-Ereignisse.",
+      "sdhealth.unavailable": "Nicht verfügbar",
+      "sdhealth.status.healthy": "Gesund",
+      "sdhealth.status.degraded": "Beeinträchtigt",
+      "sdhealth.status.critical": "Kritisch",
+      "sdhealth.status.unknown": "Unbekannt",
+      "sdhealth.verdict.healthy": "Gesund",
+      "sdhealth.verdict.sd_card_suspect": "SD-Karte verdächtig",
+      "sdhealth.verdict.insufficient_data": "Unzureichende Daten",
+      "sdhealth.verdict.unknown": "Unbekannt",
       "peerMap.title": "Peer-Karte",
       "peerMap.loading": "Peers werden lokalisiert…",
       "peerMap.status": "{n} von {total} Peers lokalisiert",
@@ -3756,6 +3930,28 @@
       "about.upToDateLatest": "Você está usando a versão de firmware mais recente.",
       "about.error": "Erro",
       "about.checkFailed": "Falha ao verificar atualizações.",
+      "about.sdHealth": "Saúde do cartão SD",
+      "sdhealth.score": "Pontuação de saúde",
+      "sdhealth.verdict": "Veredito",
+      "sdhealth.card": "Cartão",
+      "sdhealth.cardDate": "Data de fabricação",
+      "sdhealth.since": "Dados desde",
+      "sdhealth.totalWritten": "Total gravado",
+      "sdhealth.writeRate": "Taxa de gravação",
+      "sdhealth.ioErrors": "Erros de E/S",
+      "sdhealth.peakWbusy": "Pico de gravação ocupado",
+      "sdhealth.uptime": "Tempo ativo no cartão",
+      "sdhealth.days": "dias",
+      "sdhealth.noEvents": "Sem eventos de E/S recentes.",
+      "sdhealth.unavailable": "Indisponível",
+      "sdhealth.status.healthy": "Saudável",
+      "sdhealth.status.degraded": "Degradado",
+      "sdhealth.status.critical": "Crítico",
+      "sdhealth.status.unknown": "Desconhecido",
+      "sdhealth.verdict.healthy": "Saudável",
+      "sdhealth.verdict.sd_card_suspect": "Cartão SD suspeito",
+      "sdhealth.verdict.insufficient_data": "Dados insuficientes",
+      "sdhealth.verdict.unknown": "Desconhecido",
       "peerMap.title": "Mapa de pares",
       "peerMap.loading": "Localizando pares…",
       "peerMap.status": "{n} de {total} pares localizados",
@@ -3943,6 +4139,28 @@
       "about.upToDateLatest": "Вы используете последнюю версию прошивки.",
       "about.error": "Ошибка",
       "about.checkFailed": "Не удалось проверить обновления.",
+      "about.sdHealth": "Состояние SD-карты",
+      "sdhealth.score": "Оценка состояния",
+      "sdhealth.verdict": "Вердикт",
+      "sdhealth.card": "Карта",
+      "sdhealth.cardDate": "Дата производства",
+      "sdhealth.since": "Данные с",
+      "sdhealth.totalWritten": "Всего записано",
+      "sdhealth.writeRate": "Скорость записи",
+      "sdhealth.ioErrors": "Ошибки ввода-вывода",
+      "sdhealth.peakWbusy": "Пиковая загрузка записи",
+      "sdhealth.uptime": "Время работы на карте",
+      "sdhealth.days": "дн.",
+      "sdhealth.noEvents": "Нет недавних событий ввода-вывода.",
+      "sdhealth.unavailable": "Недоступно",
+      "sdhealth.status.healthy": "Исправно",
+      "sdhealth.status.degraded": "Ухудшено",
+      "sdhealth.status.critical": "Критично",
+      "sdhealth.status.unknown": "Неизвестно",
+      "sdhealth.verdict.healthy": "Исправно",
+      "sdhealth.verdict.sd_card_suspect": "SD-карта под подозрением",
+      "sdhealth.verdict.insufficient_data": "Недостаточно данных",
+      "sdhealth.verdict.unknown": "Неизвестно",
       "peerMap.title": "Карта узлов",
       "peerMap.loading": "Определение местоположения узлов…",
       "peerMap.status": "Определено местоположение {n} из {total} узлов",
@@ -4130,6 +4348,28 @@
       "about.upToDateLatest": "最新のファームウェアバージョンを使用しています。",
       "about.error": "エラー",
       "about.checkFailed": "更新の確認に失敗しました。",
+      "about.sdHealth": "SDカードの状態",
+      "sdhealth.score": "健康スコア",
+      "sdhealth.verdict": "判定",
+      "sdhealth.card": "カード",
+      "sdhealth.cardDate": "製造日",
+      "sdhealth.since": "データ取得開始",
+      "sdhealth.totalWritten": "総書き込み量",
+      "sdhealth.writeRate": "書き込み速度",
+      "sdhealth.ioErrors": "I/Oエラー",
+      "sdhealth.peakWbusy": "ピーク書き込み負荷",
+      "sdhealth.uptime": "カード稼働時間",
+      "sdhealth.days": "日",
+      "sdhealth.noEvents": "最近のI/Oイベントはありません。",
+      "sdhealth.unavailable": "利用不可",
+      "sdhealth.status.healthy": "正常",
+      "sdhealth.status.degraded": "劣化",
+      "sdhealth.status.critical": "重大",
+      "sdhealth.status.unknown": "不明",
+      "sdhealth.verdict.healthy": "正常",
+      "sdhealth.verdict.sd_card_suspect": "SDカードに疑い",
+      "sdhealth.verdict.insufficient_data": "データ不足",
+      "sdhealth.verdict.unknown": "不明",
       "peerMap.title": "ピアマップ",
       "peerMap.loading": "ピアの位置を特定中…",
       "peerMap.status": "ピア {total} 件中 {n} 件の位置を特定",
@@ -4317,6 +4557,28 @@
       "about.upToDateLatest": "최신 펌웨어 버전을 사용 중입니다.",
       "about.error": "오류",
       "about.checkFailed": "업데이트 확인에 실패했습니다.",
+      "about.sdHealth": "SD 카드 상태",
+      "sdhealth.score": "건강 점수",
+      "sdhealth.verdict": "판정",
+      "sdhealth.card": "카드",
+      "sdhealth.cardDate": "제조일",
+      "sdhealth.since": "데이터 시작",
+      "sdhealth.totalWritten": "총 쓰기량",
+      "sdhealth.writeRate": "쓰기 속도",
+      "sdhealth.ioErrors": "I/O 오류",
+      "sdhealth.peakWbusy": "최대 쓰기 부하",
+      "sdhealth.uptime": "카드 가동 시간",
+      "sdhealth.days": "일",
+      "sdhealth.noEvents": "최근 I/O 이벤트가 없습니다.",
+      "sdhealth.unavailable": "사용 불가",
+      "sdhealth.status.healthy": "정상",
+      "sdhealth.status.degraded": "저하됨",
+      "sdhealth.status.critical": "심각",
+      "sdhealth.status.unknown": "알 수 없음",
+      "sdhealth.verdict.healthy": "정상",
+      "sdhealth.verdict.sd_card_suspect": "SD 카드 의심",
+      "sdhealth.verdict.insufficient_data": "데이터 부족",
+      "sdhealth.verdict.unknown": "알 수 없음",
       "peerMap.title": "피어 맵",
       "peerMap.loading": "피어 위치를 확인하는 중…",
       "peerMap.status": "피어 {total}개 중 {n}개 위치 확인",
@@ -4504,6 +4766,28 @@
       "about.upToDateLatest": "تستخدم أحدث إصدار من البرنامج الثابت.",
       "about.error": "خطأ",
       "about.checkFailed": "فشل التحقق من التحديثات.",
+      "about.sdHealth": "صحة بطاقة SD",
+      "sdhealth.score": "درجة الصحة",
+      "sdhealth.verdict": "الحكم",
+      "sdhealth.card": "البطاقة",
+      "sdhealth.cardDate": "تاريخ الصنع",
+      "sdhealth.since": "البيانات منذ",
+      "sdhealth.totalWritten": "إجمالي المكتوب",
+      "sdhealth.writeRate": "معدل الكتابة",
+      "sdhealth.ioErrors": "أخطاء الإدخال/الإخراج",
+      "sdhealth.peakWbusy": "ذروة انشغال الكتابة",
+      "sdhealth.uptime": "مدة التشغيل على البطاقة",
+      "sdhealth.days": "يوم",
+      "sdhealth.noEvents": "لا توجد أحداث إدخال/إخراج حديثة.",
+      "sdhealth.unavailable": "غير متاح",
+      "sdhealth.status.healthy": "سليم",
+      "sdhealth.status.degraded": "متدهور",
+      "sdhealth.status.critical": "حرج",
+      "sdhealth.status.unknown": "غير معروف",
+      "sdhealth.verdict.healthy": "سليم",
+      "sdhealth.verdict.sd_card_suspect": "بطاقة SD مشتبه بها",
+      "sdhealth.verdict.insufficient_data": "بيانات غير كافية",
+      "sdhealth.verdict.unknown": "غير معروف",
       "peerMap.title": "خريطة الأقران",
       "peerMap.loading": "جارٍ تحديد مواقع الأقران…",
       "peerMap.status": "تم تحديد موقع {n} من أصل {total} أقران",

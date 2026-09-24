@@ -20,6 +20,7 @@ BTC_USER_STOPPED_FLAG=${ROCKBASE_SUPERVISOR_USER_STOP_FLAG:-/run/rockbase/bitcoi
 SERVICES="
 bitcoind|bitcoind -conf|/etc/init.d/S61bitcoind
 statusd|rockbase_statusd.sh daemon|/etc/init.d/S43statusd
+sdhealthd|rockbase_sdhealthd.sh daemon|/etc/init.d/S44sdhealthd
 miners-cache|rockbase_miners_cache.sh daemon|/etc/init.d/S63miners-cache
 miners-history|rockbase_miners_historyd.sh daemon|/etc/init.d/S64miners-history
 ledd|rockbase_ledd.sh run|/etc/init.d/S95ledd

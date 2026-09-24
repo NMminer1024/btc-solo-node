@@ -473,6 +473,7 @@
         <p data-i18n="about.subtitle">Versioning, firmware updates, and support diagnostics.</p>
       </section>
 
+      <div class="about-cards">
       <article class="surface-card about-update-card">
         <div class="surface-head">
           <h3 data-i18n="about.firmwareUpdate">Firmware Update</h3>
@@ -504,6 +505,27 @@
           </div>
         </div>
       </article>
+
+      <article class="surface-card about-sdhealth-card">
+        <div class="surface-head">
+          <h3 data-i18n="about.sdHealth">SD Card Health</h3>
+          <span class="status-badge" id="sdHealthBadge">--</span>
+        </div>
+        <div class="stack-list">
+          <div class="stack-row"><span data-i18n="sdhealth.score">Health Score</span><strong class="mono" id="sdHealthScore">--</strong></div>
+          <div class="stack-row"><span data-i18n="sdhealth.verdict">Verdict</span><strong id="sdHealthVerdict">--</strong></div>
+          <div class="stack-row"><span data-i18n="sdhealth.card">Card</span><strong class="mono" id="sdHealthCard">--</strong></div>
+          <div class="stack-row"><span data-i18n="sdhealth.cardDate">Mfg Date</span><strong class="mono" id="sdHealthCardDate">--</strong></div>
+          <div class="stack-row"><span data-i18n="sdhealth.since">Data Since</span><strong class="mono" id="sdHealthSince">--</strong></div>
+          <div class="stack-row"><span data-i18n="sdhealth.totalWritten">Total Written</span><strong class="mono" id="sdHealthTotalWritten">--</strong></div>
+          <div class="stack-row"><span data-i18n="sdhealth.writeRate">Write Rate</span><strong class="mono" id="sdHealthWriteRate">--</strong></div>
+          <div class="stack-row"><span data-i18n="sdhealth.ioErrors">I/O Errors</span><strong class="mono" id="sdHealthIoErrors">--</strong></div>
+          <div class="stack-row"><span data-i18n="sdhealth.peakWbusy">Peak Write Busy</span><strong class="mono" id="sdHealthPeakWbusy">--</strong></div>
+          <div class="stack-row"><span data-i18n="sdhealth.uptime">Uptime on Card</span><strong class="mono" id="sdHealthUptime">--</strong></div>
+        </div>
+        <p class="wifi-note" id="sdHealthEvents" data-i18n="sdhealth.noEvents">No recent I/O events.</p>
+      </article>
+      </div>
     </section>
   </main>
 </div>
