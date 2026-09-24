@@ -72,7 +72,10 @@ Memory size is auto-detected at runtime by U-Boot, mmc topology is unified.
 若需确认最近提交是否合规：
 
 ```bash
-git log --oneline -20 | LC_ALL=C grep -nP '[\x{4e00}-\x{9fff}]' && echo "含中文，需重写" || echo "OK"
+git log -1 --format=%B | grep -P '[\p{Han}]' && echo "含中文，需重写" || echo "OK: 无中文"
 ```
+
+> 注意：不要用 `grep -nP '[\x{4e00}-\x{9fff}]'`，会报
+> `character value in \x{} or \o{} is too large`，校验结果不可靠。用 `[\p{Han}]`。
 
 （检出中文则用 `git commit --amend` 或 `git rebase -i` 改写，改写后仍是英文。）
