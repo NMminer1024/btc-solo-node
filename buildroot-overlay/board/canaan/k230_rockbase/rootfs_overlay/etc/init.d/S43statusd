@@ -51,8 +51,10 @@ case "$1" in
     start)
         printf "Starting rockbase statusd: "
         stop_service
+        /usr/bin/rockbase_boot_progress.sh 2 6 35 "#f0b44c" "Starting statusd..." 2>/dev/null || true
         if start_service; then
             echo "OK"
+            /usr/bin/rockbase_boot_progress.sh 2 6 50 "#ffffff" "Status cache ready" 2>/dev/null || true
         else
             echo "FAIL"
             exit 1

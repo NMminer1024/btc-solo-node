@@ -92,6 +92,8 @@ case "$1" in
 		printf "Starting rockbase lcdui: "
 		if start_service; then
 			echo "OK"
+			/usr/bin/rockbase_boot_progress.sh 0 6 5 "#f0b44c" "Starting LCD UI..." 2>/dev/null || true
+			/usr/bin/rockbase_boot_progress.sh 0 6 10 "#ffffff" "LCD UI ready" 2>/dev/null || true
 		else
 			echo "FAIL"
 			exit 1

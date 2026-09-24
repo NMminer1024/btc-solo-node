@@ -69,6 +69,11 @@ constexpr size_t kStratumChartMaxPoints = 500;
 constexpr const char* kBootLogoRawPath = "/usr/share/rockbase-lcdui/boot-logo-800x480.argb";
 constexpr const char* kProductVersionPath = "/etc/version/product_version";
 constexpr const char* kStatusCachePath = "/tmp/status-api.json";
+constexpr const char* kBootProgressPath = "/run/rockbase/boot-progress.json";
+constexpr uint32_t kBootMinHoldMs = 2000;      // logo 最短显示时间
+constexpr uint32_t kBootMaxWaitMs = 60000;     // 等待系统就绪的最长时间（兜底）
+constexpr uint32_t kBootStageStallMs = 20000;  // 进度停滞超时（某阶段卡住时兜底退出）
+constexpr uint32_t kBootStageMinHoldMs = 500;  // 每条进度最短停留时间（保证可见）
 constexpr const char* kMinersCachePath = "/run/rockbase/miners.json";
 constexpr const char* kMinersHistoryCachePath = "/run/rockbase/miners-history-node.json";
 constexpr const char* kTimezoneFilePath = "/etc/TZ";
@@ -81,6 +86,9 @@ uint32_t g_render_buffer_index = 0;
 uint32_t g_last_present_ms = 0;
 int g_backlight_fd = -1;
 void* g_lv_draw_buf = nullptr;
+lv_obj_t* g_boot_bar = nullptr;
+lv_obj_t* g_boot_pct_label = nullptr;
+lv_obj_t* g_boot_msg_label = nullptr;
 
 struct RawImage {
     std::vector<uint8_t> data;
@@ -3919,6 +3927,158 @@ void build_tile_stage(lv_obj_t* screen) {
     lv_timer_create(refresh_status_cb, 5000, nullptr);
 }
 
+// Boot progress: driven by /run/rockbase/boot-progress.json, written by
+// init scripts (S03/S40/S43/S61/S62/S99) via rockbase_boot_progress.sh.
+struct BootStageEntry {
+    int stage = 0;
+    int pct = 0;
+    std::string message;
+    uint32_t color = 0xffffff;
+};
+
+struct BootProgressState {
+    int target_progress = 0;
+    int stage = -1;
+    int total_stages = 6;
+    float display_progress = 0.0f;
+    std::string message = "Booting...";
+    uint32_t color = 0xffffff;
+    bool ready = false;  // all init stages done (S99) -> enter dashboard
+
+    // Replay buffer: every stage that has arrived, in arrival order. The UI
+    // plays them back one at a time (each held for kBootStageMinHoldMs) so
+    // that fast init scripts (S43->S61->S62->S99 finish in <1s) don't skip
+    // past a stage on screen.
+    std::vector<BootStageEntry> stages;
+    size_t play_index = 0;
+    uint32_t play_start_ms = 0;
+};
+
+BootProgressState g_boot_progress {};
+
+void poll_boot_progress() {
+    std::string json;
+    if (!read_text_file(kBootProgressPath, json, 4096)) {
+        return;
+    }
+    const std::string pct = json_value(json, "progress", "0");
+    int value = atoi(pct.c_str());
+    if (value < 0) value = 0;
+    if (value > 100) value = 100;
+    g_boot_progress.target_progress = value;
+    const std::string msg = json_value(json, "message", "");
+    if (!msg.empty()) {
+        g_boot_progress.message = msg;
+    }
+    const std::string color = json_value(json, "color", "");
+    if (color.size() == 7 && color[0] == '#') {
+        g_boot_progress.color = static_cast<uint32_t>(std::stoul(color.substr(1), nullptr, 16));
+    }
+    // S99showversion writes stage 5 -> all init scripts have run.
+    const int stage = atoi(json_value(json, "stage", "0").c_str());
+    g_boot_progress.stage = stage;
+    const int total = atoi(json_value(json, "total_stages", "6").c_str());
+    if (total > 0) {
+        g_boot_progress.total_stages = total;
+    }
+    if (stage >= g_boot_progress.total_stages - 1) {
+        g_boot_progress.ready = true;
+    }
+    // Append to the replay buffer when a new entry arrives. Allow multiple
+    // entries per stage (e.g. "Starting..." then "Done") so the UI shows
+    // both the start and completion of each phase.
+    if (stage >= 0) {
+        const bool is_new = g_boot_progress.stages.empty() ||
+            g_boot_progress.stages.back().stage != stage ||
+            g_boot_progress.stages.back().message != g_boot_progress.message;
+        if (is_new) {
+            BootStageEntry e;
+            e.stage = stage;
+            e.pct = value;
+            e.message = g_boot_progress.message;
+            e.color = g_boot_progress.color;
+            g_boot_progress.stages.push_back(e);
+        }
+    }
+}
+
+// Advance the replay playback: hold each stage for kBootStageMinHoldMs before
+// moving to the next, so every stage is visible even when init is fast.
+void advance_boot_playback(uint32_t now) {
+    BootProgressState& bp = g_boot_progress;
+    if (bp.stages.empty()) {
+        return;
+    }
+    if (bp.play_index >= bp.stages.size()) {
+        bp.play_index = bp.stages.size() - 1;
+        return;
+    }
+    if (bp.play_start_ms == 0) {
+        bp.play_start_ms = now;
+    }
+    if (now - bp.play_start_ms >= kBootStageMinHoldMs &&
+        bp.play_index + 1 < bp.stages.size()) {
+        bp.play_index++;
+        bp.play_start_ms = now;
+    }
+}
+
+const BootStageEntry& current_boot_stage(const BootProgressState& bp) {
+    static const BootStageEntry kEmpty {};
+    if (bp.stages.empty()) {
+        return kEmpty;
+    }
+    size_t idx = bp.play_index;
+    if (idx >= bp.stages.size()) {
+        idx = bp.stages.size() - 1;
+    }
+    return bp.stages[idx];
+}
+
+void update_boot_progress_ui(lv_obj_t* bar, lv_obj_t* pct_label, lv_obj_t* msg_label) {
+    BootProgressState& bp = g_boot_progress;
+    const BootStageEntry& cur = current_boot_stage(bp);
+    const bool has_stage = !bp.stages.empty();
+    const int target_pct = has_stage ? cur.pct : bp.target_progress;
+    // Exponential ease toward the currently-playing stage's pct.
+    const float delta = static_cast<float>(target_pct) - bp.display_progress;
+    if (delta > 0.5f) {
+        bp.display_progress += delta * 0.4f;
+    }
+    else {
+        bp.display_progress = static_cast<float>(target_pct);
+    }
+    if (bp.display_progress > 100.0f) {
+        bp.display_progress = 100.0f;
+    }
+    lv_bar_set_value(bar, static_cast<int32_t>(bp.display_progress + 0.5f), LV_ANIM_OFF);
+    char buf[8];
+    std::snprintf(buf, sizeof(buf), "%d%%", static_cast<int>(bp.display_progress + 0.5f));
+    lv_label_set_text(pct_label, buf);
+    // Position the % label at the tip of the bar (clamped to bar bounds).
+    const int32_t bar_x = lv_obj_get_x(bar);
+    const int32_t bar_y = lv_obj_get_y(bar);
+    const int32_t bar_w = lv_obj_get_width(bar);
+    const int32_t label_w = lv_obj_get_width(pct_label);
+    int32_t label_x = bar_x + static_cast<int32_t>(bar_w * bp.display_progress / 100.0f) - label_w / 2;
+    if (label_x < bar_x) {
+        label_x = bar_x;
+    }
+    if (label_x > bar_x + bar_w - label_w) {
+        label_x = bar_x + bar_w - label_w;
+    }
+    lv_obj_set_pos(pct_label, label_x, bar_y + lv_obj_get_height(bar) + 6);
+    // Details with stage counter: "[2/6] Status cache ready"
+    const int shown_stage = has_stage ? cur.stage : (bp.stage < 0 ? 0 : bp.stage);
+    const std::string& shown_msg = has_stage ? cur.message : bp.message;
+    const uint32_t shown_color = has_stage ? cur.color : bp.color;
+    char full[160];
+    std::snprintf(full, sizeof(full), "[%d/%d] %s",
+                  shown_stage + 1, bp.total_stages, shown_msg.c_str());
+    lv_label_set_text(msg_label, full);
+    lv_obj_set_style_text_color(msg_label, lv_color_hex(shown_color), 0);
+}
+
 lv_obj_t* build_boot_scene(lv_obj_t* screen) {
     if (g_boot_logo.ready) {
         lv_obj_t* img = lv_image_create(screen);
@@ -3927,6 +4087,44 @@ lv_obj_t* build_boot_scene(lv_obj_t* screen) {
         lv_obj_set_pos(img, 0, 0);
         lv_obj_set_size(img, kUiWidth, kUiHeight);
         make_static(img);
+
+        // Progress bar centered on screen (NMAxe style).
+        constexpr int32_t kBarW = 480;
+        constexpr int32_t kBarH = 8;
+        constexpr int32_t kBarX = (kUiWidth - kBarW) / 2;
+        constexpr int32_t kBarY = kUiHeight / 2;  // vertical center
+
+        lv_obj_t* bar = lv_bar_create(screen);
+        lv_bar_set_range(bar, 0, 100);
+        lv_bar_set_value(bar, 0, LV_ANIM_OFF);
+        lv_obj_set_size(bar, kBarW, kBarH);
+        lv_obj_set_pos(bar, kBarX, kBarY);
+        lv_obj_set_style_bg_color(bar, lv_color_hex(0x3a4148), 0);
+        lv_obj_set_style_bg_opa(bar, LV_OPA_60, 0);
+        lv_obj_set_style_radius(bar, 4, 0);
+        lv_obj_set_style_bg_color(bar, lv_color_hex(0xf0b44c), LV_PART_INDICATOR);
+        lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_INDICATOR);
+        lv_obj_set_style_radius(bar, 4, LV_PART_INDICATOR);
+        lv_obj_clear_flag(bar, LV_OBJ_FLAG_CLICKABLE);
+        g_boot_bar = bar;
+
+        // Percentage label follows the bar tip (NMAxe style).
+        lv_obj_t* pct_label = lv_label_create(screen);
+        lv_label_set_text(pct_label, "0%");
+        lv_obj_set_style_text_font(pct_label, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_color(pct_label, lv_color_hex(0xf4efe2), 0);
+        lv_obj_clear_flag(pct_label, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_pos(pct_label, kBarX, kBarY + kBarH + 6);
+        g_boot_pct_label = pct_label;
+
+        // Details text: bottom-left aligned, larger font (NMAxe style).
+        lv_obj_t* msg_label = lv_label_create(screen);
+        lv_label_set_text(msg_label, g_boot_progress.message.c_str());
+        lv_obj_set_style_text_font(msg_label, &lv_font_montserrat_22, 0);
+        lv_obj_set_style_text_color(msg_label, lv_color_hex(g_boot_progress.color), 0);
+        lv_obj_clear_flag(msg_label, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_align(msg_label, LV_ALIGN_BOTTOM_LEFT, 24, -16);
+        g_boot_msg_label = msg_label;
 
         // Overlay product version at bottom-right, read from /etc/version/product_version
         std::string ver = read_product_version();
@@ -4056,7 +4254,60 @@ int main() {
         lv_obj_delete(fade_mask);
         fade_mask = nullptr;
     }
-    run_lv_for(kBootLogoHoldMs);
+    // Wait for system readiness (boot-progress.json, final stage = S99),
+    // with a minimum logo hold, a per-stage minimum hold (so every stage is
+    // visible), a stall timeout (a stage that never advances), and a maximum
+    // wait as final fallback.
+    {
+        const uint32_t boot_start = tick_ms();
+        int last_seen_stage = -1;
+        uint32_t last_stage_change_ms = boot_start;
+        while (!g_stop) {
+            const uint32_t now = tick_ms();
+            const uint32_t elapsed = now - boot_start;
+            poll_boot_progress();
+            // Detect stage stalls: if the stage value stops advancing for
+            // kBootStageStallMs (e.g. bitcoind deferred waiting for resize),
+            // fall through to the dashboard instead of blocking forever.
+            if (g_boot_progress.stage != last_seen_stage) {
+                last_seen_stage = g_boot_progress.stage;
+                last_stage_change_ms = now;
+            }
+            const bool stalled = (now - last_stage_change_ms) >= kBootStageStallMs;
+            // Advance the replay playback (hold each stage for the min hold).
+            advance_boot_playback(now);
+            const bool playback_done =
+                (g_boot_progress.play_index + 1 >= g_boot_progress.stages.size());
+            const bool current_held =
+                (g_boot_progress.play_start_ms != 0 &&
+                 now - g_boot_progress.play_start_ms >= kBootStageMinHoldMs);
+            if (elapsed >= kBootMinHoldMs && playback_done && current_held &&
+                (g_boot_progress.ready || stalled || elapsed >= kBootMaxWaitMs)) {
+                break;
+            }
+            if (g_boot_bar != nullptr) {
+                update_boot_progress_ui(g_boot_bar, g_boot_pct_label, g_boot_msg_label);
+            }
+            uint32_t next_ms = lv_timer_handler();
+            const uint32_t now_ms = tick_ms();
+            if (ui_interacting(now_ms)) {
+                next_ms = 0;
+            }
+            uint32_t sleep_us = next_ms * 1000U;
+            if (sleep_us < kMinLvSleepUs) {
+                sleep_us = kMinLvSleepUs;
+            }
+            if (sleep_us > kMaxLvSleepUs) {
+                sleep_us = kMaxLvSleepUs;
+            }
+            usleep(sleep_us);
+        }
+        std::printf("rockbase-lcdui: boot wait done after %ums (ready=%d, stages=%zu)\n",
+                    static_cast<unsigned>(tick_ms() - boot_start),
+                    g_boot_progress.ready ? 1 : 0,
+                    g_boot_progress.stages.size());
+        std::fflush(stdout);
+    }
     build_tile_stage(screen);
     build_tile_caches_from_snapshots();
     lv_obj_move_to_index(boot_layer, lv_obj_get_child_count(screen) - 1);

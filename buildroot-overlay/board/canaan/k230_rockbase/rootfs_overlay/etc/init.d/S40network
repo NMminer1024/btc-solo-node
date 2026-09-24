@@ -12,6 +12,13 @@ mkdir -p /run/network
 	if [ -e /sys/class/net/eth0 ] ;then  ifup eth0; fi
 	/sbin/ifup -a
 	[ $? = 0 ] && echo "OK" || echo "FAIL"
+	/usr/bin/rockbase_boot_progress.sh 1 6 15 "#f0b44c" "Starting network..." 2>/dev/null || true
+	# details: link type + active interface + IP, e.g. "wifi wlan0 192.168.124.38"
+	_IFACE=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $2}' | head -1)
+	_IPADDR=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | head -1 | cut -d/ -f1)
+	_NETTYPE="wired"
+	[ "${_IFACE}" = "wlan0" ] && _NETTYPE="wifi"
+	/usr/bin/rockbase_boot_progress.sh 1 6 30 "#ffffff" "Network ${_NETTYPE} ${_IFACE:-up} ${_IPADDR:-}" 2>/dev/null || true
 	;;
   stop)
 	printf "Stopping network: "
