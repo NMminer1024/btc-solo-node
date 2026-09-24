@@ -984,7 +984,8 @@
     for (var li = 0; li < labelCount; li += 1) {
       var lIndex = Math.round(li * span / (labelCount - 1));
       var lx = left + (width - left - right) * lIndex / span;
-      labelParts.push('<text x="' + lx.toFixed(1) + '" y="' + (height - 9) + '" text-anchor="middle">' + escapeHtml(formatChartTime(points[lIndex].ts)) + '</text>');
+      var anchor = li === 0 ? "start" : (li === labelCount - 1 ? "end" : "middle");
+      labelParts.push('<text x="' + lx.toFixed(1) + '" y="' + (height - 9) + '" text-anchor="' + anchor + '">' + escapeHtml(formatChartTime(points[lIndex].ts)) + '</text>');
     }
     var labels = labelParts.join("");
     var lines = series.map(function (item) {
