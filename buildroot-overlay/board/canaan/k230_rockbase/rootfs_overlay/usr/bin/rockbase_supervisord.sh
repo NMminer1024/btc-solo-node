@@ -16,6 +16,11 @@ LOG_ROTATIONS=${ROCKBASE_SUPERVISOR_LOG_ROTATIONS:-5}
 # Set by the web UI when the operator stops bitcoind manually; while present
 # the supervisor must NOT restart bitcoind (it is down on purpose).
 BTC_USER_STOPPED_FLAG=${ROCKBASE_SUPERVISOR_USER_STOP_FLAG:-/run/rockbase/bitcoind-user-stopped}
+# Gates S59blockdata (mount) and S61bitcoind (start). Created by S00resizemmc
+# on a successful resize; if that script fails early in init the flag is
+# missing and Bitcoin stays down forever. The heal below recovers it.
+RESIZE_DONE_FLAG=/resize_done
+BLOCK_MOUNT_POINT=/root/block
 
 SERVICES="
 bitcoind|bitcoind -conf|/etc/init.d/S61bitcoind
@@ -105,12 +110,45 @@ check_service() {
     "$init_script" restart >> "$LOG_FILE" 2>&1 || log_msg "restart ${name}: failed"
 }
 
+# Recover from a failed S00resizemmc: if /resize_done is missing but the
+# blockdata partition is present and mountable, mount it and create the flag
+# so S59blockdata/S61bitcoind (and thus Bitcoin) can come up. Conservative:
+# only touches the flag after a successful mount; never runs e2fsck/resize2fs
+# on a mounted fs. Covers the common OTA case where the fs already fills the
+# partition and only a dirty superblock blocked the resize (124.29 lesson).
+heal_blockdata() {
+    [ -f "$RESIZE_DONE_FLAG" ] && return 0
+    # Already mounted? Just record the flag.
+    if awk -v m="$BLOCK_MOUNT_POINT" '$2 == m { found = 1 } END { exit found ? 0 : 1 }' /proc/mounts; then
+        touch "$RESIZE_DONE_FLAG"
+        log_msg "heal: blockdata already mounted, created ${RESIZE_DONE_FLAG}"
+        return 0
+    fi
+    # Locate the blockdata device (LABEL first, else p4 of the root disk).
+    dev=$(blkid 2>/dev/null | sed -n 's#^\(/dev/[^:]*\):.*LABEL="blockdata".*#\1#p' | head -1)
+    if [ -z "$dev" ]; then
+        rootdev=$(sed -n 's#.*root=\(/dev/mmcblk[0-9]p[0-9]\+\).*#\1#p' /proc/cmdline)
+        bootdev=${rootdev%p*}
+        [ -n "$bootdev" ] && dev="${bootdev}p4"
+    fi
+    [ -n "$dev" ] && [ -b "$dev" ] || return 0
+    mkdir -p "$BLOCK_MOUNT_POINT"
+    if mount -t ext4 -o noatime "$dev" "$BLOCK_MOUNT_POINT" >/dev/null 2>&1; then
+        touch "$RESIZE_DONE_FLAG"
+        log_msg "heal: mounted ${dev} -> ${BLOCK_MOUNT_POINT}, created ${RESIZE_DONE_FLAG}"
+    else
+        log_msg "heal: mount ${dev} failed, will retry"
+    fi
+}
+
 check_all() {
     uptime=$(uptime_seconds)
     case "$uptime" in ''|*[!0-9]*) uptime=0 ;; esac
     if [ "$uptime" -lt "$STARTUP_GRACE" ]; then
         return 0
     fi
+
+    heal_blockdata
 
     printf '%s\n' "$SERVICES" | while IFS='|' read -r name pattern init_script; do
         [ -n "$name" ] || continue

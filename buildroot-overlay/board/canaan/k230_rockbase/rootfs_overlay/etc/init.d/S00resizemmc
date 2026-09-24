@@ -39,8 +39,36 @@ fail() {
 # would otherwise fail here forever, leaving blockdata unmounted (E2 lesson).
 # e2fsck exit codes: 0=clean, 1=errors corrected, 2=corrected+reboot advised
 # — all fine for us; only >=4 is a real failure.
+#
+# Additionally: if the filesystem already fills the partition (common on
+# OTA slots where the image was built at full card size), resize2fs is a
+# no-op but still refuses to run on a dirty superblock. In that case we
+# skip the resize entirely and just clear the dirty flag with e2fsck.
 resize_fs() {
-    local dev="$1" rc
+    local dev="$1" rc fs_blocks part_bytes fs_bytes
+
+    # Fast path: filesystem already at partition size → resize is a no-op.
+    # resize2fs still refuses to run on a dirty superblock, so clear the
+    # "needs fsck" flag (only safe when the device is NOT mounted) and skip.
+    fs_blocks=$(dumpe2fs -h "${dev}" 2>/dev/null | awk '/^Block count:/ {print $3}')
+    if [ -n "${fs_blocks}" ]; then
+        local bs
+        bs=$(dumpe2fs -h "${dev}" 2>/dev/null | awk '/^Block size:/ {print $3}')
+        [ -n "${bs}" ] || bs=4096
+        fs_bytes=$((fs_blocks * bs))
+        part_bytes=$(cat "/sys/class/block/${dev##*/}/size" 2>/dev/null)
+        [ -n "${part_bytes}" ] || part_bytes=0
+        part_bytes=$((part_bytes * 512))
+        if [ "${fs_bytes}" -ge "${part_bytes}" ]; then
+            log "${dev}: filesystem already at partition size, skipping resize"
+            # Never run e2fsck on a mounted filesystem (root is mounted rw here).
+            if ! awk -v d="${dev}" '$1 == d { found = 1 } END { exit found ? 0 : 1 }' /proc/mounts; then
+                e2fsck -f -y "${dev}" >/dev/null 2>&1
+            fi
+            return 0
+        fi
+    fi
+
     resize2fs "${dev}" && return 0
     log "resize2fs failed on ${dev}, running e2fsck repair then retrying"
     e2fsck -f -y "${dev}"; rc=$?
