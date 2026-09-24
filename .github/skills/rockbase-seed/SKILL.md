@@ -121,19 +121,41 @@ BLOCK_SEED_DIR > ROCKBASE_BLOCK_SEED_DIR > seed/root-block
 
 **快速同步命令（一键）**：
 
-```bash
-# 先停止远端 bitcoind
-sshpass -p 'sunrise' ssh sunrise@192.168.124.12 '/home/sunrise/Desktop/bitcoind/stop.sh'
-sleep 5
+> ⚠️ **不要先手动停止 bitcoind 再跑脚本。** 脚本只在"运行时检测到 bitcoind 在跑"时才会自动停止并在结束后自动重启。
+> 若先手动停掉，脚本会判定 `REMOTE_BITCOIND_WAS_RUNNING=false`，同步完**不会**重启，导致远端 bitcoind 一直停着。
+> 正确做法：直接跑脚本，让它自己检测→停止→同步→重启。
 
-# ⚠️ 重要：前台运行，禁止重定向输出（不要用 `> /tmp/xxx.log` 或 `| tail`），以便看到 rsync 进度
+> ⚠️ **本地 seed 目录非空时脚本会弹交互确认 `(y/N)`，且该确认在 stdin 被管道占用（如 `echo y |`）时可能读到 EOF 直接退出、rsync 根本不执行。**
+> 稳妥做法：**先手动清空本地目录**，脚本检测到空目录会跳过确认直接进 rsync。
+
+```bash
+# 1. 清空本地 seed 目录（跳过脚本交互确认）
+rm -rf seed/root-block && mkdir -p seed/root-block
+
+# 2. 前台运行，禁止重定向输出（不要用 `> /tmp/xxx.log` 或 `| tail`），以便看到 rsync 进度
+#    脚本会自动检测并优雅停止远端 bitcoind，同步完成后自动重启
 REMOTE_HOST=192.168.124.12 \
 REMOTE_USER=sunrise \
 REMOTE_PASSWORD=sunrise \
 REMOTE_DIR=/home/sunrise/Desktop/bitcoind/data \
 bash tools/sync-rockbase-seed-from-device.sh
 
-# 同步完成后重启远端 bitcoind
+# 3. 确认远端 bitcoind 已恢复（见下方"状态确认"）
+```
+
+**状态确认（注意进程名）**：snap 安装的 bitcoind 实际进程是 `/snap/bitcoin-core/<ver>/bin/bitcoind`，
+**不是** `bitcoin-core.daemon`。用宽泛 pattern 确认，别只匹配 `bitcoin-core.daemon`（会误报 STOPPED）：
+
+```bash
+sshpass -p 'sunrise' ssh sunrise@192.168.124.12 '
+pgrep -af "bitcoind" | grep -v pgrep || echo "STOPPED"
+timeout 20 /snap/bitcoin-core/221/bin/bitcoin-cli -conf=/home/sunrise/Desktop/bitcoind/bitcoin.conf getblockcount
+'
+```
+
+若 bitcoind 确实没起来（脚本未自动重启的情况），手动拉起：
+
+```bash
 sshpass -p 'sunrise' ssh sunrise@192.168.124.12 'nohup /snap/bin/bitcoin-core.daemon -conf=/home/sunrise/Desktop/bitcoind/bitcoin.conf -datadir=/home/sunrise/Desktop/bitcoind/data > /dev/null 2>&1 &'
 ```
 
