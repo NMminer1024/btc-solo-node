@@ -145,7 +145,8 @@ tail -n 2 /tmp/cpu_watch_latest.log 2>/dev/null
 - `cpu[]`：`busy/usr/sys/iowait/irq/steal/idle` 百分比
 - `load[]`：1/5/15 分钟 load、运行队列/总任务数、最近 PID
 - `sched[]`：context switch、中断、fork、当前 running/blocked 数
-- `mem_kb`：`MemAvailable/MemTotal`
+- `mem_kb`：`MemAvailable/MemTotal cache=PageCache swapfree=SwapFree`（KB）
+- `mem_proc[]`：关键进程 RSS（KB）：`bitcoind/ckpool/rockbase-lcdui/sshd`，进程不存在记 0
 - `vm[]`：fault、major fault、kswapd/direct scan 与 steal、allocstall、OOM
 - `sd[]`：`mmcblk1` 的读写次数、KB、耗时、inflight、busy%、weighted I/O ms
 - `temp_raw`：thermal zone 原始温度值
@@ -158,8 +159,9 @@ tail -n 2 /tmp/cpu_watch_latest.log 2>/dev/null
 2. 对照 `load`、`running`、`blocked` 判断 CPU 排队还是不可中断等待。
 3. 用 `sys/iowait`、`sd busy_pct/weighted_ms` 区分内核 CPU 与 SD I/O 阻塞。
 4. 用 `MemAvailable`、`scan_d`、`allocstall`、major fault 判断内存回收压力。
-5. 对齐进程窗口，确认 `bitcoind`、`ckpool`、`rockbase-lcdui`、内核线程的 CPU 与 RSS。
-6. 检查 `oom>0`、持续 `blocked>0`、高温等严重异常。
+5. 对齐进程窗口，确认 `bitcoind`、`ckpool`、`rockbase-lcdui`、内核线程的 CPU 与 RSS；低频窗口的 `--- MEM TOP ---` 块给出 top10 RSS 进程分布 + 整机 meminfo 快照，用于发现内存膨胀（如 glibc arena 泄漏、缓存无上限增长）。
+6. 用 `mem_proc[]` 趋势判断内存泄漏：某进程 RSS 随时间单调上涨且不回落 → 泄漏嫌疑；对照 `cache=` 与 `swapfree=` 判断 page cache 是否被 anon 页挤压（freeze 排查关键指标）。
+7. 检查 `oom>0`、持续 `blocked>0`、高温等严重异常。
 
 ---
 

@@ -6,8 +6,8 @@
 # 示例: sh /root/script/cpu_watch.sh 3600 30 900
 #
 # 功能:
-#   - 高频(默认30s): CPU各态、调度、内存回收、SD I/O、内存、温度
-#   - 低频(默认900s): 调用 cpu_page.sh 做一次60s窗口的逐进程CPU%分布
+#   - 高频(默认30s): CPU各态、调度、内存回收、SD I/O、内存(含page cache/swap)、关键进程RSS、温度
+#   - 低频(默认900s): 调用 cpu_page.sh 做一次60s窗口的逐进程CPU%分布 + top10 RSS 内存分布
 #   - 全程后台运行，不依赖 SSH 持续连接
 #   - 兼容 BusyBox（只用 awk/cut/cat/date/sleep）
 #
@@ -57,6 +57,36 @@ snapshot() {
   ' /proc/diskstats
 }
 
+# 关键进程 RSS 快照: "name=rssKB ..."（进程不存在记 0）
+# 覆盖 freeze 排查三大内存玩家 + sshd（远程会话背景）
+mem_proc() {
+  out=""
+  for n in bitcoind ckpool rockbase-lcdui sshd; do
+    p=$(pidof "$n" 2>/dev/null | cut -d' ' -f1)
+    r=0
+    if [ -n "$p" ]; then
+      r=$(awk '/^VmRSS/{print $2}' "/proc/$p/status" 2>/dev/null)
+      [ -n "$r" ] || r=0
+    fi
+    out="$out $n=$r"
+  done
+  echo ${out# }
+}
+
+# top10 RSS 进程分布（低频窗口用，写进 process log）
+mem_top() {
+  echo "--- MEM TOP $(date '+%H:%M:%S') ---" >> "$DIST_LOG"
+  for p in /proc/[0-9]*; do
+    pid=${p##*/}
+    rss=$(awk '/^VmRSS/{print $2}' "$p/status" 2>/dev/null) || continue
+    [ -n "$rss" ] || continue
+    comm=$(tr '\0' ' ' < "$p/cmdline" 2>/dev/null | cut -c1-40)
+    [ -n "$comm" ] || comm=$(awk '/^Name:/{print $2}' "$p/status" 2>/dev/null)
+    echo "$rss $pid $comm"
+  done | sort -rn | head -10 | awk '{printf "  rss=%6dKB pid=%s %s\n", $1, $2, $3}' >> "$DIST_LOG"
+  awk '/^MemAvailable/{a=$2} /^MemTotal/{t=$2} /^Buffers/{b=$2} /^Cached/{c=$2} /^SwapFree/{s=$2} END{printf "  mem: avail=%dKB total=%dKB buffers=%dKB cached=%dKB swapfree=%dKB\n", a,t,b,c,s}' /proc/meminfo >> "$DIST_LOG"
+}
+
 {
   echo "===== CPU WATCH START $(date) ====="
   echo "total=${TOTAL}s fast=${FAST}s proc_interval=${PROC_INT}s proc_window=${PROC_WIN}s"
@@ -99,17 +129,19 @@ while :; do
     printf "busy=%.1f usr=%.1f sys=%.1f iowait=%.1f irq=%.1f steal=%.1f idle=%.1f", (u+s+irq+st)*100/total,u*100/total,s*100/total,iw*100/total,irq*100/total,st*100/total,id*100/total
   }')
   load=$(cat /proc/loadavg)
-  mem=$(awk '/^MemAvailable/{a=$2} /^MemTotal/{t=$2} END{printf "%d/%d",a,t}' /proc/meminfo)
+  mem=$(awk '/^MemAvailable/{a=$2} /^MemTotal/{t=$2} /^Cached/{c=$2} /^SwapFree/{s=$2} END{printf "%d/%d cache=%d swapfree=%d",a,t,c,s}' /proc/meminfo)
+  memp=$(mem_proc)
   temp=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
   sd_busy=$(awk -v ms=$((ioms2-ioms1)) -v dt=$FAST 'BEGIN{printf "%.1f",ms*100/(dt*1000)}')
   sd="rd_ios=$((rd2-rd1)) rd_kb=$(((rdsec2-rdsec1)/2)) rd_ms=$((rdms2-rdms1)) wr_ios=$((wr2-wr1)) wr_kb=$(((wrsec2-wrsec1)/2)) wr_ms=$((wrms2-wrms1)) inflight=$inflight2 busy_pct=$sd_busy weighted_ms=$((weighted2-weighted1))"
-  echo "$(date '+%H:%M:%S') t=${elapsed}s cpu[$cpu] load[$load] sched[ctxt=$((ctxt2-ctxt1)) intr=$((intr2-intr1)) forks=$((forks2-forks1)) running=$run2 blocked=$block2] mem_kb=$mem vm[fault=$((fault2-fault1)) major=$((major2-major1)) scan_k=$((scan_k2-scan_k1)) scan_d=$((scan_d2-scan_d1)) steal_k=$((steal_k2-steal_k1)) steal_d=$((steal_d2-steal_d1)) allocstall=$((stall2-stall1)) oom=$((oom2-oom1))] sd[$sd] temp_raw=$temp" >> "$LOG"
+  echo "$(date '+%H:%M:%S') t=${elapsed}s cpu[$cpu] load[$load] sched[ctxt=$((ctxt2-ctxt1)) intr=$((intr2-intr1)) forks=$((forks2-forks1)) running=$run2 blocked=$block2] mem_kb=$mem mem_proc[$memp] vm[fault=$((fault2-fault1)) major=$((major2-major1)) scan_k=$((scan_k2-scan_k1)) scan_d=$((scan_d2-scan_d1)) steal_k=$((steal_k2-steal_k1)) steal_d=$((steal_d2-steal_d1)) allocstall=$((stall2-stall1)) oom=$((oom2-oom1))] sd[$sd] temp_raw=$temp" >> "$LOG"
   u1=$u2; s1=$s2; id1=$id2; iw1=$iw2; irq1=$irq2; st1=$st2; intr1=$intr2; ctxt1=$ctxt2; forks1=$forks2
   run1=$run2; block1=$block2; fault1=$fault2; major1=$major2; scan_k1=$scan_k2; scan_d1=$scan_d2; steal_k1=$steal_k2; steal_d1=$steal_d2; stall1=$stall2
   oom1=$oom2; rd1=$rd2; rdsec1=$rdsec2; rdms1=$rdms2; wr1=$wr2; wrsec1=$wrsec2; wrms1=$wrms2; inflight1=$inflight2; ioms1=$ioms2; weighted1=$weighted2
   if [ $((now - last_proc)) -ge $PROC_INT ]; then
     last_proc=$now
     sh /root/script/cpu_page.sh watch_dist $PROC_WIN >> "$DIST_LOG" 2>&1 &
+    mem_top
   fi
 done
 
