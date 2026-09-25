@@ -281,6 +281,8 @@ sample() {
 compute_health() {
     total_written_bytes=$((total_written_sectors * 512))
     uptime_days=$((total_uptime_sec / 86400))
+    # Display value with 1 decimal (e.g. "0.5", "1.3") for the web UI.
+    uptime_days_display=$(awk -v s="$total_uptime_sec" 'BEGIN{printf "%.1f", s/86400}')
 
     status="healthy"
     verdict="healthy"
@@ -379,6 +381,7 @@ EOF
         printf '  "dirty_kb": %s,\n' "$(json_num "$dirty_kb")"
         printf '  "io_errors": %s,\n' "$(json_num "$io_err_count")"
         printf '  "uptime_days": %s,\n' "$(json_num "$uptime_days")"
+        printf '  "uptime_days_display": %s,\n' "$(json_str "$uptime_days_display")"
         printf '  "recent_events": %s\n' "$recent_json"
         printf '}\n'
     } > "$tmp" 2>/dev/null && mv "$tmp" "$JSON_FILE" 2>/dev/null

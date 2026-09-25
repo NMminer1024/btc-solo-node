@@ -790,7 +790,7 @@
       writeRate: toText(sh.write_rate_day_display, "--"),
       ioErrors: toNumber(sh.io_errors, 0),
       peakWbusy: toNumber(sh.peak_wbusy_pct, 0),
-      uptimeDays: toNumber(sh.uptime_days, 0),
+      uptimeDays: toText(sh.uptime_days_display, String(toNumber(sh.uptime_days, 0))),
       recentEvents: Array.isArray(sh.recent_events) ? sh.recent_events : []
     };
   }
