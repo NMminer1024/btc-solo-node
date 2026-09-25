@@ -67,6 +67,43 @@
 
 全部 5 台 `MALLOC_ARENA_MAX=2` 生效，big_arenas ≤1，page cache 普遍翻倍以上。
 
+## 部署后 ~24h 中期快照（2026-09-25 13:15 UTC，部署后 ~1h+，实际为次日复查前采集）
+
+> 采集时间 2026-09-25 13:15 UTC（部署后约 1 小时）。ckpool 已从刚启动的 22-68MB
+> 涨到 140-163MB 平台期，**RSS ≈ HWM 且不再刷新**，属 glibc 正常行为
+>（malloc 释放不归还 OS，运行数小时后达到分配模式稳态），非泄漏。
+
+| MAC | IP | ckpool RSS | HWM | heap 段数 | 负载 | 整机 avail |
+|-----|-----|-----------|-----|----------|------|-----------|
+| e0:95:bc:bb:62:bf | 124.22 | 163 MB | 163 MB | 1 | 无矿机（1 user/1 worker 本地会话） | 239 MB |
+| e0:60:19:30:32:bc | 124.15 | **153 MB** | 153 MB | 1 | **真实矿机：2 users / 9 workers，~48TH/s** | 263 MB |
+| e0:a2:01:6a:99:35 | 124.28 | 141 MB | 141 MB | 1 | 无矿机 | 251 MB |
+| e0:eb:4e:2c:2d:70 | 124.34 | 140 MB | 140 MB | 1 | 无矿机 | 231 MB |
+| e0:d9:1b:92:d8:56 | 124.31 | 147 MB | 153 MB | 1 | 无矿机 | 232 MB |
+
+**关键结论**：
+- 修复效果稳定：稳态 140-163MB（修复前 195-233MB），heap 段数全部 = 1（修复前 8-10）
+- **内存不随 worker 数线性增长**：124.15 带 9 个真实矿机 worker 仅 153MB，比无矿机的 124.22（163MB）还略低；stratum 单会话开销 KB 级
+- 泄漏判定标准（24h 复查用）：RSS 单调逼近并**刷新 HWM** 才是泄漏特征；当前 RSS=HWM 平台期 = 正常
+- 若 24h 复查时 HWM 被刷新到 200MB+ 才需重新排查
+
+### 同期 bitcoind 内存分析（2026-09-25 13:10 UTC）
+
+| 指标 | 值 | 说明 |
+|------|-----|------|
+| 当前 RSS | 524-571 MB（5 台一致） | smaps_rollup: Pss_Anon 398MB + Pss_File 142MB |
+| HWM 峰值 | 807-840 MB（5 台高度一致） | 块下载/验证期瞬态峰值，非泄漏（峰值后回落且 24h 不涨） |
+| UTXO 集 | 118 MiB | debug.log 确认，符合 dbcache=128 |
+| leveldb cache | ~128 MB | dbcache=128MiB |
+| mempool | ≤48 MB | maxmempool=50 |
+| heap 段数 | 3 | 无 glibc arena 膨胀（15 线程未触发） |
+| Pss_File 142MB | mmap .ldb 页 | 属 page cache，可回收，非真实压力 |
+
+**bitcoind 判定：正常，无泄漏**。构成与配置参数一一对应（UTXO 118 + leveldb 128 + mempool ≤48 + 块处理 ~100 ≈ 398MB anon）。
+**风险提示**：峰值叠加场景 `bitcoind 831 + ckpool 163 + lcdui 3 + sshd 3 + 内核 ~50 ≈ 1050MB > 967MB 总量`，
+avail 压到 ~0、zram 打满，是 freeze 链的内存侧背景。可选缓解（收益有限）：`dbcache=96`（省 ~32MB）、
+`maxmempool=20`（solo 挖矿不需要 50MB，省 ~28MB 峰值）；治本仍是减少 SD 随机读延迟。
+
 ## 部署后 24h 复查结果（2026-09-26 填写）
 
 | MAC | IP | ckpool RSS | big_arenas | buff/cache | available | zram | 卡死次数 | trigger=D 频率 | 结论 |
