@@ -84,7 +84,7 @@
 - 这两份都是非 seed 最小镜像。
 - 当前 rootfs 基线是 `2G`，不是之前的 `6G`。
 - `K230_BLOCKDATA_SIZE=256M`。
-- `swap` 已禁用，两台 `/proc/swaps` 均为空。
+- ~~`swap` 已禁用，两台 `/proc/swaps` 均为空。~~（**已过时**：2026-09-23 起 zram 128M lz4 swap 已启用，见 `S60swap`；本段描述的是 2026-08 旧镜像状态）
 - 默认不要构建 seed 镜像，除非用户明确说“带 seed”。
 ## 待办：USB WiFi 网卡升级计划（RTL8821CU 5G）
 

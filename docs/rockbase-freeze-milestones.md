@@ -471,7 +471,7 @@ pstore（`/root/log/pstore-archive/latest/console-ramoops-0`）尾部铁证：
    77948ms、53520ms —— 远超正常值。
 2. **bitcoind 线程 D 状态卡在页缓存读**：`b-initload`/`b-msghand` 栈均为
    `filemap_fault → folio_wait_bit_common → io_schedule`（等 SD 卡数据页）。
-3. **内存压力叠加**：1G 板 + swap 禁用，该次启动 OOM killer 触发两次
+3. **内存压力叠加**：1G 板 + swap 禁用（该事件发生于 2026-09-23 zram 启用之前），该次启动 OOM killer 触发两次
    （4977s、12750s），两次都杀 bitcoind（anon-rss ~619MB）。
 4. OOM 后 D 状态仍未恢复 → healthd 60s 兜底 → panic 重启。
 
@@ -490,7 +490,7 @@ pstore（`/root/log/pstore-archive/latest/console-ramoops-0`）尾部铁证：
 - 与既有结论一致：**根因是 SD 卡 I/O 路径单核硬卡死，与 PIO/DMA 无关**。
   本次新增最具体的量化证据：mmc1 claim 持有 8.5min。
 - 新观察：OOM 双杀 bitcoind 后 D 状态仍不恢复，说明卡死点在 I/O 层而非
-  bitcoind 本身；1G + 无 swap 下 bitcoind 619MB anon 是 OOM 主因之一。
+  bitcoind 本身；1G + 无 swap（当时状态，2026-09-23 后为 zram 128M）下 bitcoind 619MB anon 是 OOM 主因之一。
 - 当前启动（14:02 起）健康：无 D 任务、load ~1.0；但 diag 日志 22:03–22:11
   仍有瞬时 D 触发（含 kworker 卡 `drm_atomic_helper_wait_for_vblanks`，自行恢复），
   SD 卡 I/O 抖动问题仍存在。

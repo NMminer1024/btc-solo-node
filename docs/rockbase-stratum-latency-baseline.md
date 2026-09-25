@@ -113,7 +113,7 @@ elapsed_ms=1276, 1288, 32, 188, 28, 88, 36, 88, 28, 184
 | CPU 核数 | **1 核** |
 | 瞬时 CPU | usr 26% + **sys 52%** + idle 21% |
 | loadavg | 2.62（运行队列 2/152） |
-| 内存 | free 13M / available 245M，无 swap |
+| 内存 | free 13M / available 245M，无 swap（2026-08 实测时 swap 已禁用；2026-09-23 起 zram 128M lz4 已启用） |
 
 sys 52% 构成：**kswapd 内存回收**（`pgscan_kswapd=431万页`）+ **r8152 USB 网卡中断**（IRQ 85 `dwc2_hsotg` 累计 3800 万次）+ TASKLET 98.6万 + RCU 338万。bitcoind ~6%，**ckpool 仅 ~0.7%**。
 

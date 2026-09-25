@@ -76,7 +76,7 @@ local 包（`rockbase_lcdui` 等）源码改动后，顶层 `buildroot` 构建**
 - `dev` 分支源码已不再应用 `0034-rockbase-sdhci-force-pio-dma-diagnostic.patch`，**重新构建的新镜像默认恢复 DMA**
 - 注意：统一后仅单一 `output/k230_rockbase_defconfig/build/linux-*`；**共享 kernel patch 变更后，执行 `linux-dirclean` 再重编**，否则可能导出旧的 PIO kernel
 - Rootfs 基线: 2G，非 6G
-- Swap 已禁用
+- **Swap: zram 128M (lz4) 已启用**（2026-09-23 起，`S60swap` init + kernel `CONFIG_ZRAM=y`，`vm.swappiness=10`）。zram 在 RAM 内压缩，不增加 SD I/O 压力。注意：1G 板内存紧张时 zram 会很快打满（实测 124.38 12h 即 100%），打满后内存压力回到"无 swap"水平，kswapd 持续回收仍会发生
 
 ## Profile 合并记录
 

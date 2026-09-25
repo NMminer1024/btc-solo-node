@@ -92,7 +92,7 @@ ssh root@<IP> 'mount | grep pstore; dmesg | grep -Ei "ramoops|pstore"; ls -lah /
 - 提交脉络：`57fc4982`(fix 0034 hunk) → `cc6410e5`(rtl8189fs SDIO bus 自恢复，仍 PIO) → `88f1eff3`(sync freeze status) → `936ea15b`(disable 0034, restore DMA)
 - 最强证据指向 `RTL8189FS + SDIO host claim/IRQ/XMIT` 路径
 - pstore/ramoops 已加入并验证成功：`echo c > /proc/sysrq-trigger` 触发 panic → 10s 后重启 → 生成 `console-ramoops-0`
-- **软挂死兜底已实战验证（2026-09-21，124.9）**：`rockbase_serial_healthd` 检测关键 I/O 进程持续 D > 60s → 写 `c` 触发 panic 自动重启，卡死 3.5h 后自愈。pstore 抓到完整证据链：mmc1（SD 卡）host claim 被 kworker 持有最长 8.5min + bitcoind 线程 D 在 `filemap_fault→folio_wait_bit_common` + OOM 双杀 bitcoind（1G 无 swap，anon ~619MB）。详见 `docs/rockbase-freeze-milestones.md`「2026-09-21」节
+- **软挂死兜底已实战验证（2026-09-21，124.9）**：`rockbase_serial_healthd` 检测关键 I/O 进程持续 D > 60s → 写 `c` 触发 panic 自动重启，卡死 3.5h 后自愈。pstore 抓到完整证据链：mmc1（SD 卡）host claim 被 kworker 持有最长 8.5min + bitcoind 线程 D 在 `filemap_fault→folio_wait_bit_common` + OOM 双杀 bitcoind（当时 1G 无 swap——zram 2026-09-23 才启用，anon ~619MB）。详见 `docs/rockbase-freeze-milestones.md`「2026-09-21」节
 - **区分 sysrq 类型**：`sysrq: Show Blocked State`（w 键）只是诊断 dump，不是重启原因；真正的重启是 `sysrq: Trigger a crash`（c 键）+ `Rebooting in 10 seconds`
 - **healthd 触发时间戳**（内核秒数）：`/tmp/rockbase-serial-healthd.{sysrq,diag,panic}`；diag 明细在 `/run/rockbase-log/serialhealth-diag.log`
 

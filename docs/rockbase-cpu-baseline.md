@@ -14,7 +14,8 @@
 ## 基线数据（2026-08-19 实测）
 
 **测试板**: `192.168.124.15`（1G 版，mmc0=SDIO WiFi, mmc1=SD card）
-**系统状态**: 开机 ~2h，bitcoind 运行中，内存紧张（free ~10M，无 swap，kswapd 持续回收）
+**系统状态**: 开机 ~2h，bitcoind 运行中，内存紧张（free ~10M，kswapd 持续回收）
+> 注：该基线测于 2026-08-19，当时 swap 已禁用。2026-09-23 起 zram 128M lz4 swap 已启用（`S60swap`），但 1G 板 zram 会很快打满，打满后内存压力特征与此基线基本一致。
 
 ### 修复前（呼吸动画启用，首次基线）
 
@@ -46,7 +47,7 @@
 3. **背景进程页间基本一致**：bitcoind 4%~9%、ckpool 2%~6% 的波动是自身活动噪声，与页面无关。整机 CPU 的页间差异几乎全部来自 `rockbase-lcdui`。
 4. **背景压力（各页共有）**：
    - 单核 load average 长期 2.5~5（严重过载）
-   - sys 态 CPU ~40-48% 偏高，根因是内存耗尽（total 945M，free ~10M，无 swap）→ kswapd 持续页面回收（vmstat: pgsteal_kswapd ~1.1M）
+   - sys 态 CPU ~40-48% 偏高，根因是内存耗尽（total 945M，free ~10M；当时无 swap，2026-09-23 后为 zram 128M 且很快打满）→ kswapd 持续页面回收（vmstat: pgsteal_kswapd ~1.1M）
    - bitcoind RSS ~640M + ckpool ~150M 占满 1G 内存的大头
 
 ## 排查经验（供后续参考）

@@ -104,7 +104,7 @@ sh /root/script/cpu_watch.sh
 
 ### 日志位置
 
-日志全部位于 `/tmp` tmpfs（RAM）中，板子无 swap，因此不会给 SD 增加写压力：
+日志全部位于 `/tmp` tmpfs（RAM）中，swap 为 zram（RAM 内压缩，不落 SD），因此不会给 SD 增加写压力：
 
 ```text
 /tmp/cpu_watch_latest.log          # 高频主日志软链接
@@ -188,7 +188,7 @@ tail -n 2 /tmp/cpu_watch_latest.log 2>/dev/null
 - **Stratum 页热点根因 = 状态点无限呼吸动画**（`start_status_dot_breathing` 的 `LV_ANIM_REPEAT_INFINITE`，每 10ms 一帧 `std::cos` 浮点 + 改透明度触发重绘），**不是图表刷新**（图表仅 32 点 × 3 序列、5s 刷一次）
 - 修复：`#if 0` 禁用呼吸动画，在线显示静态绿点；Stratum 页 lcdui CPU **34.7% → 3.6%**，整机 97.5% → 73.4%
 - 触摸参数最终定为 **20ms（50Hz）+ 睡眠上限 20ms**（`kTouchReadPeriodMs=20`, `kMaxLvSleepUs=20000`）：lcdui 3.6% → 3.1%、整机 73.4% → 71.3%，收益边际但无副作用；注意动画帧率上限相应降到 ~50fps，快速滑动略钝
-- 背景压力：整机 sys 态 ~40-48% 偏高，与内存耗尽（free ~10M、无 swap、kswapd 持续回收）相关，属各页共有背景
+- 背景压力：整机 sys 态 ~40-48% 偏高，与内存耗尽（free ~10M、kswapd 持续回收）相关，属各页共有背景。注：该基线测于 2026-08-19（当时 swap 已禁用）；2026-09-23 起 zram 128M lz4 已启用，但 1G 板 zram 很快打满，打满后压力特征与此基线基本一致
 
 > 详细基线数据、根因分析与排查经验见 `docs/rockbase-cpu-baseline.md`。
 
