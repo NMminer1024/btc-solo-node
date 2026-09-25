@@ -16,7 +16,8 @@ else
     mkdir -p "$LOGDIR"
     LOGFILE="$LOGDIR/ckpool.log"
     echo "Starting ckpool (solo mode)..."
-    ckpool -c "$CONF" > "$LOGFILE" 2>&1 &
+    # MALLOC_ARENA_MAX: keep in sync with /etc/init.d/S62ckpool
+    MALLOC_ARENA_MAX=2 ckpool -c "$CONF" > "$LOGFILE" 2>&1 &
     sleep 2
     if ps | grep -v grep | grep -q ckpool; then
         echo "ckpool started OK"
