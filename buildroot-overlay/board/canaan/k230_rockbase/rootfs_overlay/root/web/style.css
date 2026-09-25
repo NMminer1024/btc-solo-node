@@ -870,6 +870,32 @@ textarea {
   border-top: 0;
 }
 
+/* Total disk row: visually distinct from per-partition rows (aggregate vs parts). */
+.storage-row-total .storage-label {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.storage-row-total .storage-bar {
+  height: 12px;
+  border-radius: 6px;
+}
+
+.storage-row-total .storage-bar-fill {
+  border-radius: 6px;
+}
+
+.storage-row-total .storage-value {
+  font-size: 0.95rem;
+}
+
+/* First partition row after the total: extra gap + dashed divider. */
+.storage-row-total + .storage-row {
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
 .storage-label {
   color: var(--muted);
   font-size: 11px;

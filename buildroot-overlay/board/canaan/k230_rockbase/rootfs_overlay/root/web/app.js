@@ -198,7 +198,8 @@
       label: t("about.totalDisk"),
       value: sys.diskTotalUsed + " / " + sys.diskTotalSize,
       pct: totalPct,
-      barId: "storageTotalBar"
+      barId: "storageTotalBar",
+      isTotal: true
     });
 
     // Per-partition rows
@@ -218,7 +219,7 @@
     for (var r = 0; r < rows.length; r++) {
       var row = rows[r];
       var wrap = document.createElement("div");
-      wrap.className = "storage-row";
+      wrap.className = "storage-row" + (row.isTotal ? " storage-row-total" : "");
 
       var label = document.createElement("span");
       label.className = "storage-label";
