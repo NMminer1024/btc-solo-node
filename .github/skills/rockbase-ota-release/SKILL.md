@@ -98,6 +98,15 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
 10. 用版本 tag 触发 workflow：
     - `git tag -a "$VERSION" -m "$VERSION"`
     - `git push origin main --tags`
+    - ⚠️ **一次 push 带多个新 tag 时，GitHub Actions 的 `on: push: tags`
+      只触发一次（甚至不触发目标 tag 的 run）**（2026-09-25 实测：一次推 8 个
+      tag，目标 tag 的 run 没出现）。如果本地积累了多个未推 tag，先确认哪些
+      需要发布，**只推本次要发布的 tag**；若已经批量推了且 workflow 没触发，
+      单独重推目标 tag 即可：
+      `git push origin :refs/tags/$VERSION && git push origin $VERSION`
+      （删的是刚推的未发布 tag，不算删除已发布 release，不违反约束）。
+      判断是否触发的可靠方法：查 `actions/runs` API 里有没有该 tag 的 run，
+      而不是看 release 页面 URL 是否 200（GitHub 对不存在的 tag 也返回 200）。
 11. 发布后做闭环收尾检查：
    - 先等 GitHub Actions / Release 生成完成；如果刚推完就查不到资产，先轮询重试
    - `curl -sfI -L "https://github.com/$RELEASE_REPO/releases/tag/$VERSION"`，确认 release 页面可打开
