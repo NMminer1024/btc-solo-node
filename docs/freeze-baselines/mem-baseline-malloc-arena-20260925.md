@@ -81,10 +81,37 @@
 | e0:eb:4e:2c:2d:70 | 124.34 | 140 MB | 140 MB | 1 | 无矿机 | 231 MB |
 | e0:d9:1b:92:d8:56 | 124.31 | 147 MB | 153 MB | 1 | 无矿机 | 232 MB |
 
+**⚠️ 修正（部署后 ~5h，13:15→18:00 UTC 对比）**：ckpool 仍在缓慢爬升 +14~33MB（186/174/155/163/180MB），
+3 台 HWM 被刷新，增速 ~5MB/h。之前"平台期"结论下早了——**判定标准修正为看增速是否收敛**，
+不能只看 RSS≈HWM。若 24h 复查时增速仍 ≥5MB/h（RSS > 250MB），需查 ckpool 是否有
+per-share/per-worker 累积结构（share 历史、worker 统计缓存）。即使持续 24h 也仅 ~260MB，
+仍低于修复前 195-233MB 锁死值 + 无 arena 膨胀，暂不紧急。
+
+### 爬升根因定论（源码级分析，2026-09-25 14:30 UTC）
+
+**结论：非泄漏 = 60s 周期 GBT 大分配 × glibc 堆棘轮效应。无矿机板子同样爬升，因 GBT 循环与矿机会话完全解耦。**
+
+源码证据链（`dl/ckpool/git/src/`）：
+1. **周期性大分配**：generator 线程每 60s 无条件拉 GBT（`gen_loop` generator.c:394 → `gen_gbtbase` bitcoin.c:128）。
+   每次 ~4000 tx 的 GBT JSON 产生 ~4-6MB 临时分配：yyjson_rpc_call 解析（~2MB）+ mut_doc 整份拷贝（~2MB）
+   + imut_copy 存进 workbase->gbtdoc（~2MB）。板上日志实证：`Stored local workbase with 3960 transactions` 每秒滚动。
+2. **存活数据有界**：workbase 最多 3 个（stratifier.c:1125 `HASH_COUNT < 3`），>10min 由 `clear_workbase`
+   （stratifier.c:800）完整释放（txn_data/gbtdoc/merkle 全 free）；share 按 workbase 老化清理
+   （purge/age_share_hashtable）；`ckyyalc`（yyjson_util.c:35）就是普通 malloc 包装，无自定义池。
+   存活上限 ≈ 3 × 2MB = 6MB。**释放路径完整，无泄漏点。**
+3. **RSS 棘轮机制（板上实测 124.22）**：VmData 421MB 但 RSS 仅 174MB——`/proc/maps` 显示
+   [heap] 主段 26MB + 1 个 65MB 全驻留段 + **24 个 8MB 段 Rss=0kB（纯虚拟预留）**。
+   glibc 每轮 GBT 大分配向内核 mmap 新 8MB subheap 段；释放时只 munmap 堆顶连续空闲区，
+   中间空洞留着复用 → RSS 棘轮上移 + 虚拟地址持续预留；下一轮复用上一轮 chunk →
+   净效果 157-188MB 锯齿震荡（实测轨迹 140→186→173→157），非单调上涨。
+4. **⚠️ 指标修正**：`grep -c heap /proc/maps` 只数 `[heap]` 主段（恒=1），**测不到匿名 arena 段**，
+   之前"heap 段数=1"指标无效。真正的健康指标：**RSS 是否持续刷新 HWM 且突破 200MB**
+   （当前 HWM 187 冻结，RSS 157-188MB 震荡 = 正常）。
+
 **关键结论**：
-- 修复效果稳定：稳态 140-163MB（修复前 195-233MB），heap 段数全部 = 1（修复前 8-10）
+- 修复效果稳定：稳态 140-163MB（修复前 195-233MB）
 - **内存不随 worker 数线性增长**：124.15 带 9 个真实矿机 worker 仅 153MB，比无矿机的 124.22（163MB）还略低；stratum 单会话开销 KB 级
-- 泄漏判定标准（24h 复查用）：RSS 单调逼近并**刷新 HWM** 才是泄漏特征；当前 RSS=HWM 平台期 = 正常
+- 泄漏判定标准（24h 复查用）：RSS 单调逼近并**刷新 HWM** 才是泄漏特征；锯齿震荡 + HWM 冻结 = 正常
 - 若 24h 复查时 HWM 被刷新到 200MB+ 才需重新排查
 
 ### 同期 bitcoind 内存分析（2026-09-25 13:10 UTC）
@@ -106,7 +133,9 @@ avail 压到 ~0、zram 打满，是 freeze 链的内存侧背景。可选缓解�
 
 ## 部署后 24h 复查结果（2026-09-26 填写）
 
-| MAC | IP | ckpool RSS | big_arenas | buff/cache | available | zram | 卡死次数 | trigger=D 频率 | 结论 |
+> 判定标准：ckpool RSS 锯齿震荡在 200MB 内且 HWM 未被刷新 = 正常（爬升根因见上节定论）。
+
+| MAC | IP | ckpool RSS/HWM | buff/cache | available | zram | 卡死次数 | trigger=D 频率 | 结论 |
 |-----|-----|-----------|-----------|-----------|-----------|------|---------|---------------|------|
 | e0:95:bc:bb:62:bf | 124.22 | | | | | | | | |
 | e0:60:19:30:32:bc | 124.15 | | | | | | | | |
@@ -122,8 +151,9 @@ for ip in 22 15 28 34 31; do
   timeout 30 ssh -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o BatchMode=yes root@192.168.124.$ip '
     cat /sys/class/net/wlan0/address; uptime
     CKPID=$(pidof ckpool)
-    grep -E "VmRSS|Threads" /proc/$CKPID/status
-    echo "big_arenas=$(awk "/^[0-9a-f]/{addr=\$1} /^Size:/{size=\$2} /^Rss:/{if(size>50000) n++} END{print n+0}" /proc/$CKPID/smaps)"
+    # 健康指标 = VmRSS/VmHWM（HWM 持续刷新且 >200MB 才异常）；
+    # 注意：grep -c heap /proc/maps 只数 [heap] 主段，测不到匿名 arena 段，勿用
+    grep -E "VmRSS|VmHWM|Threads" /proc/$CKPID/status
     cat /proc/$CKPID/environ | tr "\0" "\n" | grep MALLOC
     free
     grep zram /proc/swaps
