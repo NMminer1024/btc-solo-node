@@ -1,0 +1,710 @@
+[    4.748901] EXT4-fs (mmcblk1p3): mounted filesystem 994c1c8f-067e-475c-854c-ac051d31656c r/w with ordered data mode. Quota mode: disabled.
+[   10.782405] 8189fs: loading out-of-tree module taints kernel.
+[   13.405112] warning: `iwconfig' uses wireless extensions which will stop working for Wi-Fi 7 hardware; use nl80211
+[   32.843414] EXT4-fs (mmcblk1p4): mounted filesystem 4619797b-cfee-479e-a164-485a3e172d5b r/w with ordered data mode. Quota mode: disabled.
+[   32.929903] zram0: detected capacity change from 0 to 262144
+[   32.953128] Adding 131068k swap on /dev/zram0.  Priority:-2 extents:1 across:131068k SS
+[  315.864143] sysrq: Show Blocked State
+[  469.119643] sysrq: Show Blocked State
+[  469.123447] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[  469.131864] Call Trace:
+[  469.134315] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[  469.139590] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[  469.144484] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[  469.149635] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[  469.155840] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[  469.161339] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[  469.166490] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[  469.172348] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[  469.177932] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[  469.183781] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[  469.189111] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[  616.044235] sysrq: Show Blocked State
+[  822.307939] sysrq: Show Blocked State
+[  822.311758] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[  822.320167] Call Trace:
+[  822.322616] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[  822.327884] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[  822.332781] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[  822.337937] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[  822.344138] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[  822.349637] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[  822.354793] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[  822.360647] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[  822.366232] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[  822.372079] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[  822.377419] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 1123.258360] sysrq: Show Blocked State
+[ 1527.855681] sysrq: Show Blocked State
+[ 1714.115327] sysrq: Show Blocked State
+[ 1863.971920] sysrq: Show Blocked State
+[ 2001.400097] sysrq: Show Blocked State
+[ 2136.481593] sysrq: Show Blocked State
+[ 2334.822615] sysrq: Show Blocked State
+[ 2334.826374] task:kworker/u2:1    state:D stack:0     pid:20    ppid:2      flags:0x00000000
+[ 2334.834774] Workqueue: events_unbound commit_work
+[ 2334.839508] Call Trace:
+[ 2334.841956] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 2334.847206] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 2334.852117] [<ffffffff80b63af6>] schedule_timeout+0x7e/0xee
+[ 2334.857705] [<ffffffff8060de22>] drm_atomic_helper_wait_for_vblanks.part.0+0x18a/0x202
+[ 2334.865636] [<ffffffff8060eb12>] drm_atomic_helper_commit_tail_rpm+0x5e/0x72
+[ 2334.872714] [<ffffffff8060f7bc>] commit_tail+0x76/0x128
+[ 2334.877953] [<ffffffff8060f87e>] commit_work+0x10/0x18
+[ 2334.883107] [<ffffffff800321c0>] process_one_work+0x104/0x1fa
+[ 2334.888869] [<ffffffff8003251c>] worker_thread+0x266/0x34a
+[ 2334.894367] [<ffffffff8003a3ee>] kthread+0xc4/0xde
+[ 2334.899170] [<ffffffff80b64d92>] ret_from_fork+0xe/0x1c
+[ 2498.839354] sysrq: Show Blocked State
+[ 2630.901239] sysrq: Show Blocked State
+[ 2986.467555] sysrq: Show Blocked State
+[ 3297.628748] sysrq: Show Blocked State
+[ 3494.693415] sysrq: Show Blocked State
+[ 3711.120267] sysrq: Show Blocked State
+[ 4602.385212] sysrq: Show Blocked State
+[ 4806.874393] sysrq: Show Blocked State
+[ 5031.544174] sysrq: Show Blocked State
+[ 5336.378731] sysrq: Show Blocked State
+[ 5496.596006] sysrq: Show Blocked State
+[ 5496.599821] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[ 5496.608238] Call Trace:
+[ 5496.610688] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 5496.615959] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 5496.620873] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 5496.626027] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 5496.632231] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 5496.637731] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 5496.642883] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 5496.648732] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 5496.654315] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 5496.660168] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 5496.665495] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 5921.630311] sysrq: Show Blocked State
+[ 6240.597755] sysrq: Show Blocked State
+[ 6396.649963] sysrq: Show Blocked State
+[ 6708.123414] sysrq: Show Blocked State
+[ 6861.784547] sysrq: Show Blocked State
+[ 6994.655222] sysrq: Show Blocked State
+[ 7151.828151] sysrq: Show Blocked State
+[ 7389.720384] sysrq: Show Blocked State
+[ 7592.029222] sysrq: Show Blocked State
+[ 7882.217939] sysrq: Show Blocked State
+[ 7882.221755] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[ 7882.230167] Call Trace:
+[ 7882.232629] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 7882.237887] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 7882.242784] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 7882.247934] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 7882.254135] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 7882.259647] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 7882.264800] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 7882.270645] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 7882.276254] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 7882.282106] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 7882.287431] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 8008.350097] sysrq: Show Blocked State
+[ 8008.353908] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[ 8008.362314] Call Trace:
+[ 8008.364787] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 8008.370040] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 8008.374930] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 8008.380086] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 8008.386287] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 8008.391799] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 8008.396960] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 8008.402816] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 8008.408402] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 8008.414255] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 8008.419579] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 8343.175965] sysrq: Show Blocked State
+[ 8648.045760] sysrq: Show Blocked State
+[ 8830.726690] sysrq: Show Blocked State
+[ 9163.683343] sysrq: Show Blocked State
+[ 9292.376219] sysrq: Show Blocked State
+[ 9522.428266] sysrq: Show Blocked State
+[ 9663.789620] sysrq: Show Blocked State
+[ 9966.853780] sysrq: Show Blocked State
+[10351.239255] sysrq: Show Blocked State
+[10747.559916] sysrq: Show Blocked State
+[11395.130465] sysrq: Show Blocked State
+[11548.030164] sysrq: Show Blocked State
+[11548.033976] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[11548.042382] Call Trace:
+[11548.044844] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[11548.050082] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[11548.054976] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[11548.060126] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[11548.066339] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[11548.071842] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[11548.077000] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[11548.082845] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[11548.088435] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[11548.094283] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[11548.099613] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[11706.003447] sysrq: Show Blocked State
+[12037.990515] sysrq: Show Blocked State
+[12312.528422] sysrq: Show Blocked State
+[12452.962040] sysrq: Show Blocked State
+[12611.780957] sysrq: Show Blocked State
+[13003.297478] sysrq: Show Blocked State
+[13796.604213] sysrq: Show Blocked State
+[15371.424151] sysrq: Show Blocked State
+[15520.624175] sysrq: Show Blocked State
+[15893.313666] sysrq: Show Blocked State
+[16269.053703] sysrq: Show Blocked State
+[16561.189016] sysrq: Show Blocked State
+[17480.918092] sysrq: Show Blocked State
+[17990.526603] sysrq: Show Blocked State
+[18182.004443] sysrq: Show Blocked State
+[18462.177438] sysrq: Show Blocked State
+[18867.462457] sysrq: Show Blocked State
+[19082.702476] sysrq: Show Blocked State
+[19224.544767] sysrq: Show Blocked State
+[19549.651703] sysrq: Show Blocked State
+[19549.655517] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[19549.663947] Call Trace:
+[19549.666397] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[19549.671661] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[19549.676572] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[19549.681725] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[19549.687929] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[19549.693438] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[19549.698590] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[19549.704439] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[19549.710028] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[19549.715877] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[19549.721201] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[19913.408731] sysrq: Show Blocked State
+[20093.666836] sysrq: Show Blocked State
+[20228.442443] sysrq: Show Blocked State
+[20349.269839] sysrq: Show Blocked State
+[20608.133474] sysrq: Show Blocked State
+[20753.957146] sysrq: Show Blocked State
+[20753.960949] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[20753.969378] Call Trace:
+[20753.971870] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[20753.977127] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[20753.982018] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[20753.987172] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[20753.993375] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[20753.998884] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[20754.004042] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[20754.009893] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[20754.015479] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[20754.021327] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[20754.026654] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[20872.451334] [rb-mmc-diag] claim release host=mmc1 releaser=27006:kworker/0:0H owner=11977:b-msghand claim_cnt=1 held_ms=544 contended=0
+[20873.589486] sysrq: Show Blocked State
+[20873.593295] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[20873.601714] Call Trace:
+[20873.604178] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[20873.609424] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[20873.614320] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[20873.619471] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[20873.625672] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[20873.631174] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[20873.636339] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[20873.642185] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[20873.647778] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[20873.653634] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[20873.658958] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[20945.105041] [rb-mmc-diag] claim release host=mmc1 releaser=27006:kworker/0:0H owner=11977:b-msghand claim_cnt=1 held_ms=596 contended=0
+[21004.605598] sysrq: Show Blocked State
+[21004.609414] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[21004.617836] Call Trace:
+[21004.620298] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[21004.625544] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[21004.630439] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[21004.635596] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[21004.641792] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[21004.647299] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[21004.652451] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[21004.658303] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[21004.663896] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[21004.669745] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[21004.675072] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[21013.375847] [rb-mmc-diag] claim release host=mmc1 releaser=27006:kworker/0:0H owner=11977:b-msghand claim_cnt=1 held_ms=512 contended=0
+[21134.613184] sysrq: Show Blocked State
+[21134.616998] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[21134.625411] Call Trace:
+[21134.627869] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[21134.633115] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[21134.638014] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[21134.643165] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[21134.649364] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[21134.654927] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[21134.660086] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[21134.665957] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[21134.671550] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[21134.677400] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[21134.682724] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[21253.953424] sysrq: Show Blocked State
+[21253.957267] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[21253.965670] Call Trace:
+[21253.968133] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[21253.973393] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[21253.978284] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[21253.983434] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[21253.989636] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[21253.995139] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[21254.000291] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[21254.006141] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[21254.011725] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[21254.017585] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[21254.022914] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[21825.578974] sysrq: Show Blocked State
+[22094.049682] sysrq: Show Blocked State
+[22245.584033] sysrq: Show Blocked State
+[22371.330108] sysrq: Show Blocked State
+[22635.459674] sysrq: Show Blocked State
+[23134.272261] sysrq: Show Blocked State
+[23345.738100] sysrq: Show Blocked State
+[23553.720268] sysrq: Show Blocked State
+[23790.488203] sysrq: Show Blocked State
+[23955.919803] sysrq: Show Blocked State
+[24328.375257] sysrq: Show Blocked State
+[24333.599882] [rb-mmc-diag] claim release host=mmc1 releaser=23289:kworker/0:0H owner=11:kworker/u2:0 claim_cnt=1 held_ms=712 contended=0
+[24340.630611] [rb-mmc-diag] claim release host=mmc1 releaser=23289:kworker/0:0H owner=4667:bitcoind claim_cnt=1 held_ms=688 contended=0
+[24344.564260] [rb-mmc-diag] claim release host=mmc1 releaser=2831:kworker/0:1H owner=11:kworker/u2:0 claim_cnt=1 held_ms=720 contended=0
+[24500.828417] sysrq: Show Blocked State
+[25064.410203] sysrq: Show Blocked State
+[25064.414020] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[25064.422438] Call Trace:
+[25064.424995] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[25064.430253] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[25064.435153] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[25064.440318] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[25064.446513] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[25064.452026] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[25064.457182] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[25064.463031] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[25064.468619] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[25064.474468] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[25064.479791] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[25512.600333] sysrq: Show Blocked State
+[25746.782111] sysrq: Show Blocked State
+[25979.631439] sysrq: Show Blocked State
+[26252.361941] sysrq: Show Blocked State
+[26522.072541] sysrq: Show Blocked State
+[26726.615192] sysrq: Show Blocked State
+[26872.193172] sysrq: Show Blocked State
+[26872.196991] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[26872.205420] Call Trace:
+[26872.207886] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[26872.213133] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[26872.218029] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[26872.223180] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[26872.229375] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[26872.234876] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[26872.240033] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[26872.245879] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[26872.251467] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[26872.257316] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[26872.262638] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[27138.960556] sysrq: Show Blocked State
+[27476.852453] sysrq: Show Blocked State
+[27666.426902] sysrq: Show Blocked State
+[27666.430693] task:cat             state:D stack:0     pid:11825 ppid:1997   flags:0x00000000
+[27666.439110] Call Trace:
+[27666.441569] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[27666.446816] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[27666.451712] [<ffffffff80b63af6>] schedule_timeout+0x7e/0xee
+[27666.457317] [<ffffffff800956e6>] msleep+0x32/0x40
+[27666.462046] [<ffffffff80860724>] canaan_get_temp+0x72/0x94
+[27666.467549] [<ffffffff8085efde>] __thermal_zone_get_temp+0x36/0xf0
+[27666.473750] [<ffffffff8085f0fa>] thermal_zone_get_temp+0x62/0x7e
+[27666.479769] [<ffffffff8085df8c>] temp_show+0x24/0x5c
+[27666.484745] [<ffffffff8062432c>] dev_attr_show+0x14/0x46
+[27666.490075] [<ffffffff8024bd86>] sysfs_kf_seq_show+0x6c/0xe2
+[27666.495749] [<ffffffff8024a566>] kernfs_seq_show+0x1a/0x22
+[27666.501255] [<ffffffff801ff30a>] seq_read_iter+0xd0/0x31e
+[27666.506671] [<ffffffff8024abd4>] kernfs_fop_read_iter+0xfe/0x160
+[27666.512693] [<ffffffff80206ab6>] copy_splice_read+0x156/0x254
+[27666.518454] [<ffffffff80206ce8>] vfs_splice_read+0x84/0xd6
+[27666.523957] [<ffffffff80208438>] splice_file_to_pipe+0x58/0x92
+[27666.529809] [<ffffffff801d3728>] do_sendfile+0xf2/0x3ce
+[27666.535050] [<ffffffff801d5836>] __riscv_sys_sendfile64+0xe8/0x10c
+[27666.541245] [<ffffffff80b5b946>] do_trap_ecall_u+0x124/0x136
+[27666.546916] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[28202.747980] sysrq: Show Blocked State
+[28399.841324] sysrq: Show Blocked State
+[29186.456004] sysrq: Show Blocked State
+[29320.619938] sysrq: Show Blocked State
+[29886.171179] sysrq: Show Blocked State
+[30287.612124] sysrq: Show Blocked State
+[30433.324107] sysrq: Show Blocked State
+[30988.656325] sysrq: Show Blocked State
+[31114.619700] sysrq: Show Blocked State
+[31423.219374] sysrq: Show Blocked State
+[31703.909270] sysrq: Show Blocked State
+[31974.836819] sysrq: Show Blocked State
+[32307.909658] sysrq: Show Blocked State
+[32572.916499] sysrq: Show Blocked State
+[32572.920318] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[32572.928728] Call Trace:
+[32572.931200] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[32572.936455] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[32572.941344] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[32572.946499] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[32572.952696] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[32572.958194] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[32572.963349] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[32572.969209] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[32572.974793] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[32572.980646] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[32572.985974] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[33074.507255] sysrq: Show Blocked State
+[33338.038627] sysrq: Show Blocked State
+[33518.238765] sysrq: Show Blocked State
+[33669.002185] sysrq: Show Blocked State
+[33828.081037] sysrq: Show Blocked State
+[34030.088643] sysrq: Show Blocked State
+[34249.931041] sysrq: Show Blocked State
+[34586.138503] sysrq: Show Blocked State
+[34730.337126] sysrq: Show Blocked State
+[34867.448681] sysrq: Show Blocked State
+[34989.876027] sysrq: Show Blocked State
+[35246.841271] sysrq: Show Blocked State
+[35246.845075] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[35246.853493] Call Trace:
+[35246.855965] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[35246.861215] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[35246.866111] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[35246.871261] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[35246.877457] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[35246.882964] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[35246.888115] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[35246.893965] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[35246.899560] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[35246.905408] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[35246.910731] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[35568.579473] sysrq: Show Blocked State
+[35727.589539] sysrq: Show Blocked State
+[35926.472137] sysrq: Show Blocked State
+[36111.383583] sysrq: Show Blocked State
+[36333.741200] sysrq: Show Blocked State
+[36965.830073] sysrq: Show Blocked State
+[37255.156816] sysrq: Show Blocked State
+[38248.801736] sysrq: Show Blocked State
+[38435.147599] sysrq: Show Blocked State
+[38624.622344] sysrq: Show Blocked State
+[38795.312543] [rb-mmc-diag] claim release host=mmc1 releaser=17534:kworker/0:3H owner=11977:b-msghand claim_cnt=1 held_ms=504 contended=0
+[38918.855694] sysrq: Show Blocked State
+[38918.859496] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[38918.867920] Call Trace:
+[38918.870372] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[38918.875642] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[38918.880541] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[38918.885700] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[38918.891913] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[38918.897413] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[38918.902568] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[38918.908419] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[38918.914005] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[38918.919856] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[38918.925184] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[39302.969693] sysrq: Show Blocked State
+[39424.700912] sysrq: Show Blocked State
+[39734.100420] sysrq: Show Blocked State
+[40056.624476] sysrq: Show Blocked State
+[40339.937487] sysrq: Show Blocked State
+[40640.126780] sysrq: Show Blocked State
+[40936.539329] sysrq: Show Blocked State
+[40936.543137] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[40936.551549] Call Trace:
+[40936.554021] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[40936.559294] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[40936.564194] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[40936.569361] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[40936.575562] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[40936.581065] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[40936.586218] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[40936.592061] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[40936.597649] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[40936.603502] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[40936.608827] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[41675.102222] sysrq: Show Blocked State
+[41826.461402] sysrq: Show Blocked State
+[41826.465182] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[41826.473617] Call Trace:
+[41826.476086] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[41826.481338] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[41826.486236] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[41826.491387] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[41826.497581] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[41826.503083] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[41826.508234] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[41826.514091] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[41826.519680] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[41826.525529] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[41826.530852] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[42030.136462] sysrq: Show Blocked State
+[42241.530463] sysrq: Show Blocked State
+[42432.387832] sysrq: Show Blocked State
+[42610.433535] sysrq: Show Blocked State
+[42746.328067] sysrq: Show Blocked State
+[42746.331880] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[42746.340328] Call Trace:
+[42746.342780] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[42746.348036] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[42746.352928] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[42746.358084] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[42746.364291] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[42746.369790] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[42746.374947] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[42746.380793] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[42746.386384] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[42746.392237] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[42746.397561] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[42913.169602] sysrq: Show Blocked State
+[42913.173416] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[42913.181831] Call Trace:
+[42913.184298] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[42913.189560] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[42913.194455] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[42913.199611] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[42913.205807] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[42913.211314] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[42913.216467] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[42913.222311] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[42913.227902] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[42913.233751] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[42913.239075] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[43236.943486] sysrq: Show Blocked State
+[43361.764931] sysrq: Show Blocked State
+[43361.768718] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[43361.777163] Call Trace:
+[43361.779633] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[43361.784893] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[43361.789802] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[43361.794954] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[43361.801155] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[43361.806659] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[43361.811810] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[43361.817655] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[43361.823243] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[43361.829099] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[43361.834424] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[43539.006863] sysrq: Show Blocked State
+[43776.887270] sysrq: Show Blocked State
+[43776.891071] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[43776.899490] Call Trace:
+[43776.901972] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[43776.907228] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[43776.912122] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[43776.917277] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[43776.923477] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[43776.928975] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[43776.934139] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[43776.939984] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[43776.945569] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[43776.951421] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[43776.956745] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[43923.251630] sysrq: Show Blocked State
+[43923.255431] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[43923.263870] Call Trace:
+[43923.266340] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[43923.271595] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[43923.276491] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[43923.281642] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[43923.287894] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[43923.293403] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[43923.298556] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[43923.304409] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[43923.309993] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[43923.315842] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[43923.321169] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[44147.713554] sysrq: Show Blocked State
+[44289.702630] sysrq: Show Blocked State
+[44469.793158] sysrq: Show Blocked State
+[44749.860098] sysrq: Show Blocked State
+[44907.346827] sysrq: Show Blocked State
+[45146.171279] sysrq: Show Blocked State
+[45390.018431] sysrq: Show Blocked State
+[46033.668703] sysrq: Show Blocked State
+[46285.977492] sysrq: Show Blocked State
+[46427.821288] sysrq: Show Blocked State
+[46574.944702] sysrq: Show Blocked State
+[47012.166498] sysrq: Show Blocked State
+[47883.039337] sysrq: Show Blocked State
+[48166.277493] sysrq: Show Blocked State
+[48677.563776] sysrq: Show Blocked State
+[48847.343423] sysrq: Show Blocked State
+[49272.891557] sysrq: Show Blocked State
+[49460.512040] sysrq: Show Blocked State
+[49649.073393] sysrq: Show Blocked State
+[50290.512136] sysrq: Show Blocked State
+[50500.617976] sysrq: Show Blocked State
+[50500.621790] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[50500.630209] Call Trace:
+[50500.632695] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[50500.637953] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[50500.642849] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[50500.648007] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[50500.654209] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[50500.659765] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[50500.664921] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[50500.670768] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[50500.676360] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[50500.682209] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[50500.687535] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[50933.282323] sysrq: Show Blocked State
+[51117.480117] sysrq: Show Blocked State
+[51453.780703] sysrq: Show Blocked State
+[51592.050852] sysrq: Show Blocked State
+[51756.475936] sysrq: Show Blocked State
+[51756.479746] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[51756.488170] Call Trace:
+[51756.490633] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[51756.495887] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[51756.500779] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[51756.505936] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[51756.512135] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[51756.517640] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[51756.522796] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[51756.528642] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[51756.534225] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[51756.540080] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[51756.545408] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[51877.780604] sysrq: Show Blocked State
+[52050.717957] sysrq: Show Blocked State
+[52173.720135] sysrq: Show Blocked State
+[52726.043299] sysrq: Show Blocked State
+[52911.431046] sysrq: Show Blocked State
+[53609.228025] sysrq: Show Blocked State
+[53926.777229] sysrq: Show Blocked State
+[54161.173705] sysrq: Show Blocked State
+[54407.998578] sysrq: Show Blocked State
+[54773.110938] sysrq: Show Blocked State
+[54928.125539] sysrq: Show Blocked State
+[55071.135047] sysrq: Show Blocked State
+[55194.511406] sysrq: Show Blocked State
+[55322.454172] sysrq: Show Blocked State
+[55538.147509] sysrq: Show Blocked State
+[55863.428398] sysrq: Show Blocked State
+[56179.652012] sysrq: Show Blocked State
+[56179.655868] task:jbd2/mmcblk1p3- state:D stack:0     pid:203   ppid:2      flags:0x00000000
+[56179.664294] Call Trace:
+[56179.666760] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[56179.672017] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[56179.676907] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[56179.682057] [<ffffffff80b5f128>] bit_wait_io+0x10/0x4c
+[56179.687252] [<ffffffff80b5ec52>] __wait_on_bit+0x8a/0xae
+[56179.692579] [<ffffffff80b5ecf2>] out_of_line_wait_on_bit+0x7c/0x96
+[56179.698772] [<ffffffff802102c6>] __wait_on_buffer+0x42/0x4c
+[56179.704363] [<ffffffff8029fdea>] jbd2_journal_commit_transaction+0x127e/0x15c2
+[56179.711607] [<ffffffff802a36b4>] kjournald2+0xb6/0x242
+[56179.716759] [<ffffffff8003a3ee>] kthread+0xc4/0xde
+[56179.721568] [<ffffffff80b64d92>] ret_from_fork+0xe/0x1c
+[56179.726823] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[56179.735189] Call Trace:
+[56179.737640] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[56179.742892] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[56179.747787] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[56179.752945] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[56179.759148] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[56179.764647] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[56179.769802] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[56179.775647] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[56179.781230] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[56179.787080] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[56179.792403] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[56326.849300] sysrq: Show Blocked State
+[56477.467097] sysrq: Show Blocked State
+[56703.494276] sysrq: Show Blocked State
+[56888.760459] sysrq: Show Blocked State
+[56888.764267] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[56888.772700] Call Trace:
+[56888.775182] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[56888.780430] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[56888.785321] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[56888.790476] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[56888.796671] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[56888.802169] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[56888.807324] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[56888.813174] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[56888.818758] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[56888.824610] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[56888.829939] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[57123.711579] sysrq: Show Blocked State
+[57289.127084] sysrq: Show Blocked State
+[57658.865686] sysrq: Show Blocked State
+[57658.869498] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[57658.877924] Call Trace:
+[57658.880389] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[57658.885640] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[57658.890536] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[57658.895704] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[57658.901914] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[57658.907412] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[57658.912568] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[57658.918414] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[57658.923998] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[57658.929851] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[57658.935175] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[57855.965352] sysrq: Show Blocked State
+[58189.146872] sysrq: Show Blocked State
+[58328.950317] sysrq: Show Blocked State
+[58499.168521] sysrq: Show Blocked State
+[58692.769464] sysrq: Show Blocked State
+[58916.367229] sysrq: Show Blocked State
+[59099.482381] sysrq: Show Blocked State
+[59223.328032] sysrq: Show Blocked State
+[59343.231597] sysrq: Show Blocked State
+[59526.300657] sysrq: Show Blocked State
+[59591.540095] [rb-mmc-diag] claim release host=mmc1 releaser=21299:kworker/0:0H owner=11107:kworker/u2:3 claim_cnt=1 held_ms=788 contended=0
+[59596.694940] [rb-mmc-diag] claim release host=mmc1 releaser=4009:b-http_pool_2 owner=11977:b-msghand claim_cnt=1 held_ms=712 contended=0
+[59602.460912] [rb-mmc-diag] claim release host=mmc1 releaser=7262:kworker/0:2H owner=9628:kworker/u2:2 claim_cnt=1 held_ms=736 contended=0
+[59612.675017] [rb-mmc-diag] claim release host=mmc1 releaser=7262:kworker/0:2H owner=4667:bitcoind claim_cnt=1 held_ms=640 contended=0
+[59614.895092] [rb-mmc-diag] claim release host=mmc1 releaser=7262:kworker/0:2H owner=4667:bitcoind claim_cnt=1 held_ms=536 contended=0
+[59618.393276] [rb-mmc-diag] claim release host=mmc1 releaser=7262:kworker/0:2H owner=4667:bitcoind claim_cnt=1 held_ms=840 contended=0
+[59620.822228] [rb-mmc-diag] claim release host=mmc1 releaser=7262:kworker/0:2H owner=9628:kworker/u2:2 claim_cnt=1 held_ms=620 contended=0
+[59623.800112] [rb-mmc-diag] claim release host=mmc1 releaser=7262:kworker/0:2H owner=9628:kworker/u2:2 claim_cnt=1 held_ms=828 contended=0
+[59625.892301] [rb-mmc-diag] claim release host=mmc1 releaser=7262:kworker/0:2H owner=9628:kworker/u2:2 claim_cnt=1 held_ms=576 contended=0
+[59629.132312] [rb-mmc-diag] claim release host=mmc1 releaser=7262:kworker/0:2H owner=9628:kworker/u2:2 claim_cnt=1 held_ms=604 contended=0
+[59630.921560] [rb-mmc-diag] claim release host=mmc1 releaser=7262:kworker/0:2H owner=9628:kworker/u2:2 claim_cnt=1 held_ms=556 contended=0
+[59632.075142] [rb-mmc-diag] claim release host=mmc1 releaser=7262:kworker/0:2H owner=20828:wpa_cli claim_cnt=1 held_ms=636 contended=0
+[59633.579708] [rb-mmc-diag] claim release host=mmc1 releaser=7262:kworker/0:2H owner=4667:bitcoind claim_cnt=1 held_ms=544 contended=0
+[59638.455921] [rb-mmc-diag] claim release host=mmc1 releaser=7262:kworker/0:2H owner=11977:b-msghand claim_cnt=1 held_ms=516 contended=0
+[59640.772955] [rb-mmc-diag] claim release host=mmc1 releaser=21299:kworker/0:0H owner=4667:bitcoind claim_cnt=1 held_ms=508 contended=0
+[59943.682668] sysrq: Show Blocked State
+[59943.686494] task:b-msghand       state:D stack:0     pid:11977 ppid:1      flags:0x00000000
+[59943.694910] Call Trace:
+[59943.697361] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[59943.702619] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[59943.707515] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[59943.712667] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[59943.718907] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[59943.724409] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[59943.729566] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[59943.735417] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[59943.741005] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[59943.746857] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[59943.752186] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[60159.745558] sysrq: Show Blocked State
+[60379.650802] sysrq: Show Blocked State
+[60504.804207] sysrq: Show Blocked State
+[60633.938334] sysrq: Show Blocked State
+[61075.868599] sysrq: Show Blocked State
+[61610.997903] sysrq: Show Blocked State
+[61785.012337] sysrq: Show Blocked State
+[62096.628894] sysrq: Show Blocked State
+[62264.779353] sysrq: Show Blocked State
+[62579.372005] sysrq: Show Blocked State
+[62735.170187] sysrq: Show Blocked State
+[62860.004931] sysrq: Show Blocked State
+[63065.149445] sysrq: Show Blocked State
+[63501.602170] sysrq: Show Blocked State
+[63770.324767] sysrq: Show Blocked State
+[63969.937971] sysrq: Show Blocked State
+[64561.316787] sysrq: Show Blocked State
+[64712.680157] sysrq: Show Blocked State
+[64886.316152] sysrq: Show Blocked State
+[65737.164554] sysrq: Show Blocked State
+[65996.398781] sysrq: Show Blocked State
+[66226.646362] sysrq: Show Blocked State
+[66401.539963] sysrq: Show Blocked State
+[66816.392900] sysrq: Show Blocked State
+[66953.533755] sysrq: Show Blocked State
+[67161.202485] sysrq: Show Blocked State
+[67342.026795] sysrq: Show Blocked State

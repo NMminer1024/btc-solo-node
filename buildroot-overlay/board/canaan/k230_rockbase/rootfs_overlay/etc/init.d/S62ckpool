@@ -56,7 +56,11 @@ start_waiter() {
                 # trim oversized log before redirect (board has no `stat`; use `wc -c`)
                 _sz=$(wc -c < "'"${LOGFILE}"'" 2>/dev/null || echo 0)
                 [ "$_sz" -gt 52428800 ] 2>/dev/null && : > "'"${LOGFILE}"'"
-                ckpool -c "'"${CONF}"'" > "'"${LOGFILE}"'" 2>&1 &
+                # MALLOC_ARENA_MAX: cap glibc per-thread malloc arenas (default
+                # 8*cores+8). The 27 ckpool threads otherwise grow ~9 x 64MB
+                # arenas (RSS 233MB on 1G board), starving page cache.
+                # NOTE: no apostrophes allowed in this comment (inside sh -c '...').
+                MALLOC_ARENA_MAX=2 ckpool -c "'"${CONF}"'" > "'"${LOGFILE}"'" 2>&1 &
                 sleep 2
 
                 if pidof ckpool >/dev/null 2>&1; then
@@ -85,7 +89,8 @@ trim_log() {
 start_ckpool() {
     mkdir -p "${LOGDIR}"
     trim_log
-    ckpool -c "${CONF}" > "${LOGFILE}" 2>&1 &
+    # MALLOC_ARENA_MAX: cap glibc per-thread malloc arenas (see waiter above).
+    MALLOC_ARENA_MAX=2 ckpool -c "${CONF}" > "${LOGFILE}" 2>&1 &
     sleep 2
     is_running
 }

@@ -18,9 +18,9 @@ description: 'Debug Rockbase board freeze/lockup/hang issues. Collect logs, psto
 - 如果串口还在打印，**不要立刻断电**
 - 保存串口日志文件，记录板子 IP、板子内存型号（1G/2G，运行时检测）和大概卡死时间
 - 如果串口还在输出，继续录 2~5 分钟
-- 如果串口完全无输出，SSH/网页都无响应 → 硬复位
+- 如果串口完全无输出，SSH/网页都无响应 → **先等 ~60s**：硬件 WDT（`S05watchdog` 喂狗）通常会自动复位板子，无需人工断电；超过 2 分钟仍未恢复再考虑硬复位
 
-### 2. 硬复位后第一时间捞 pstore
+### 2. 复位后第一时间捞 pstore
 
 **所有板子（2026-09-24 起局域网仅 6 台 1G 真机，MAC 见 AGENTS.md 板子基线表）**：
 
@@ -110,8 +110,10 @@ kernel.sysrq = 1
 ### 关于硬 lockup
 
 - 驱动已内置 `RB8189_BUS_STUCK_PANIC_MS=60000`，但软定时器在关中断硬 lockup 下不触发
-- 真正能定位硬 lockup 的是 JTAG，不是软件看门狗
-- WDT 的价值仅限于 debug：区分"硬 lockup"和"软 hang"
+- **硬件 WDT 是有效的最后兜底（2026-09-25 实测定论）**：`S05watchdog` 启动用户态 `watchdog -T 60 -t 10 /dev/watchdog` 喂 K230 SoC 硬件 WDT；硬 lockup 时喂狗进程停摆 → 60s 后硬件自动复位。**之前误判为"人工复位"的硬 lockup 实际都是 WDT 自动复位**（证据：`docs/freeze-baselines/pstore-e06019-3032bc-20260925-wdt-reset.txt` 等，repo memory `freeze-baseline.md`「2026-09-25 重大发现」节）
+- 卡死结局三类：(a) 软 D 持续 → `hung_task_panic` 自愈；(b) 硬 lockup → 硬件 WDT 60s 自动复位；(c) 需人工复位的极少
+- **注意**：OTA 流程会暂停 WDT（`rockbase-ota.sh` quiesce 含 S05watchdog），OTA 期间硬 lockup 不会自动复位
+- 定位硬 lockup 根因仍需 JTAG；WDT 只负责兜底复位，不负责定位
 - 当前 pstore 仍可能为空（如果系统硬死锁到 CPU 不再调度）
 
 ---
@@ -121,6 +123,6 @@ kernel.sysrq = 1
 1. 继续用 pstore 观察真实业务负载下的结果
 2. 如果 pstore 捕获到 RTW/SDIO 争抢，优先补齐 SDIO 入口串行化
 3. 如果串行化仍不足，评估 dedicated bus worker
-4. 如果 pstore 为空且串口彻底停住，评估 JTAG/NMI
-5. **不要**盲目加 watchdog 掩盖问题
+4. 如果 pstore 为空且串口彻底停住，评估 JTAG/NMI（复位本身由硬件 WDT 兜底，不会永久挂死）
+5. **不要**盲目加软件 watchdog 掩盖问题（硬件 WDT 兜底已存在且有效，见「关于硬 lockup」）
 6. **不要**恢复高频 rb-mmc-diag 打印（放大单核调度压力）
