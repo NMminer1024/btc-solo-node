@@ -883,10 +883,14 @@ textarea {
 
 .storage-row-total .storage-bar-fill {
   border-radius: 6px;
+  background: var(--green);
 }
+
+/* warn/danger states (defined later) still override the green base. */
 
 .storage-row-total .storage-value {
   font-size: 0.95rem;
+  color: var(--green);
 }
 
 /* First partition row after the total: extra gap + dashed divider. */
