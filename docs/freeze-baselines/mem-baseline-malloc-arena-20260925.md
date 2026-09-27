@@ -131,6 +131,25 @@ per-share/per-worker 累积结构（share 历史、worker 统计缓存）。即�
 avail 压到 ~0、zram 打满，是 freeze 链的内存侧背景。可选缓解（收益有限）：`dbcache=96`（省 ~32MB）、
 `maxmempool=20`（solo 挖矿不需要 50MB，省 ~28MB 峰值）；治本仍是减少 SD 随机读延迟。
 
+## malloc_trim 补丁验证与固化（2026-09-25 ~ 09-27，124.38 / MAC e0:ca:fa:cd:d6:b3）
+
+**背景**：MALLOC_ARENA_MAX=2 后稳态 140-163MB，但 glibc 堆棘轮仍使锯齿峰值达 188MB。
+在 `clear_workbase()`（workbase 退休 ~10min）和 `block_update()`（每 60s GBT 轮结束）
+两处加 `malloc_trim(0)`，把堆顶连续空闲区归还 OS。改动完全独立于出块/提交主逻辑
+（trim 只动已释放的堆顶，不碰存活数据；爆块提交走 block_solve → process_block →
+generator_submitblock，不经过这两处）。
+
+| 版本 | 稳态 RSS | HWM | 备注 |
+|------|---------|-----|------|
+| 修复前（无 trim） | 157-188MB 锯齿 | 187MB | 基线 |
+| 仅退休 trim（1h） | 92-105MB | 135→245MB | 大 mempool（7576tx）下间隔峰值冲高 |
+| **双 trim（1h 窗口）** | **103-149MB 锯齿** | **170MB 冻结 35min** | 带真实矿机 worker（907GH/s） |
+| 双 trim（23h 后） | 221MB | 261MB | 尖峰随 mempool 波动，glibc 碎片化结构性限制 |
+
+**结论**：稳态收益明确（省 50-90MB 给 page cache），已固化为
+`buildroot-overlay/package/ckpool/0001-rockbase-malloc-trim-gbt-heap-ratchet.patch`
+（commit `064e950`）。峰值（261MB）未根治，如需进一步压低需换 jemalloc（独立实验）。
+
 ## 部署后 24h 复查结果（2026-09-26 填写）
 
 > 判定标准：ckpool RSS 锯齿震荡在 200MB 内且 HWM 未被刷新 = 正常（爬升根因见上节定论）。
