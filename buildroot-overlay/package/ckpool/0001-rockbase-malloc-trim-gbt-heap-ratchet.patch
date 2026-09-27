@@ -1,0 +1,37 @@
+diff --git a/src/stratifier.c b/src/stratifier.c
+index 1dff7b80..219d1fde 100644
+--- a/src/stratifier.c
++++ b/src/stratifier.c
+@@ -16,6 +16,7 @@
+ #include <sys/types.h>
+ #include <dirent.h>
+ #include <fcntl.h>
++#include <malloc.h>
+ #include <math.h>
+ #include <string.h>
+ #include <unistd.h>
+@@ -818,6 +819,12 @@ static void clear_workbase(ckpool_t *ckp, workbase_t *wb)
+ 	if (wb->gbtdoc)
+ 		yyjson_doc_free(wb->gbtdoc);
+ 	free(wb);
++	/* Return freed top-of-heap memory to the OS. Each 60s GBT round
++	 * allocates ~4-6MB transiently; without this glibc only munmaps
++	 * contiguous top frees and RSS ratchets up (sawtooth 157-188MB).
++	 * Called only on workbase retirement (~10min cadence), so the
++	 * syscall cost is negligible. */
++	malloc_trim(0);
+ }
+ 
+ /* Remove all shares with a workbase id less than wb_id for block changes */
+@@ -1587,6 +1594,11 @@ retry:
+ 	sdata->update_time = time(NULL);
+ 	if (new_block)
+ 		sdata->update_time -= ckp->update_interval / 2;
++	/* Each 60s GBT round allocates ~4-12MB transiently (yyjson parse +
++	 * mut copy); trim right after the round so the heap ratchet peak
++	 * does not accumulate between workbase retirements. One syscall
++	 * per minute is negligible. */
++	malloc_trim(0);
+ out:
+ 
+ 	cksem_post(&sdata->update_sem);
