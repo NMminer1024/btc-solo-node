@@ -14,7 +14,7 @@ CKPOOL_AUTORECONF = YES
 # the glibc RSS ratchet (sawtooth 157-188MB -> steady 103-149MB on 1G board).
 # Validated on 192.168.124.38 (MAC e0:ca:fa:cd:d6:b3), see
 # docs/freeze-baselines/mem-baseline-malloc-arena-20260925.md.
-CKPOOL_PATCH = 0001-rockbase-malloc-trim-gbt-heap-ratchet.patch
+# The .patch in this package dir is applied automatically by Buildroot.
 
 # asprintf needs _GNU_SOURCE on glibc
 CKPOOL_CONF_ENV = CFLAGS="$(TARGET_CFLAGS) -D_GNU_SOURCE"
