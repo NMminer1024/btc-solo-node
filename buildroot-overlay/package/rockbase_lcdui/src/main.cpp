@@ -4043,7 +4043,13 @@ int main() {
 
     while (!g_stop) {
         const uint32_t now_ms = tick_ms();
+        buzzer_update();
         const bool interacting = ui_interacting(now_ms);
+        const bool overlay_active_before_update =
+            g_network_settings_overlay.active() || g_wifi_config_overlay.active() ||
+            g_timezone_overlay.active() || g_miners_overlay.active() ||
+            g_peer_map_overlay.active() || g_ota_overlay.active() ||
+            g_firmware_update_overlay.active();
         if (g_network_settings_overlay_open_pending && !g_network_settings_overlay.active()) {
             g_network_settings_overlay.open(g_network_settings_wifi_summary,
                                             g_network_settings_timezone_summary,
@@ -4102,8 +4108,15 @@ int main() {
             g_firmware_update_overlay.update();
         }
 
-        process_deferred_refreshes_if_idle();
-        refresh_one_dirty_page_if_idle();
+        const bool overlay_closed_this_iteration = overlay_active_before_update &&
+            !g_network_settings_overlay.active() && !g_wifi_config_overlay.active() &&
+            !g_timezone_overlay.active() && !g_miners_overlay.active() &&
+            !g_peer_map_overlay.active() && !g_ota_overlay.active() &&
+            !g_firmware_update_overlay.active();
+        if (!overlay_closed_this_iteration) {
+            process_deferred_refreshes_if_idle();
+            refresh_one_dirty_page_if_idle();
+        }
 
         bool custom_present = false;
         if (!g_network_settings_overlay.active() && !g_wifi_config_overlay.active() &&

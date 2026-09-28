@@ -15,4 +15,5 @@
 
 void buzzer_init();
 void buzzer_beep();
+void buzzer_update();
 void buzzer_shutdown();

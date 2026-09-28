@@ -34,6 +34,7 @@ char g_duty_path[128] = {};
 char g_enable_path[128] = {};
 bool g_pwm_ready = false;
 uint64_t g_last_beep_ms = 0;
+uint64_t g_beep_until_ms = 0;
 
 // Millisecond monotonic clock, matching the tick_ms() style used elsewhere.
 uint64_t now_ms() {
@@ -142,16 +143,25 @@ void buzzer_beep() {
     }
     g_last_beep_ms = now;
 
-    if (!sysfs_write(g_enable_path, "1")) {
+    if (sysfs_write(g_enable_path, "1")) {
+        g_beep_until_ms = now + kBuzzerBeepMs;
+    }
+}
+
+void buzzer_update() {
+    if (!g_pwm_ready || g_beep_until_ms == 0) {
         return;
     }
-    usleep(kBuzzerBeepMs * 1000U);
-    sysfs_write(g_enable_path, "0");
+    if (now_ms() >= g_beep_until_ms) {
+        sysfs_write(g_enable_path, "0");
+        g_beep_until_ms = 0;
+    }
 }
 
 void buzzer_shutdown() {
     if (g_pwm_ready) {
         sysfs_write(g_enable_path, "0");
+        g_beep_until_ms = 0;
         g_pwm_ready = false;
     }
 }
