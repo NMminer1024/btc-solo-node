@@ -35,6 +35,7 @@
 // DSEG7 digital-tube font (see font/README.md). Its glyph set has no
 // comma/slash/percent, so those must stay in a regular font.
 LV_FONT_DECLARE(dseg7c700_font_22);
+LV_FONT_DECLARE(dseg7c700_font_24);
 LV_FONT_DECLARE(dseg7c700_font_28);
 LV_FONT_DECLARE(dseg7c700_font_32);
 #include "timezone_overlay.h"
@@ -2667,9 +2668,9 @@ bool update_stratum_chart(const StratumPageModel& model) {
         }
         lv_point_t unit_size {};
         lv_text_get_size(&unit_size, lv_label_get_text(g_tiles.stratum_total_hashrate_unit),
-                         &lv_font_montserrat_22, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+                         &lv_font_montserrat_16, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
         lv_obj_align_to(g_tiles.stratum_total_hashrate, g_tiles.stratum_total_hashrate_unit,
-                        LV_ALIGN_OUT_LEFT_TOP, 72 - unit_size.x - 4, -13);
+                        LV_ALIGN_OUT_LEFT_TOP, 72 - unit_size.x - 4, -11);
     }
     if (g_tiles.stratum_y_unit != nullptr) {
         lv_label_set_text(g_tiles.stratum_y_unit, axis_display.unit);
@@ -3412,16 +3413,17 @@ void build_stratum_tile(lv_obj_t* tv) {
     lv_obj_set_style_border_color(chart_panel, lv_color_hex(0x2f4250), 0);
     lv_obj_set_style_pad_all(chart_panel, 16, 0);
 
-    g_tiles.stratum_total_hashrate_unit = add_label(tile, "", 0, 0, &lv_font_montserrat_22, lv_color_hex(0x9aa6ac));
+    // 总算力放在 chart 面板内部、最上面一根横线（y=26）上方，右端顶对齐到 chart 右边缘。
+    // 字体比原来小一号（value 32->24, unit 22->16），保持原配色风格。
+    // 注意：unit/value 的 align_to 依赖 chart，必须在 chart 创建后再设置（见下方）。
+    g_tiles.stratum_total_hashrate_unit = add_label(chart_panel, "", 0, 0, &lv_font_montserrat_16, lv_color_hex(0x9aa6ac));
     lv_obj_set_width(g_tiles.stratum_total_hashrate_unit, 72);
     lv_obj_set_style_text_align(g_tiles.stratum_total_hashrate_unit, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_align_to(g_tiles.stratum_total_hashrate_unit, chart_panel, LV_ALIGN_OUT_TOP_RIGHT, 0, -4);
     // 初始为空：无算力数据时不显示 "--" 占位，有数据后由 update_stratum_chart 填充。
-    g_tiles.stratum_total_hashrate = add_label(tile, "", 0, 0, &dseg7c700_font_32, lv_color_hex(0xf0b44c));
+    g_tiles.stratum_total_hashrate = add_label(chart_panel, "", 0, 0, &dseg7c700_font_24, lv_color_hex(0xf0b44c));
     lv_obj_set_width(g_tiles.stratum_total_hashrate, 120);
     lv_obj_set_style_text_align(g_tiles.stratum_total_hashrate, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_long_mode(g_tiles.stratum_total_hashrate, LV_LABEL_LONG_MODE_CLIP);
-    lv_obj_align_to(g_tiles.stratum_total_hashrate, g_tiles.stratum_total_hashrate_unit, LV_ALIGN_OUT_LEFT_TOP, -4, -13);
 
     g_tiles.stratum_legend_5m = add_label(chart_panel, "5m", 0, 0, &lv_font_montserrat_16, lv_color_hex(0x51c7a3));
     g_tiles.stratum_legend_6h = add_label(chart_panel, "6h", 0, 0, &lv_font_montserrat_16, lv_color_hex(0x7fa16c));
@@ -3470,6 +3472,11 @@ void build_stratum_tile(lv_obj_t* tv) {
     lv_chart_set_series_values(g_tiles.stratum_chart, g_tiles.stratum_series_6h, zeros.data(), zeros.size());
     lv_chart_set_series_values(g_tiles.stratum_chart, g_tiles.stratum_series_1d, zeros.data(), zeros.size());
     lv_chart_refresh(g_tiles.stratum_chart);
+
+    // 总算力定位：unit 锚定到 chart 右上角上方 4px（右端顶对齐 chart 右边缘），
+    // value 紧贴 unit 左侧。chart 此时已创建，align_to 才有效。
+    lv_obj_align_to(g_tiles.stratum_total_hashrate_unit, g_tiles.stratum_chart, LV_ALIGN_OUT_TOP_RIGHT, -4, -4);
+    lv_obj_align_to(g_tiles.stratum_total_hashrate, g_tiles.stratum_total_hashrate_unit, LV_ALIGN_OUT_LEFT_TOP, -4, -11);
 
     // Unit sits above the topmost Y tick (1.00 at y=18) so it never overlaps the
     // value. Brighter than the tick values (0x78848b) so the unit reads as a
