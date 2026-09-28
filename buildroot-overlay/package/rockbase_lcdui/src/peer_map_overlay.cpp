@@ -177,6 +177,7 @@ void PeerMapOverlay::open(const std::vector<std::string>& peer_ips, const Geo& s
     close();
     close_requested_ = false;
     ips_ = peer_ips;
+    last_ips_ = peer_ips;
     self_geo_ = self_geo;
     inbound_ = inbound;
 
@@ -294,6 +295,23 @@ void PeerMapOverlay::resolve_geo(const std::vector<std::string>& ips) {
     std::snprintf(status, sizeof(status), "%zu of %zu peers located",
                   located, ips.size());
     set_status(status);
+}
+
+void PeerMapOverlay::refresh_data(const std::vector<std::string>& peer_ips,
+                                  const Geo& self_geo,
+                                  const std::map<std::string, bool>& inbound) {
+    if (root_ == nullptr) return;
+    // Skip the (relatively expensive) geo resolution + full redraw unless the
+    // peer set, inbound flags or self location actually changed.
+    if (peer_ips == last_ips_ && inbound == inbound_ && self_geo == self_geo_) {
+        return;
+    }
+    ips_ = peer_ips;
+    last_ips_ = peer_ips;
+    inbound_ = inbound;
+    self_geo_ = self_geo;
+    resolve_geo(ips_);
+    draw_frame((monotonic_ms() - anim_start_ms_) / 1000.0);
 }
 
 void PeerMapOverlay::set_status(const std::string& text) {
@@ -428,6 +446,7 @@ void PeerMapOverlay::close() {
     close_requested_ = false;
     markers_.clear();
     ips_.clear();
+    last_ips_.clear();
     backdrop_.clear();
     buf_.clear();
     std::memset(&img_dsc_, 0, sizeof(img_dsc_));

@@ -420,6 +420,8 @@ bool g_peer_map_overlay_open_pending = false;
 std::vector<std::string> g_peer_map_ips;
 std::map<std::string, bool> g_peer_map_inbound;
 PeerMapOverlay::Geo g_peer_map_self_geo;
+// Last time the main loop polled the status cache for the open peer map.
+uint32_t g_peer_map_last_poll_ms = 0;
 OtaOverlay g_ota_overlay;
 FirmwareUpdateOverlay g_firmware_update_overlay;
 int g_pressed_hotspot_index = -1;
@@ -428,6 +430,7 @@ bool g_show_page_indicator = false;
 void set_active_page(uint32_t page);
 void refresh_clock_cb(lv_timer_t*);
 void refresh_status_cb(lv_timer_t*);
+void refresh_open_peer_map_if_due();
 int present_display_buffer();
 void request_status_refresh();
 void set_page_source_visible(uint32_t index, bool visible);
@@ -442,7 +445,8 @@ bool ui_interacting(uint32_t now_ms = tick_ms()) {
     (void)now_ms;
         return g_touch.down || g_pager_anim_active || g_network_settings_overlay.active() ||
             g_wifi_config_overlay.active() ||
-           g_timezone_overlay.active() || g_miners_overlay.active() || g_ota_overlay.active() ||
+           g_timezone_overlay.active() || g_miners_overlay.active() ||
+           g_peer_map_overlay.active() || g_ota_overlay.active() ||
            g_firmware_update_overlay.active();
 }
 
@@ -3799,6 +3803,33 @@ void refresh_status_cb(lv_timer_t*) {
     }
 }
 
+// While the peer map overlay is open, periodically re-read the status cache
+// and push new peer data into it so peers connect/disconnect live without
+// having to close and reopen the overlay. The overlay itself no-ops when the
+// data is unchanged, so this only costs one small JSON read every few
+// seconds. (The regular 5s status refresh is deferred while an overlay is
+// active, so the open overlay polls on its own.)
+void refresh_open_peer_map_if_due() {
+    if (!g_peer_map_overlay.active()) {
+        g_peer_map_last_poll_ms = 0;
+        return;
+    }
+    const uint32_t now_ms = tick_ms();
+    if (g_peer_map_last_poll_ms != 0 && now_ms - g_peer_map_last_poll_ms < 5000U) {
+        return;
+    }
+    g_peer_map_last_poll_ms = now_ms;
+
+    UiModel model;
+    if (!build_ui_model(model)) {
+        return;
+    }
+    g_peer_map_ips = model.bitcoin.peer_ips;
+    g_peer_map_inbound = model.bitcoin.peer_inbound;
+    g_peer_map_self_geo = model.bitcoin.self_geo;
+    g_peer_map_overlay.refresh_data(g_peer_map_ips, g_peer_map_self_geo, g_peer_map_inbound);
+}
+
 void cache_tile_pages() {
     for (uint32_t index = 0; index < kTileCount; ++index) {
         lv_obj_t* page = g_tiles.page[index];
@@ -4062,6 +4093,7 @@ int main() {
         }
         g_miners_overlay.update();
         g_peer_map_overlay.update();
+        refresh_open_peer_map_if_due();
         g_ota_overlay.update();  // self-manages open/close from /run/rockbase/ota-state.json
         // Passive OTA check: periodically runs check-async in the background
         // and pops a prompt only when a genuinely newer version is available.

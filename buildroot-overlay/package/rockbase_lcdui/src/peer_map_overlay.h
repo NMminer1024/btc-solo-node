@@ -27,11 +27,21 @@ public:
         std::string city;
         std::string country;
         bool known = false;
+
+        bool operator==(const Geo& o) const {
+            return lat == o.lat && lon == o.lon && city == o.city &&
+                   country == o.country && known == o.known;
+        }
     };
 
     void open(const std::vector<std::string>& peer_ips, const Geo& self_geo,
               const std::map<std::string, bool>& inbound = {});
     void update();  // call from the main loop (drives the arc animation)
+    // Live-refresh the peer set while the overlay is open. No-op unless the
+    // data actually changed; new peers are geolocated lazily (per-IP cache),
+    // so only genuinely new addresses hit the offline geoip lookup.
+    void refresh_data(const std::vector<std::string>& peer_ips, const Geo& self_geo,
+                      const std::map<std::string, bool>& inbound);
     bool active() const { return root_ != nullptr; }
 
 private:
@@ -66,6 +76,7 @@ private:
     bool close_requested_ = false;
 
     std::vector<std::string> ips_;
+    std::vector<std::string> last_ips_;  // last data applied (change detection)
     std::vector<Marker> markers_;
     std::map<std::string, bool> inbound_;
     Geo self_geo_ {};

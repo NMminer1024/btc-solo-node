@@ -4875,6 +4875,9 @@
   var peerMapPoints = []; // last resolved points (for animated redraws)
   var peerMapInbound = {}; // ip -> true if the connection is inbound
   var peerMapAnimId = null; // requestAnimationFrame handle
+  var peerMapOpen = false; // overlay visibility (drives live refresh)
+  var peerMapPollTimer = null; // setInterval handle for live peer refresh
+  var PEER_MAP_REFRESH_MS = 5000; // peers connect/disconnect live while open
 
   function peerMapProject(lat, lon, w, h) {
     // equirectangular using the map's actual lat range (85..-60) and the
@@ -5002,7 +5005,10 @@
     ctx.fill();
   }
 
-  function peerMapDrawCanvas(points) {
+  // Update the data the animation loop draws from (points + inbound flags).
+  // The running rAF loop picks the new data up on its next frame, so an
+  // already-open map refreshes live without a full redraw here.
+  function peerMapApplyData(points) {
     peerMapPoints = points;
     var api = lastDashboardApi;
     var detail = api && api.bitcoin && Array.isArray(api.bitcoin.peers_detail) ? api.bitcoin.peers_detail : [];
@@ -5010,6 +5016,10 @@
     detail.forEach(function (d) {
       if (d && typeof d.ip === "string" && d.inbound) peerMapInbound[d.ip] = true;
     });
+  }
+
+  function peerMapDrawCanvas(points) {
+    peerMapApplyData(points);
     peerMapDrawFrame(points, 0);
   }
 
@@ -5085,7 +5095,10 @@
     if (canvas) canvas.style.cursor = "";
   }
 
-  function peerMapResolve(ips) {
+  // live=true: the overlay is already open and this is a periodic refresh —
+  // only swap the data the animation loop draws from (no t=0 redraw, no
+  // status-text flicker).
+  function peerMapResolve(ips, live) {
     var pending = ips.filter(function (ip) { return !peerMapGeoCache[ip]; });
     var done = function () {
       var points = ips.map(function (ip) {
@@ -5093,9 +5106,18 @@
         if (g && !g.unknown) return { ip: ip, lat: g.lat, lon: g.lon, city: g.city, country: g.country };
         return { ip: ip, unknown: true };
       });
-      peerMapDrawCanvas(points);
+      if (live) {
+        peerMapApplyData(points);
+      } else {
+        peerMapDrawCanvas(points);
+      }
       var located = points.filter(function (p) { return !p.unknown; }).length;
-      setText("peerMapStatus", t("peerMap.status").replace("{n}", String(located)).replace("{total}", String(ips.length)));
+      var statusEl = document.getElementById("peerMapStatus");
+      var statusText = t("peerMap.status").replace("{n}", String(located)).replace("{total}", String(ips.length));
+      // Skip the write when unchanged so periodic refreshes don't flicker.
+      if (statusEl && statusEl.textContent !== statusText) {
+        statusEl.textContent = statusText;
+      }
     };
     if (!pending.length) { done(); return; }
     // Local offline lookup via /api/geoip.cgi (GeoLite2-City.mmdb on the
@@ -5128,22 +5150,49 @@
     }
   }
 
+  // While the map is open, re-read the latest dashboard data every few
+  // seconds so peers that connect/disconnect appear live (the dashboard
+  // itself only refreshes every DASHBOARD_REFRESH_SECONDS).
+  function peerMapStartPoll() {
+    if (peerMapPollTimer != null) return;
+    peerMapPollTimer = window.setInterval(function () {
+      if (!peerMapOpen) return;
+      var ips = peerMapGetIps();
+      if (!ips.length) {
+        peerMapApplyData([]);
+        return;
+      }
+      peerMapResolve(ips, true);
+    }, PEER_MAP_REFRESH_MS);
+  }
+
+  function peerMapStopPoll() {
+    if (peerMapPollTimer != null) {
+      window.clearInterval(peerMapPollTimer);
+      peerMapPollTimer = null;
+    }
+  }
+
   function openPeerMap() {
     var overlay = document.getElementById("peerMapOverlay");
     if (!overlay) return;
     var ips = peerMapGetIps();
     overlay.hidden = false;
+    peerMapOpen = true;
     setText("peerMapStatus", t("peerMap.loading"));
     if (!ips.length) {
       peerMapDrawCanvas([]);
       setText("peerMapStatus", t("peerMap.empty"));
-      return;
+    } else {
+      peerMapResolve(ips);
     }
-    peerMapResolve(ips);
     peerMapStartAnim();
+    peerMapStartPoll();
   }
 
   function closePeerMap() {
+    peerMapOpen = false;
+    peerMapStopPoll();
     peerMapStopAnim();
     var overlay = document.getElementById("peerMapOverlay");
     if (overlay) overlay.hidden = true;
