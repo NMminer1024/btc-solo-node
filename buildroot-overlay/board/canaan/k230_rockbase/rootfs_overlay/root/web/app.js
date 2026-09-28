@@ -2886,6 +2886,9 @@
       "peerMap.empty": "No peers connected.",
       "peerMap.unknown": "Unknown location",
       "peerMap.self": "This node",
+      "peerMap.legendSelf": "This node",
+      "peerMap.legendInbound": "Inbound",
+      "peerMap.legendOutbound": "Outbound",
       /* ota */
       "ota.available": "Firmware Update Available",
       "ota.whatsNew": "What's New",
@@ -3100,6 +3103,9 @@
       "peerMap.empty": "当前没有已连接的节点。",
       "peerMap.unknown": "位置未知",
       "peerMap.self": "本节点",
+      "peerMap.legendSelf": "本节点",
+      "peerMap.legendInbound": "入站",
+      "peerMap.legendOutbound": "出站",
       /* ota */
       "ota.available": "有可用固件更新",
       "ota.whatsNew": "更新内容",
@@ -3305,6 +3311,9 @@
       "peerMap.empty": "No hay pares conectados.",
       "peerMap.unknown": "Ubicación desconocida",
       "peerMap.self": "Este nodo",
+      "peerMap.legendSelf": "Este nodo",
+      "peerMap.legendInbound": "Entrante",
+      "peerMap.legendOutbound": "Saliente",
       "ota.available": "Actualización de firmware disponible",
       "ota.whatsNew": "Novedades",
       "ota.note": "La actualización se descarga, se verifica y se escribe en la ranura de sistema en espera. La sincronización y el minado se pausan durante la actualización. Al terminar, el nodo se reinicia automáticamente. No apagues el equipo.",
@@ -3506,6 +3515,9 @@
       "peerMap.empty": "Aucun pair connecté.",
       "peerMap.unknown": "Emplacement inconnu",
       "peerMap.self": "Ce nœud",
+      "peerMap.legendSelf": "Ce nœud",
+      "peerMap.legendInbound": "Entrant",
+      "peerMap.legendOutbound": "Sortant",
       "ota.available": "Mise à jour du firmware disponible",
       "ota.whatsNew": "Nouveautés",
       "ota.note": "La mise à jour est téléchargée, vérifiée et écrite dans la baie système en attente. La synchronisation et le minage sont en pause pendant la mise à jour. À la fin, le nœud redémarre automatiquement. Ne coupez pas le courant.",
@@ -3707,6 +3719,9 @@
       "peerMap.empty": "Keine verbundenen Peers.",
       "peerMap.unknown": "Unbekannter Standort",
       "peerMap.self": "Dieser Knoten",
+      "peerMap.legendSelf": "Dieser Knoten",
+      "peerMap.legendInbound": "Eingehend",
+      "peerMap.legendOutbound": "Ausgehend",
       "ota.available": "Firmware-Update verfügbar",
       "ota.whatsNew": "Neuigkeiten",
       "ota.note": "Das Update wird heruntergeladen, geprüft und in den Standby-Systemslot geschrieben. Synchronisation und Mining werden während des Updates pausiert. Nach Abschluss startet der Knoten automatisch neu. Nicht ausschalten.",
@@ -3908,6 +3923,9 @@
       "peerMap.empty": "Nenhum par conectado.",
       "peerMap.unknown": "Localização desconhecida",
       "peerMap.self": "Este nó",
+      "peerMap.legendSelf": "Este nó",
+      "peerMap.legendInbound": "Entrante",
+      "peerMap.legendOutbound": "Saindo",
       "ota.available": "Atualização de firmware disponível",
       "ota.whatsNew": "Novidades",
       "ota.note": "A atualização é baixada, verificada e gravada no slot de sistema em espera. A sincronização e a mineração ficam em pausa durante a atualização. Ao terminar, o nó reinicia automaticamente. Não desligue.",
@@ -4109,6 +4127,9 @@
       "peerMap.empty": "Нет подключённых узлов.",
       "peerMap.unknown": "Неизвестное местоположение",
       "peerMap.self": "Этот узел",
+      "peerMap.legendSelf": "Этот узел",
+      "peerMap.legendInbound": "Входящие",
+      "peerMap.legendOutbound": "Исходящие",
       "ota.available": "Доступно обновление прошивки",
       "ota.whatsNew": "Что нового",
       "ota.note": "Обновление скачивается, проверяется и записывается в резервный системный слот. Синхронизация и майнинг приостанавливаются во время обновления. После записи узел автоматически перезагрузится. Не отключайте питание.",
@@ -4310,6 +4331,9 @@
       "peerMap.empty": "接続中のピアがありません。",
       "peerMap.unknown": "位置不明",
       "peerMap.self": "このノード",
+      "peerMap.legendSelf": "このノード",
+      "peerMap.legendInbound": "受信",
+      "peerMap.legendOutbound": "送信",
       "ota.available": "ファームウェア更新があります",
       "ota.whatsNew": "新機能",
       "ota.note": "更新はダウンロードされ、検証されて、スタンバイのシステムスロットに書き込まれます。アップグレード中は同期とマイニングが一時停止されます。書き込みが完了するとノードは自動的に再起動します。電源を切らないでください。",
@@ -4511,6 +4535,9 @@
       "peerMap.empty": "연결된 피어가 없습니다.",
       "peerMap.unknown": "위치 미상",
       "peerMap.self": "이 노드",
+      "peerMap.legendSelf": "이 노드",
+      "peerMap.legendInbound": "수신",
+      "peerMap.legendOutbound": "발신",
       "ota.available": "펌웨어 업데이트가 있습니다",
       "ota.whatsNew": "새로운 내용",
       "ota.note": "업데이트는 다운로드되고 검증된 뒤 대기 시스템 슬롯에 기록됩니다. 업그레이드 동안 동기화 및 채굴이 일시 중지됩니다. 기록이 끝나면 노드가 자동으로 재부팅됩니다. 전원을 끄지 마세요.",
@@ -4712,6 +4739,9 @@
       "peerMap.empty": "لا يوجد أقران متصلون.",
       "peerMap.unknown": "موقع غير معروف",
       "peerMap.self": "هذا العقد",
+      "peerMap.legendSelf": "هذا العقد",
+      "peerMap.legendInbound": "وارد",
+      "peerMap.legendOutbound": "صادر",
       "ota.available": "تحديث البرنامج الثابت متاح",
       "ota.whatsNew": "ما الجديد",
       "ota.note": "يتم تنزيل التحديث وتحققه وكتابته في فتحة النظام الاحتياطية. يتوقف المزامنة والتعدين أثناء الترقية. عند انتهاء الكتابة تعاد تشغيل العقدة تلقائيًا. لا تقطع الطاقة.",
@@ -4879,6 +4909,33 @@
   var peerMapPollTimer = null; // setInterval handle for live peer refresh
   var PEER_MAP_REFRESH_MS = 5000; // peers connect/disconnect live while open
 
+  /* Water-drop pin markers: red = this node, blue = inbound, orange = outbound.
+   * Images are loaded once; until they are ready (or if they fail) the map
+   * falls back to plain dots. */
+  var peerMapPinImages = {};
+  var peerMapPinReady = false;
+  (function () {
+    var pins = {
+      self: "img/pin_classic_red.png",
+      inbound: "img/pin_classic_blue.png",
+      outbound: "img/pin_classic_orange_yellow.png"
+    };
+    var pending = 0;
+    Object.keys(pins).forEach(function (role) {
+      pending++;
+      var img = new Image();
+      img.onload = img.onerror = function () {
+        peerMapPinImages[role] = img;
+        if (--pending === 0) peerMapReadyPinsLoaded();
+      };
+      img.src = pins[role];
+    });
+  })();
+  function peerMapReadyPinsLoaded() {
+    peerMapPinReady = true;
+    if (peerMapOpen && peerMapPoints.length) peerMapDrawFrame(peerMapPoints, 0);
+  }
+
   function peerMapProject(lat, lon, w, h) {
     // equirectangular using the map's actual lat range (85..-60) and the
     // map's visual center longitude (105E, China centered). The world is
@@ -4951,22 +5008,35 @@
       });
     }
 
-    // peer dots on top of the arcs
+    // peer pins on top of the arcs (water-drop markers, tip at the point)
     peerMapMarkers.forEach(function (m) {
+      peerMapDrawPin(ctx, m.x, m.y, peerMapInbound[m.ip] ? "inbound" : "outbound", 26);
+    });
+
+    // this node's own location: red pin, drawn last so it sits on top
+    if (selfPos) {
+      peerMapMarkers.push({ x: selfPos.x, y: selfPos.y, ip: "", city: selfGeo.city, country: selfGeo.country, self: true });
+      peerMapDrawPin(ctx, selfPos.x, selfPos.y, "self", 32);
+    }
+  }
+
+  /* Draw a water-drop pin image with its tip anchored at (x, y).
+   * Falls back to a plain dot while the image is still loading. */
+  function peerMapDrawPin(ctx, x, y, role, h) {
+    var img = peerMapPinImages[role];
+    if (!img || !img.complete || !img.naturalWidth) {
+      var fallback = { self: "#ff3b30", inbound: "#58a6ff", outbound: "#f7931a" }[role] || "#f7931a";
       ctx.beginPath();
-      ctx.arc(m.x, m.y, 6, 0, Math.PI * 2);
-      ctx.fillStyle = "#f7931a";
+      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = fallback;
       ctx.fill();
       ctx.lineWidth = 1.5;
       ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
       ctx.stroke();
-    });
-
-    // this node's own location: solid green star
-    if (selfPos) {
-      peerMapMarkers.push({ x: selfPos.x, y: selfPos.y, ip: "", city: selfGeo.city, country: selfGeo.country, self: true });
-      peerMapDrawStar(ctx, selfPos.x, selfPos.y, 9, "#ff3b30", "rgba(255, 255, 255, 0.9)");
+      return;
     }
+    var w = (img.naturalWidth / img.naturalHeight) * h;
+    ctx.drawImage(img, x - w / 2, y - h, w, h);
   }
 
   /* Flight-map style arc: quadratic bezier bulging upward, dashed with a
@@ -5069,7 +5139,12 @@
     for (var i = 0; i < peerMapMarkers.length; i++) {
       var m = peerMapMarkers[i];
       var dx = mx - m.x, dy = my - m.y;
-      if (dx * dx + dy * dy <= 160) { hit = m; break; } // ~13px in canvas coords
+      // pin-shaped hit region: circular head above the tip + narrow body
+      var headR = m.self ? 13 : 10;
+      var headCy = m.y - (m.self ? 22 : 17);
+      var hdx = mx - m.x, hdy = my - headCy;
+      if (hdx * hdx + hdy * hdy <= headR * headR) { hit = m; break; }
+      if (Math.abs(dx) <= 7 && dy >= -6 && dy <= 8) { hit = m; break; }
     }
     if (hit) {
       tooltip.hidden = false;

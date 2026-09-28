@@ -634,11 +634,16 @@
       <canvas id="peerMapCanvas" width="1200" height="533"></canvas>
       <div class="peermap-tooltip" id="peerMapTooltip" hidden></div>
     </div>
+    <div class="peermap-legend">
+      <span class="peermap-legend-item"><img src="img/pin_classic_red.png" alt="" /> <span data-i18n="peerMap.legendSelf">This node</span></span>
+      <span class="peermap-legend-item"><img src="img/pin_classic_blue.png" alt="" /> <span data-i18n="peerMap.legendInbound">Inbound</span></span>
+      <span class="peermap-legend-item"><img src="img/pin_classic_orange_yellow.png" alt="" /> <span data-i18n="peerMap.legendOutbound">Outbound</span></span>
+    </div>
     <p class="peermap-status" id="peerMapStatus" data-i18n="peerMap.loading">Locating peers…</p>
   </div>
 </div>
 
 <script src="/world-map.js?v=20260923-svc1"></script>
-<script src="/app.js?v=20260924-stor1"></script>
+<script src="/app.js?v=20260928-pin1"></script>
 </body>
 </html>
