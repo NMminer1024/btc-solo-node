@@ -242,19 +242,26 @@ sample() {
         wbusy=0
         write_rate_bps=0
     else
-        # Sampling window in seconds (clamped to avoid anomalies).
-        window=$((now - last_sample_epoch))
+        # Sampling window from MONOTONIC uptime delta, never wall clock:
+        # boards have no RTC, so the NTP one-shot sync jumps the wall clock
+        # ~55 years forward at boot. A wall-clock window would clamp to
+        # INTERVAL while dwrite_ms spans the real (much larger) interval,
+        # faking wbusy=100 and ratcheting the persisted peak permanently.
+        window=$((uptime - last_uptime_sec))
         if [ "$window" -le 0 ] || [ "$window" -gt $((INTERVAL * 4)) ]; then
-            window=$INTERVAL
+            # Abnormal gap (daemon stall / missed samples): skip this window
+            # instead of distorting the rate or polluting the peak.
+            wbusy=0
+            write_rate_bps=0
+        else
+            # Write busy % from ms_writing (f11, write time only) delta.
+            dwrite_ms=$((ms_writing - last_ms_writing))
+            [ "$dwrite_ms" -lt 0 ] && dwrite_ms=0
+            wbusy=$(awk -v d="$dwrite_ms" -v w="$window" 'BEGIN{if(w>0){p=d/(w*1000)*100; if(p>100)p=100; printf "%.0f", p} else print 0}')
+
+            # Write rate bytes/sec over the window.
+            write_rate_bps=$(awk -v dw="$dw" -v w="$window" 'BEGIN{if(w>0)printf "%.0f", dw*512/w; else print 0}')
         fi
-
-        # Write busy % from ms_writing (f11, write time only) delta.
-        dwrite_ms=$((ms_writing - last_ms_writing))
-        [ "$dwrite_ms" -lt 0 ] && dwrite_ms=0
-        wbusy=$(awk -v d="$dwrite_ms" -v w="$window" 'BEGIN{if(w>0){p=d/(w*1000)*100; if(p>100)p=100; printf "%.0f", p} else print 0}')
-
-        # Write rate bytes/sec over the window.
-        write_rate_bps=$(awk -v dw="$dw" -v w="$window" 'BEGIN{if(w>0)printf "%.0f", dw*512/w; else print 0}')
     fi
     [ "$wbusy" -gt "$peak_wbusy" ] && peak_wbusy=$wbusy
 
@@ -280,9 +287,15 @@ sample() {
 
 compute_health() {
     total_written_bytes=$((total_written_sectors * 512))
+    # Cumulative powered-on days; used only for the insufficient_data verdict.
     uptime_days=$((total_uptime_sec / 86400))
-    # Display value with 1 decimal (e.g. "0.5", "1.3") for the web UI.
-    uptime_days_display=$(awk -v s="$total_uptime_sec" 'BEGIN{printf "%.1f", s/86400}')
+    # Display value: wall-clock span since tracking started, so it matches the
+    # "since <date>" shown next to it. A board powered off for days still shows
+    # the real elapsed monitoring time instead of a misleading low uptime figure.
+    _now=$(now_epoch)
+    _span=$(( _now - first_install_epoch ))
+    [ "$_span" -lt 0 ] && _span=0
+    uptime_days_display=$(awk -v s="$_span" 'BEGIN{printf "%.1f", s/86400}')
 
     status="healthy"
     verdict="healthy"
