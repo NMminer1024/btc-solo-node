@@ -104,6 +104,7 @@ local 包（`rockbase_lcdui` 等）源码改动后，顶层 `buildroot` 构建**
 | 触摸滑屏/点按钮（tileview 翻页、关弹窗，闭环调试导航） | `rockbase-swipe` |
 | OTA 发布到 GitHub Releases（打版本包/签名/发布到公开发布仓库） | `rockbase-ota-release` |
 | OTA 升级真机（「ota升级124.30」→ 触发/监控/验证） | `rockbase-ota` |
+| OTA 版本线重置（清空所有 Release/tag + VERSION 归零重新起版） | `rockbase-ota-reset` |
 | 产品可读版本号（VERSION 文件、vX.Y.Z 含义、升版流程） | `rockbase-version` |
 | 局域网 Axe 矿机扫描/统计/批量改 pool/重启（AxeOS HTTP API） | `axe-lan-scan` |
 
