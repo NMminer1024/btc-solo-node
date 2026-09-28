@@ -311,8 +311,17 @@ void* TimezoneOverlay::apply_thread_entry(void* arg) {
     auto* self = static_cast<TimezoneOverlay*>(arg);
     if (self == nullptr) return nullptr;
     const std::string zone = self->selected_zone_ != nullptr ? self->selected_zone_->key : "UTC";
+    // 时区写入（rockbase_timezone.sh apply）是瞬间完成的，worker 只同步等它，
+    // 用其返回码判定成功/失败。状态缓存刷新（refresh-now）会跑完整 collect 链
+    // （含 bitcoin-cli getpeerinfo，IBD 下单核可达 30s+），若同步等待会让
+    // "Applying" 弹窗卡几十秒不返回。UI 大时钟走 sync_process_timezone() 独立
+    // 即时生效，不依赖此刷新；故把 refresh-now 放到后台异步执行，不阻塞 worker。
+    // 注意：后台任务的 stdout/stderr 已重定向到 /dev/null，不会持有 popen 的读
+    // 管道，因此 popen 在前景 apply 结束后立即返回，不会因后台任务挂起。
     const std::string cmd = "sh /usr/bin/rockbase_timezone.sh apply " + shell_quote(zone) +
-                            " >/dev/null 2>&1 && sh /usr/bin/rockbase_statusd.sh refresh-now >/dev/null 2>&1";
+                            " >/dev/null 2>&1; rc=$?; "
+                            "sh /usr/bin/rockbase_statusd.sh refresh-now >/dev/null 2>&1 & "
+                            "exit $rc";
     int rc = 0;
     const std::string output = run_command(cmd, &rc);
     self->worker_message_ = output.empty() ? (rc == 0 ? "Timezone updated." : "Timezone update failed.") : output;

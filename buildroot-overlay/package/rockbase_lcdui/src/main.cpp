@@ -156,19 +156,13 @@ struct TileRuntime {
     lv_obj_t* system_swap_pct = nullptr;
     lv_obj_t* system_swap_fill = nullptr;
     lv_obj_t* system_swap_detail = nullptr;
-    lv_obj_t* system_uptime = nullptr;
     lv_obj_t* network_iface_icon = nullptr;
     lv_obj_t* network_settings_icon = nullptr;
     lv_obj_t* network_signal_arc = nullptr;
     lv_obj_t* network_signal_value = nullptr;
     lv_obj_t* network_signal_sub = nullptr;
-    lv_obj_t* network_device_dot = nullptr;
     lv_obj_t* network_device_value = nullptr;
     lv_obj_t* network_device_mac = nullptr;
-    lv_obj_t* network_gateway_dot = nullptr;
-    lv_obj_t* network_gateway = nullptr;
-    lv_obj_t* network_dns_dot = nullptr;
-    lv_obj_t* network_dns = nullptr;
     lv_obj_t* network_down_arrow = nullptr;
     lv_obj_t* network_down_value = nullptr;
     lv_obj_t* network_up_arrow = nullptr;
@@ -2656,7 +2650,8 @@ bool update_stratum_chart(const StratumPageModel& model) {
     if (g_tiles.stratum_total_hashrate != nullptr) {
         const double total_ghs = parse_hashrate_ghs(model.total_hashrate_5m);
         if (total_ghs <= 0.0) {
-            lv_label_set_text(g_tiles.stratum_total_hashrate, "--");
+            // 无有效算力时不显示任何占位内容（原为 "--"）。
+            lv_label_set_text(g_tiles.stratum_total_hashrate, "");
             lv_label_set_text(g_tiles.stratum_total_hashrate_unit, "");
         } else {
             lv_label_set_text(g_tiles.stratum_total_hashrate, format_hashrate_value(total_ghs).c_str());
@@ -3315,13 +3310,11 @@ void build_bitcoin_tile(lv_obj_t* tv) {
     const lv_color_t accent = lv_color_hex(spec.accent);
     lv_obj_t* tile = create_tile_base(tv, 0, spec);
 
-    // Bottom-left live clock, same baseline as the page-indicator dots
-    // (center y=443) and the bottom-right version tag. montserrat_18:
-    // line_height 21 / base_line 4 -> baseline 17px below top -> y = 443 - 17
-    // = 426. Left-aligned so the left edge stays pinned at x=42.
-    g_tiles.clock_time_label = add_label(tile, "--:--:--", 42, 426,
-                                         &lv_font_montserrat_18, lv_color_hex(0xf4efe2));
-    lv_obj_set_width(g_tiles.clock_time_label, 120);
+    // Bottom-left uptime (moved from System page), same baseline as the
+    // page-indicator dots (center y=443) and the bottom-right version tag.
+    g_tiles.clock_time_label = add_label(tile, "--", 42, 426,
+                                         &lv_font_montserrat_16, lv_color_hex(0xb7c2c8));
+    lv_obj_set_width(g_tiles.clock_time_label, 200);
     lv_obj_set_style_text_align(g_tiles.clock_time_label, LV_TEXT_ALIGN_LEFT, 0);
 
     add_label(tile, "Sync Flow", 42, 130, &lv_font_montserrat_18, lv_color_hex(0xf0b44c));
@@ -3360,8 +3353,9 @@ void build_bitcoin_tile(lv_obj_t* tv) {
                                               34 + (progress_num_size.y - progress_pct_size.y),
                                               &lv_font_montserrat_32, lv_color_hex(0x9aa6ac));
 
+    // 左右两个数字统一米白（原左侧为暗灰 0x78848b，与其他卡片数值色不一致）。
     g_bitcoin_height_current_roll = create_rolling_number(g_tiles.bitcoin_height, 0, 24, 156, 6,
-                                                          &dseg7c700_font_32, lv_color_hex(0x78848b));
+                                                          &dseg7c700_font_32, lv_color_hex(0xf4efe2));
     set_rolling_number_immediate(g_bitcoin_height_current_roll, "--");
     g_tiles.bitcoin_height_sep = add_label(g_tiles.bitcoin_height, "/", 161, 24,
                                            &lv_font_montserrat_32, lv_color_hex(0x9aa6ac));
@@ -3414,7 +3408,8 @@ void build_stratum_tile(lv_obj_t* tv) {
     lv_obj_set_width(g_tiles.stratum_total_hashrate_unit, 72);
     lv_obj_set_style_text_align(g_tiles.stratum_total_hashrate_unit, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_align_to(g_tiles.stratum_total_hashrate_unit, chart_panel, LV_ALIGN_OUT_TOP_RIGHT, 0, -4);
-    g_tiles.stratum_total_hashrate = add_label(tile, "--", 0, 0, &dseg7c700_font_32, lv_color_hex(0xf0b44c));
+    // 初始为空：无算力数据时不显示 "--" 占位，有数据后由 update_stratum_chart 填充。
+    g_tiles.stratum_total_hashrate = add_label(tile, "", 0, 0, &dseg7c700_font_32, lv_color_hex(0xf0b44c));
     lv_obj_set_width(g_tiles.stratum_total_hashrate, 120);
     lv_obj_set_style_text_align(g_tiles.stratum_total_hashrate, LV_TEXT_ALIGN_RIGHT, 0);
     lv_label_set_long_mode(g_tiles.stratum_total_hashrate, LV_LABEL_LONG_MODE_CLIP);
@@ -3551,11 +3546,6 @@ void build_system_tile(lv_obj_t* tv) {
     lv_obj_set_style_bg_opa(page_scrim, LV_OPA_50, 0);
     lv_obj_move_to_index(page_scrim, 1);
 
-    // Bottom-left uptime, styled identically to the bottom-right version tag
-    // (montserrat_16, 0xb7c2c8, baseline y=428) so the footer reads as a
-    // symmetric status strip: uptime (left) / dots (center) / version (right).
-    g_tiles.system_uptime = add_label(tile, "--", 42, 428, &lv_font_montserrat_16, lv_color_hex(0xb7c2c8));
-    lv_obj_set_width(g_tiles.system_uptime, 360);
 }
 
 void build_network_tile(lv_obj_t* tv) {
@@ -3606,56 +3596,27 @@ void build_network_tile(lv_obj_t* tv) {
                                             &lv_font_montserrat_18, lv_color_hex(0x9aa6ac));
     lv_label_set_long_mode(g_tiles.network_signal_sub, LV_LABEL_LONG_MODE_DOTS);
 
-    constexpr int32_t kNodeY = 366;
-    constexpr int32_t kNodeCenterX[3] = {144, 400, 656};
-    constexpr int32_t kNodeColumnWidth = 220;
-    for (int32_t index = 0; index < 2; ++index) {
-        lv_obj_t* link = lv_obj_create(tile);
-        make_static(link);
-        lv_obj_remove_style_all(link);
-        lv_obj_set_pos(link, kNodeCenterX[index] + 7, kNodeY + 6);
-        lv_obj_set_size(link, kNodeCenterX[index + 1] - kNodeCenterX[index] - 14, 2);
-        lv_obj_set_style_bg_color(link, lv_color_hex(0x526269), 0);
-        lv_obj_set_style_bg_opa(link, LV_OPA_COVER, 0);
-    }
-
-    g_tiles.network_device_dot = create_status_dot(tile, kNodeCenterX[0] - 7, kNodeY, 14);
-    g_tiles.network_gateway_dot = create_status_dot(tile, kNodeCenterX[1] - 7, kNodeY, 14);
-    g_tiles.network_dns_dot = create_status_dot(tile, kNodeCenterX[2] - 7, kNodeY, 14);
-    lv_obj_t* device_title = add_label(tile, "DEVICE", kNodeCenterX[0] - 110, 336,
-                                       &lv_font_montserrat_14, lv_color_hex(0x78848b));
-    lv_obj_t* gateway_title = add_label(tile, "GATEWAY", kNodeCenterX[1] - 110, 336,
-                                        &lv_font_montserrat_14, lv_color_hex(0x78848b));
-    lv_obj_t* dns_title = add_label(tile, "DNS", kNodeCenterX[2] - 110, 336,
-                                    &lv_font_montserrat_14, lv_color_hex(0x78848b));
-    lv_obj_t* node_titles[] = {device_title, gateway_title, dns_title};
-    for (lv_obj_t* title : node_titles) {
-        lv_obj_set_width(title, kNodeColumnWidth);
-        lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
-    }
-    g_tiles.network_device_value = add_label(tile, "--", kNodeCenterX[0] - 110, 387,
-                                              &lv_font_montserrat_18,
-                                              lv_color_hex(0xf4efe2));
-    g_tiles.network_device_mac = add_label(tile, "--", kNodeCenterX[0] - 110, 416,
-                                            &lv_font_montserrat_14,
-                                            lv_color_hex(0x9aa6ac));
-    g_tiles.network_gateway = add_label(tile, "--", kNodeCenterX[1] - 110, 387,
-                                         &lv_font_montserrat_18,
-                                         lv_color_hex(0xf4efe2));
-    g_tiles.network_dns = add_label(tile, "--", kNodeCenterX[2] - 110, 387,
-                                     &lv_font_montserrat_18,
-                                     lv_color_hex(0xf4efe2));
-    lv_obj_t* node_values[] = {
-        g_tiles.network_device_value,
-        g_tiles.network_device_mac,
-        g_tiles.network_gateway,
-        g_tiles.network_dns,
-    };
-    for (lv_obj_t* value : node_values) {
-        lv_obj_set_width(value, kNodeColumnWidth);
-        lv_obj_set_style_text_align(value, LV_TEXT_ALIGN_CENTER, 0);
-    }
-    lv_label_set_long_mode(g_tiles.network_dns, LV_LABEL_LONG_MODE_DOTS);
+    // --- Bottom row: "IP | MAC" on one line, centered on the ring (x=400) ---
+    // Flex row 容器：IP / 竖线 / MAC 三个 label，内容整体水平居中于圆环中心。
+    // 文本长度变化（IP 位数不同）时 flex 自动重新居中，无需手动算坐标。
+    lv_obj_t* ipmac_row = lv_obj_create(tile);
+    make_static(ipmac_row);
+    lv_obj_remove_style_all(ipmac_row);
+    lv_obj_set_pos(ipmac_row, 0, 372);
+    lv_obj_set_size(ipmac_row, kUiWidth, 36);
+    lv_obj_set_flex_flow(ipmac_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(ipmac_row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(ipmac_row, 10, 0);
+    g_tiles.network_device_value = add_label(ipmac_row, "--", 0, 0,
+                                             &lv_font_montserrat_18,
+                                             lv_color_hex(0xf4efe2));
+    lv_obj_t* ipmac_sep = add_label(ipmac_row, "|", 0, 0,
+                                    &lv_font_montserrat_18,
+                                    lv_color_hex(0x526269));
+    g_tiles.network_device_mac = add_label(ipmac_row, "--", 0, 0,
+                                           &lv_font_montserrat_18,
+                                           lv_color_hex(0x9aa6ac));
 
     // --- Throughput block: vertical DOWN/UP rates in the left blank area ---
     constexpr int32_t kTrafficX = 100;
@@ -3685,11 +3646,6 @@ void refresh_clock_cb(lv_timer_t*) {
     }
 
     sync_process_timezone();
-    bool dirty = false;
-    dirty |= set_label(g_tiles.clock_time_label, current_time_text("%H:%M:%S"));
-    if (dirty) {
-        g_page_cache_dirty[0] = true;
-    }
 }
 
 bool update_height_card(const HeightCardModel& card) {
@@ -3742,6 +3698,7 @@ uint32_t apply_ui_model(const UiModel& model) {
     dirty |= set_label(g_tiles.bitcoin_block_date_title, "Block Time");
     dirty |= set_label(g_tiles.bitcoin_block_date, model.bitcoin.block_date);
     dirty |= set_label(g_tiles.bitcoin_block_time, model.bitcoin.block_time);
+    dirty |= set_label(g_tiles.clock_time_label, model.system.uptime);
     if (dirty) {
         dirty_mask |= page_dirty_bit(0);
     }
@@ -3771,7 +3728,6 @@ uint32_t apply_ui_model(const UiModel& model) {
     dirty |= set_bar(g_tiles.system_swap_fill, g_tiles.system_swap_pct, model.system.swap_value,
                      model.system.swap_pct_text);
     dirty |= set_label(g_tiles.system_swap_detail, model.system.swap_detail);
-    dirty |= set_label(g_tiles.system_uptime, model.system.uptime);
     if (dirty) {
         dirty_mask |= page_dirty_bit(2);
     }
@@ -3794,21 +3750,6 @@ uint32_t apply_ui_model(const UiModel& model) {
                                           model.network.timezone_offset;
     dirty |= set_label(g_tiles.network_device_value, model.network.ip);
     dirty |= set_label(g_tiles.network_device_mac, model.network.mac);
-    dirty |= set_label(g_tiles.network_gateway, model.network.gateway);
-    dirty |= set_label(g_tiles.network_dns, model.network.dns);
-    lv_obj_t* network_dots[] = {
-        g_tiles.network_device_dot,
-        g_tiles.network_gateway_dot,
-        g_tiles.network_dns_dot,
-    };
-    const bool network_states[] = {
-        model.network.device_up,
-        model.network.gateway_up,
-        model.network.dns_up,
-    };
-    for (size_t index = 0; index < 3; ++index) {
-        dirty |= set_network_status_dot(network_dots[index], network_states[index]);
-    }
     // TRAFFIC: down/up throughput
     const bool has_rx = model.network.net_rx_display != "--" && !model.network.net_rx_display.empty();
     const bool has_tx = model.network.net_tx_display != "--" && !model.network.net_tx_display.empty();
