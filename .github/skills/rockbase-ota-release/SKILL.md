@@ -79,6 +79,19 @@ description: 用于把现成的 Rockbase OTA 包发布到公开 GitHub Releases 
 6. 发布前先本地验签：
    - `openssl dgst -sha256 -verify <(openssl pkey -in "$PRIVATE_KEY" -pubout) -signature "$PKG_DIR/slot-$VERSION.img.gz.sig" "$PKG_DIR/slot-$VERSION.img.gz"`
    - `sha256sum` 必须和 `manifest.json` 里的值一致。
+   - **镜像内二进制含新代码校验（2026-09-28 实锤的坑，必做）**：如果本次发布包含
+     local 包（如 `rockbase_lcdui`）的改动，必须从 `SLOT_IMG` 抽出对应二进制，
+     用 `strings` 验证含本次改动的关键标记，防止把旧二进制打进 OTA：
+     ```bash
+     /sbin/debugfs -R 'cat /usr/bin/rockbase-lcdui' "$SLOT_IMG" 2>/dev/null > /tmp/verify-lcdui.bin
+     # 旧代码标记应已消失（示例：删掉了 GATEWAY/DEVICE/DNS 列头）
+     strings /tmp/verify-lcdui.bin | grep -cE '^(GATEWAY|DEVICE|DNS)$'   # 期望 0
+     # 新代码标记应存在（换成本次改动的独特字符串）
+     strings /tmp/verify-lcdui.bin | grep -c '<新代码独特字符串>'          # 期望 >0
+     ```
+     校验不过就停止发布，回 `rockbase-build` skill 的 **local 包漏编陷阱** 章节
+     强制重编后再打包。注意：镜像 `release_version` 版本号正确**不代表**二进制是新的
+     （VERSION 文件走 genimage 路径，与包编译无关），必须 strings 验证二进制本身。
 7. 如果包不存在、已过期，或 `manifest` 指向了错误仓库，就重新生成：
    - `tools/mk-ota-package.sh --version "$VERSION" --key "$PRIVATE_KEY" --slot-img "$SLOT_IMG" --base-url "https://github.com/$RELEASE_REPO/releases/download/$VERSION" --min-version v0.0.01 --notes-file "$RELEASE_WORKDIR/release-packages/$VERSION/RELEASE_NOTES.md" --out-dir "$PKG_DIR"`
    - `--notes-file` 会将 RELEASE_NOTES.md 内容嵌入 `manifest.json` 的 `notes` 字段，

@@ -118,7 +118,7 @@ echo "=== build log 末尾 ==="; tail -15 /tmp/rockbase-build.log
 | 默认非 seed | 除非用户明确说"带 seed 镜像"，否则永远构建非 seed 最小镜像 |
 | 全量编译 | 清理所有编译产物（保留工具链和 `.config`），完全重新编译；详见下方 **全量编译** 章节 |
 | 完整镜像 | 带 seed 的镜像（`K230_BLOCKDATA_SIZE=20G` + 真实 seed 数据）；详见 `rockbase-seed` skill |
-| LVGL UI 重建 | local 包源码改动后顶层 `make buildroot` 会自动 rsync 检测并重编（已根治）；仍可手动 `<pkg>-rebuild` 强制重建 |
+| LVGL UI 重建 | local 包源码改动后**必须先 `make <pkg>-rebuild` 再 `make buildroot`**（rsync 钩子删 stamp 与 make 依赖解析存在时机竞态，单次增量构建可能漏编，见下方 **local 包漏编陷阱** 章节）；构建后必须验证 target 二进制含新代码 |
 | 镜像导出 | 按运行环境自适应：WSL 自动导出到 `/mnt/d/code/pony/IoT/k230/img/`；纯 Linux 物理机不导出、镜像保留在 `output/<CONF>/images/`；显式设 `K230_IMAGE_OUT_DIR` 时任何环境都导出到该目录 |
 | 构建前准备 | 非 seed 构建需要 `mkdir -p /tmp/rockbase-empty-seed` |
 | 并行编译 | 所有编译（全量/增量）必须显式多核并行：make 命令追加 `-j$(nproc)`；详见下方 **并行编译（强制）** 章节 |
@@ -140,11 +140,55 @@ echo "=== build log 末尾 ==="; tail -15 /tmp/rockbase-build.log
 | `buildroot-overlay/` 顶层/非包目录文件**内容**修改（`package/pkg-generic.mk`、`package/Config.in`、`support/` 等） | `make sync` | `.overlay_sync` 只对文件名增删敏感，内容修改不重跑 rsync |
 | `rootfs_overlay/` 下文件**内容**修改（如 `root/web/app.js`、脚本、配置） | `make sync` | 同上，`.overlay_sync` 对内容修改不敏感 |
 | `rootfs_overlay/` 下文件**新增/删除** | 无需额外动作 | 文件名列表变化会触发 `.overlay_sync` 自动 rsync |
-| local 包源码（`package/<pkg>/src/`，如 `rockbase_lcdui`） | 无需额外动作 | 已根治：顶层 `make buildroot` 自动 rsync 检测变化并重编 |
+| local 包源码（`package/<pkg>/src/`，如 `rockbase_lcdui`） | **先 `make CONF=... <pkg>-rebuild -j$(nproc)`，再 `make buildroot`** | rsync 钩子删 stamp 与 make 依赖解析存在时机竞态，单次增量构建可能漏编（见下方 **local 包漏编陷阱** 章节） |
 | 手动 `rm` 过 `output/.../target/` 里的包文件 | 对应包 `<pkg>-dirclean` | Buildroot 依据 install stamp 判断已装，不会重装 |
 | defconfig 大幅变更 / 怀疑产物不一致 | `make CONF=... clean`（或 `rm -rf output/<CONF>/`） | 全量重建 |
 
 > 多个改动叠加时，按"最彻底"的前置动作执行即可（如既改了 kernel patch 又改了 overlay 文件，`linux-dirclean` + `make sync` 都做）。
+
+---
+
+## ⚠️ local 包漏编陷阱（rsync 钩子删 stamp 的时机竞态，2026-09-28 实锤）
+
+> **现象**：改了 local 包（`rockbase_lcdui` 等）源码，跑增量 `make buildroot`，
+> 日志里 rsync 钩子明明报了 `>>> ROCKBASE_LCDUI: source changed, forcing rebuild`
+> 并删了 `.stamp_built`，但**本次构建没有 build 步骤**（`build-time.log` 只有
+> `rsync → install-target`），install 把**上一次编译的旧二进制**拷进 target 打进镜像。
+> 更隐蔽的是：如果同一次构建还改了 `VERSION` 文件，镜像 `release_version` 会正确
+> 显示新版本号，**掩盖了二进制是旧的事实**——直到真机升级后才发现改动没生效。
+
+**根因**：`pkg-generic.mk` 的 `.stamp_rsynced` 是 `FORCE`（每次必跑），rsync 检测到
+源码变化就 `rm .stamp_built` 来"强制重建"。但 GNU make 在**启动时**就解析好依赖图、
+决定了哪些目标要 build；FORCE 钩子是**执行阶段**才删 stamp——此时 make 已决定本次
+不 build，删 stamp 对当次运行无效，要到**下一次** make 运行才会真正重编。
+
+**标准做法（local 包源码改动后）**：
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+# 1) 先强制重编该包（独立于 buildroot 主流程，确保真编译）
+make CONF=k230_rockbase_defconfig rockbase_lcdui-rebuild -j$(nproc)
+# 2) 再跑主构建（rsync 同步 + install 新二进制 + 打镜像）
+make CONF=k230_rockbase_defconfig buildroot -j$(nproc) \
+  BLOCK_SEED_DIR=/tmp/rockbase-empty-seed K230_BLOCKDATA_SIZE=256M K230_IMAGE_GZIP=0
+```
+
+**构建后必须验证二进制含新代码**（不能只看"构建成功"或版本号）：
+
+```bash
+# 用本次改动的关键字符串标记验证 target 二进制（示例：删掉了 GATEWAY 列头）
+strings output/k230_rockbase_defconfig/target/usr/bin/rockbase-lcdui | grep -cE '^(GATEWAY|DEVICE|DNS)$'
+# 期望 0（旧标记已消失）；非 0 = 旧二进制，构建漏编，停止发布
+# 也可反向验证新代码标记存在：
+strings output/k230_rockbase_defconfig/target/usr/bin/rockbase-lcdui | grep -c '<新代码里的独特字符串>'
+```
+
+**判断是否真重编**：数 `build-time.log` 里该包的 `start:build` 行 + 比
+`build/<pkg>/<binary>` 与 `target/usr/bin/<binary>` 的 md5，别只看 "Building" 字样。
+
+**教训**：热部署（scp 到板子）永远能验证 UI 改动，但"改源码→增量构建→打 OTA→发布"
+这条全链路第一次走时暴露了增量构建漏编 local 包的问题。凡是**要发布 OTA** 的构建，
+打包前必须做上面的 strings 验证（`rockbase-ota-release` skill 也有对应发布前校验）。
 
 ---
 
