@@ -79,6 +79,7 @@ display_buffer* g_buffer = nullptr;
 display_buffer* g_display_buffers[3] {};
 uint32_t g_render_buffer_index = 0;
 uint32_t g_last_present_ms = 0;
+bool g_present_pending = false;
 int g_backlight_fd = -1;
 void* g_lv_draw_buf = nullptr;
 
@@ -950,6 +951,8 @@ void process_deferred_refreshes_if_idle() {
 int present_display_buffer() {
     const uint32_t now_ms = tick_ms();
     if (g_last_present_ms != 0 && now_ms - g_last_present_ms < kPresentIntervalMs) {
+        // Rate-limited frame must still reach the screen (e.g. the last frame after an overlay closes).
+        g_present_pending = true;
         return 0;
     }
 
@@ -958,6 +961,7 @@ int present_display_buffer() {
         return -1;
     }
 
+    g_present_pending = false;
     g_last_present_ms = now_ms;
     g_render_buffer_index = (g_render_buffer_index + 1U) % 3U;
     g_buffer = g_display_buffers[g_render_buffer_index];
@@ -4143,10 +4147,18 @@ int main() {
                                     (g_touch.down || custom_present);
         uint32_t next_ms = lv_timer_handler();
         g_custom_frame_presenting = false;
+        if (g_present_pending && g_buffer != nullptr) {
+            present_display_buffer();
+        }
         // The OTA overlay has no touch interaction and can stay up for many
         // minutes; it must not force the no-sleep high-framerate mode.
         if (interacting && !g_ota_overlay.active()) {
             next_ms = 0;
+        }
+        if (g_present_pending) {
+            const uint32_t since_ms = tick_ms() - g_last_present_ms;
+            const uint32_t wait_ms = since_ms < kPresentIntervalMs ? kPresentIntervalMs - since_ms : 0;
+            next_ms = std::min(next_ms, wait_ms);
         }
         uint32_t sleep_us = next_ms * 1000U;
         if (sleep_us < kMinLvSleepUs) {
