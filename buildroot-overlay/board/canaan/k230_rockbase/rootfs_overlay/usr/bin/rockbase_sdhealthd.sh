@@ -23,6 +23,11 @@ JSON_FILE=${ROCKBASE_SDHEALTH_JSON:-/tmp/sdhealth.json}
 LOG_FILE=${ROCKBASE_SDHEALTH_LOG:-/run/rockbase-log/sdhealth.log}
 LOG_MAX_KB=${ROCKBASE_SDHEALTH_LOG_MAX_KB:-128}
 
+# Boards have no RTC: wall clock starts at 1970 and jumps forward on the NTP
+# one-shot sync. Wall-clock values recorded before that sync are garbage, so
+# only trust the clock once it is past this sanity threshold (2020-01-01 UTC).
+CLOCK_TRUST_EPOCH=1577836800
+
 # I/O error patterns scanned from dmesg (incremental via kernel timestamp).
 ERR_PATTERN='I/O error|buffer I/O error|blk_update_request.*error|EXT4-fs error|end_request.*I/O error'
 
@@ -278,7 +283,9 @@ sample() {
     last_ms_writing=$ms_writing
     last_sample_epoch=$now
     last_uptime_sec=$uptime
-    [ "$first_install_epoch" -eq 0 ] && first_install_epoch=$now
+    # Re-seed until the clock is trustworthy: a pre-NTP sample would otherwise
+    # pin the baseline to a 1970 epoch and "since" would show 1970-01-01 forever.
+    [ "$first_install_epoch" -lt "$CLOCK_TRUST_EPOCH" ] && first_install_epoch=$now
 
     write_state
 }
@@ -292,10 +299,16 @@ compute_health() {
     # Display value: wall-clock span since tracking started, so it matches the
     # "since <date>" shown next to it. A board powered off for days still shows
     # the real elapsed monitoring time instead of a misleading low uptime figure.
-    _now=$(now_epoch)
-    _span=$(( _now - first_install_epoch ))
-    [ "$_span" -lt 0 ] && _span=0
-    uptime_days_display=$(awk -v s="$_span" 'BEGIN{printf "%.1f", s/86400}')
+    # If the baseline was never seeded with a trustworthy clock, fall back to
+    # cumulative powered-on time instead of a bogus multi-decade span.
+    if [ "$first_install_epoch" -ge "$CLOCK_TRUST_EPOCH" ]; then
+        _now=$(now_epoch)
+        _span=$(( _now - first_install_epoch ))
+        [ "$_span" -lt 0 ] && _span=0
+        uptime_days_display=$(awk -v s="$_span" 'BEGIN{printf "%.1f", s/86400}')
+    else
+        uptime_days_display=$(awk -v s="$total_uptime_sec" 'BEGIN{printf "%.1f", s/86400}')
+    fi
 
     status="healthy"
     verdict="healthy"
@@ -343,8 +356,9 @@ render_json() {
     }')
     [ -n "$card_date" ] || card_date="-"
     # Baseline start: when this sampler first installed / started recording.
+    # Only shown once seeded with a trustworthy (post-NTP) clock.
     baseline_since="-"
-    [ "$first_install_epoch" -gt 0 ] && baseline_since=$(epoch_to_date "$first_install_epoch")
+    [ "$first_install_epoch" -ge "$CLOCK_TRUST_EPOCH" ] && baseline_since=$(epoch_to_date "$first_install_epoch")
 
     total_written_display=$(bytes_display "$total_written_bytes")
     total_read_display=$(bytes_display "$((total_read_sectors * 512))")
