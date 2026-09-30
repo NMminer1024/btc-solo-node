@@ -13,7 +13,7 @@ INCS += -I$(STAGING_DIR)/usr/include/drm
 LIBPATH += -L$(STAGING_DIR)/usr/lib
 LIBS += -llvgl -ldisplay -ldrm -lpthread -lm
 
-SRCS := $(wildcard *.cpp)
+SRCS := $(wildcard *.cpp) $(wildcard core/*.cpp)
 OBJS := $(SRCS:.cpp=.o)
 
 # DSEG7 digital-tube fonts: generated C files (see font/gen_dseg7_fonts.py).
@@ -24,7 +24,7 @@ FONT_OBJS := $(FONT_SRCS:.c=.o)
 
 all: $(BIN) $(CALIB) $(DEBUG_TOOLS)
 
-$(OBJS): %.o: %.cpp *.h
+$(OBJS): %.o: %.cpp *.h core/*.h
 	$(CXX) -c $(CXXFLAGS) $< -o $@ $(INCS)
 
 $(FONT_OBJS): font/%.o: font/%.c

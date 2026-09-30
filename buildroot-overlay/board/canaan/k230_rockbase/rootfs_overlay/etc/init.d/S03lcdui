@@ -14,7 +14,7 @@ if [ -r /etc/TZ ]; then
 	# 时区名 -> POSIX TZ（启动时导出给 lcdui 进程）。
 	# 注意：新增/删除时区时，必须与
 	#   package/rockbase_lcdui/src/timezone_overlay.h 的 kZones[]、
-	#   以及 src/main.cpp 的 timezone_posix_spec() 保持同步。
+	#   以及 src/core/dashboard_data.cpp 的 timezone_posix_spec() 保持同步。
 	case "${TZ}" in
 		""|UTC|UTC0|Etc/UTC) TZ="UTC0" ;;
 		CST-8|Asia/Shanghai) TZ="CST-8" ;;

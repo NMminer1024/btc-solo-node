@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "core/dashboard_data.h"
 #include "lvgl/lvgl.h"
 
 // Full-screen peer map overlay (distinct from the card-style ModalOverlay
@@ -21,18 +22,9 @@
 //     (tools/gen_world_map_image.py, same projection as the web map).
 class PeerMapOverlay {
 public:
-    struct Geo {
-        double lat = 0.0;
-        double lon = 0.0;
-        std::string city;
-        std::string country;
-        bool known = false;
-
-        bool operator==(const Geo& o) const {
-            return lat == o.lat && lon == o.lon && city == o.city &&
-                   country == o.country && known == o.known;
-        }
-    };
+    // Data type lives in core/dashboard_data.h (LVGL-free, host-testable);
+    // the alias keeps existing call sites (PeerMapOverlay::Geo) valid.
+    using Geo = lcdui::PeerGeo;
 
     void open(const std::vector<std::string>& peer_ips, const Geo& self_geo,
               const std::map<std::string, bool>& inbound = {});
