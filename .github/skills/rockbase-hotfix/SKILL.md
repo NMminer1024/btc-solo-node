@@ -43,6 +43,15 @@ scp -p <local_file> root@192.168.124.X:<target_path>
 ssh root@192.168.124.X '<验证命令>'
 ```
 
+#### ⚠️ 重启 rockbase-lcdui 必须走 init 脚本（2026-09-30 踩坑固化）
+
+`S03lcdui` 是一次性 init 脚本，**supervisord 不守护 lcdui**。裸 `kill $(pidof rockbase-lcdui)`
+后进程不会被任何机制拉起 → **屏幕全黑**（批量部署时 6 台全黑）。
+
+- 替换二进制后用 `/etc/init.d/S03lcdui restart`（自带 pidfile + is_running 检查，可安全重复执行）
+- 或 kill 后立即 `S03lcdui start`，并确认 `ps -eo pid,ppid,args | grep rockbase-lcdui`
+  有 ppid=1 的进程才算恢复
+
 #### ⚠️ 部署脚本/守护进程后必查清单（2026-09-24 踩坑固化）
 
 1. **执行权限丢失**：`scp`（不带 `-p`）覆盖脚本后权限会变 `-rw-r--r--`，init.d `start` 报 `Permission denied` 但**不显示**（被 `>/dev/null 2>&1` 吞掉），daemon 静默起不来。
