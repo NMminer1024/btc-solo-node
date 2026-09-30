@@ -116,22 +116,30 @@ void MinersOverlay::rebuild() {
 
         lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
 
+        // Offline miners are rendered in muted grays (name / hashrate /
+        // metric line) so a wallet that has not reported shares for days
+        // is distinguishable from a live one at a glance. Online rows keep
+        // the bright name + amber hashrate treatment.
+        const uint32_t addr_color = miner.online ? 0xf4efe2 : 0x8c9aa1;
+        const uint32_t hash_color = miner.online ? 0xf0b44c : 0x68757c;
+        const uint32_t metric_color = miner.online ? 0x9fb1b9 : 0x5c6a72;
+
         const std::string address_text = compact_address(miner.address);
-        lv_obj_t* addr = add_text(card, address_text.c_str(), 40, 12, &lv_font_montserrat_22, 0xf4efe2);
+        lv_obj_t* addr = add_text(card, address_text.c_str(), 40, 12, &lv_font_montserrat_22, addr_color);
         lv_obj_set_width(addr, 330);
         lv_label_set_long_mode(addr, LV_LABEL_LONG_MODE_DOTS);
 
-        lv_obj_t* hash = add_text(card, miner.hashrate_5m.c_str(), 386, 26, &lv_font_montserrat_36, 0xf0b44c);
+        lv_obj_t* hash = add_text(card, miner.hashrate_5m.c_str(), 386, 26, &lv_font_montserrat_36, hash_color);
         lv_obj_set_width(hash, 290);
         lv_obj_set_style_text_align(hash, LV_TEXT_ALIGN_RIGHT, 0);
 
         const std::string workers = metric_line("Workers ", std::to_string(std::max(0, miner.workers)));
-        add_text(card, workers.c_str(), 40, 42, &lv_font_montserrat_16, 0x9fb1b9);
+        add_text(card, workers.c_str(), 40, 42, &lv_font_montserrat_16, metric_color);
 
         const std::string last_share = metric_line("Last ", miner.last_share_ago.empty() ? std::string("-") : miner.last_share_ago);
-        add_text(card, last_share.c_str(), 154, 42, &lv_font_montserrat_16, 0x9fb1b9);
+        add_text(card, last_share.c_str(), 154, 42, &lv_font_montserrat_16, metric_color);
 
         const std::string best_share = metric_line("Best ", miner.best_share.empty() ? std::string("--") : miner.best_share);
-        add_text(card, best_share.c_str(), 296, 42, &lv_font_montserrat_16, 0x9fb1b9);
+        add_text(card, best_share.c_str(), 296, 42, &lv_font_montserrat_16, metric_color);
     }
 }

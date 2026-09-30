@@ -1730,6 +1730,19 @@ html[data-theme="light"] .miners-history-grid {
   color: var(--muted);
 }
 
+/* Offline miners render in muted gray across every cell (matches the LCD
+   miners overlay): without these overrides the accent/yellow cells and the
+   address link below keep their colored look and offline rows stay bright. */
+.data-table .row-offline td,
+.data-table .row-offline td.cell-accent,
+.data-table .row-offline td.cell-yellow {
+  color: var(--muted);
+}
+
+.data-table .row-offline .addr-link {
+  color: var(--muted);
+}
+
 .miner-row {
   cursor: pointer;
 }
