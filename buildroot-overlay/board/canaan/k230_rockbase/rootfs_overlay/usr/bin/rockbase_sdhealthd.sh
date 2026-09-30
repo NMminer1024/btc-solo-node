@@ -31,6 +31,20 @@ CLOCK_TRUST_EPOCH=1577836800
 # I/O error patterns scanned from dmesg (incremental via kernel timestamp).
 ERR_PATTERN='I/O error|buffer I/O error|blk_update_request.*error|EXT4-fs error|end_request.*I/O error'
 
+# ---- A-scheme verdict inputs (override per-deployment via env) ----
+# Lifetime (L1) thresholds on CUMULATIVE written bytes. These are the only
+# wear-based signals: a card only degrades/criticals once it has genuinely
+# absorbed a lot of writes. Conservative defaults for 32-64GB node cards.
+TBW_DEGRADED_GB=${ROCKBASE_SD_TBW_DEGRADED_GB:-500}
+TBW_CRITICAL_GB=${ROCKBASE_SD_TBW_CRITICAL_GB:-2000}
+# Rolling window (powered-on seconds) used for BOTH the I/O-error recency
+# window and the peak-wbusy decay. Errors/spikes older than this stop counting,
+# so the card can recover to healthy (no permanent ratchet).
+WINDOW_SEC=${ROCKBASE_SD_WINDOW_SEC:-86400}
+# Observation period: below this powered-on runtime we only "monitor" and do
+# not declare degraded/critical (except on hard I/O errors).
+OBSERVATION_SEC=${ROCKBASE_SD_OBSERVATION_SEC:-$((7 * 86400))}
+
 # ---------- helpers ----------
 
 now_epoch() {
@@ -153,6 +167,9 @@ load_state() {
     io_err_count=0
     io_err_marker=0
     peak_wbusy=0
+    peak_wbusy_uptime=0
+    io_err_window_start_count=0
+    io_err_window_start_uptime=0
     first_install_epoch=0
     [ -r "$STATE_FILE" ] && . "$STATE_FILE" 2>/dev/null || true
 }
@@ -172,6 +189,9 @@ write_state() {
         echo "io_err_count=$io_err_count"
         echo "io_err_marker=$io_err_marker"
         echo "peak_wbusy=$peak_wbusy"
+        echo "peak_wbusy_uptime=$peak_wbusy_uptime"
+        echo "io_err_window_start_count=$io_err_window_start_count"
+        echo "io_err_window_start_uptime=$io_err_window_start_uptime"
         echo "first_install_epoch=$first_install_epoch"
     } > "$tmp" 2>/dev/null && mv "$tmp" "$STATE_FILE" 2>/dev/null
 }
@@ -268,7 +288,20 @@ sample() {
             write_rate_bps=$(awk -v dw="$dw" -v w="$window" 'BEGIN{if(w>0)printf "%.0f", dw*512/w; else print 0}')
         fi
     fi
-    [ "$wbusy" -gt "$peak_wbusy" ] && peak_wbusy=$wbusy
+
+    # Peak wbusy is now a ROLLING 24h value (informational only — it no longer
+    # drives status/score). Reset it once the recorded peak is older than the
+    # window so a single transient spike can no longer lock the card
+    # "degraded" forever (the old permanent ratchet was the main false-positive
+    # source). total_uptime_sec is monotonic (immune to NTP jumps).
+    if [ "$total_uptime_sec" -ge $((peak_wbusy_uptime + WINDOW_SEC)) ]; then
+        peak_wbusy=0
+        peak_wbusy_uptime=$total_uptime_sec
+    fi
+    if [ "$wbusy" -gt "$peak_wbusy" ]; then
+        peak_wbusy=$wbusy
+        peak_wbusy_uptime=$total_uptime_sec
+    fi
 
     # Dirty / Writeback (write-back pressure).
     dirty_kb=$(awk '/^Dirty:/{print $2}' /proc/meminfo 2>/dev/null)
@@ -276,6 +309,14 @@ sample() {
 
     # I/O error scan (incremental).
     scan_io_errors
+
+    # Roll the 24h I/O-error recency window forward (powered-on seconds). The
+    # verdict uses errors within this window, so a single long-ago transient
+    # error stops counting after 24h and the card can recover to healthy.
+    if [ "$total_uptime_sec" -ge $((io_err_window_start_uptime + WINDOW_SEC)) ]; then
+        io_err_window_start_count=$io_err_count
+        io_err_window_start_uptime=$total_uptime_sec
+    fi
 
     # Persist current sample as the new "last".
     last_written_sectors=$w_sectors
@@ -310,31 +351,45 @@ compute_health() {
         uptime_days_display=$(awk -v s="$total_uptime_sec" 'BEGIN{printf "%.1f", s/86400}')
     fi
 
+    tbw_degraded_bytes=$((TBW_DEGRADED_GB * 1000000000))
+    tbw_critical_bytes=$((TBW_CRITICAL_GB * 1000000000))
+
+    # I/O errors occurring within the rolling window (ongoing failure signal).
+    io_err_recent=$((io_err_count - io_err_window_start_count))
+    [ "$io_err_recent" -lt 0 ] && io_err_recent=0
+
     status="healthy"
     verdict="healthy"
 
-    if [ "$io_err_count" -gt 0 ]; then
+    # Hard evidence 1: I/O errors happening RECENTLY (within the window).
+    # A single long-ago transient error no longer pins the card critical.
+    if [ "$io_err_recent" -gt 0 ]; then
         status="critical"
         verdict="sd_card_suspect"
-    elif [ "$peak_wbusy" -ge 90 ]; then
+    # Hard evidence 2: cumulative wear (L1) crossing lifetime thresholds.
+    # This is the only true lifetime signal and only trips on real, large
+    # accumulated writes — never on transient I/O pressure.
+    elif [ "$total_written_bytes" -ge "$tbw_critical_bytes" ]; then
+        status="critical"
+        verdict="wear_out"
+    elif [ "$total_written_bytes" -ge "$tbw_degraded_bytes" ]; then
         status="degraded"
+        verdict="wear_warning"
     fi
 
-    # Insufficient data: too early / too little evidence to call it.
-    if [ "$uptime_days" -lt 1 ] && [ "$total_written_bytes" -lt 1073741824 ]; then
+    # Observation period: not enough powered-on runtime to judge -> keep
+    # healthy and mark monitoring (frontend renders status=healthy +
+    # insufficient_data as "Monitoring"). Never overrides a hard
+    # critical/degraded decided above.
+    if [ "$status" = "healthy" ] && [ "$total_uptime_sec" -lt "$OBSERVATION_SEC" ]; then
         verdict="insufficient_data"
     fi
 
     score=100
-    if [ "$io_err_count" -gt 0 ]; then
-        score=40
-    elif [ "$peak_wbusy" -ge 95 ]; then
-        score=60
-    elif [ "$peak_wbusy" -ge 90 ]; then
-        score=75
-    elif [ "$peak_wbusy" -ge 70 ]; then
-        score=85
-    fi
+    case "$status" in
+        critical) score=40 ;;
+        degraded) score=70 ;;
+    esac
 }
 
 # ---------- render ----------
@@ -407,6 +462,7 @@ EOF
         printf '  "peak_wbusy_pct": %s,\n' "$(json_num "$peak_wbusy")"
         printf '  "dirty_kb": %s,\n' "$(json_num "$dirty_kb")"
         printf '  "io_errors": %s,\n' "$(json_num "$io_err_count")"
+        printf '  "io_errors_recent": %s,\n' "$(json_num "$io_err_recent")"
         printf '  "uptime_days": %s,\n' "$(json_num "$uptime_days")"
         printf '  "uptime_days_display": %s,\n' "$(json_str "$uptime_days_display")"
         printf '  "recent_events": %s\n' "$recent_json"

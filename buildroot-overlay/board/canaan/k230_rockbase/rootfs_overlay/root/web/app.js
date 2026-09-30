@@ -265,7 +265,7 @@
 
     setText("sdHealthCard", sd.cardDate && sd.cardDate !== "--" ? sd.card + " (" + sd.cardDate + ")" : sd.card);
     setText("sdHealthWritten", sd.totalWritten + " \u00b7 " + sd.writeRate);
-    setText("sdHealthIoErrors", String(sd.ioErrors) + " \u00b7 " + t("sdhealth.peakWbusy") + " " + (sd.peakWbusy > 0 ? sd.peakWbusy + "%" : "--"));
+    setText("sdHealthIoErrors", String(sd.ioErrors));
     setText("sdHealthTracking", t("sdhealth.since") + " " + sd.since + " (" + sd.uptimeDays + " " + t("sdhealth.days") + ")");
 
     if (eventsEl) {
@@ -790,7 +790,6 @@
       totalWritten: toText(sh.total_written_display, "--"),
       writeRate: toText(sh.write_rate_day_display, "--"),
       ioErrors: toNumber(sh.io_errors, 0),
-      peakWbusy: toNumber(sh.peak_wbusy_pct, 0),
       uptimeDays: toText(sh.uptime_days_display, String(toNumber(sh.uptime_days, 0))),
       recentEvents: Array.isArray(sh.recent_events) ? sh.recent_events : []
     };
