@@ -2697,13 +2697,13 @@ bool update_stratum_chart(const StratumPageModel& model) {
         lv_point_t unit_size {};
         lv_text_get_size(&unit_size, lv_label_get_text(g_tiles.stratum_total_hashrate_unit),
                          &lv_font_montserrat_16, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-        // 小数部分：与整数部分同字体（MID -9：unit 下移 4px 后保持数值位置不变）。
+        // 小数部分：与整数部分同字体（MID -7：unit 上移 2px 后保持数值位置不变）。
         lv_obj_align_to(g_tiles.stratum_total_hashrate_frac, g_tiles.stratum_total_hashrate_unit,
-                        LV_ALIGN_OUT_LEFT_MID, 72 - unit_size.x - 4, -9);
+                        LV_ALIGN_OUT_LEFT_MID, 72 - unit_size.x - 4, -7);
         if (lv_obj_has_flag(g_tiles.stratum_total_hashrate_dot, LV_OBJ_FLAG_HIDDEN)) {
             // 无小数：整数部分右边缘直接贴单位左侧 4px。
             lv_obj_align_to(g_tiles.stratum_total_hashrate, g_tiles.stratum_total_hashrate_unit,
-                            LV_ALIGN_OUT_LEFT_MID, 72 - unit_size.x - 4, -9);
+                            LV_ALIGN_OUT_LEFT_MID, 72 - unit_size.x - 4, -7);
         } else {
             // 小数点：6px 圆点，位于小数部分左侧 4px，中心下移 10px
             // （12 偏下、8 偏上，10 居中）。
@@ -3532,9 +3532,9 @@ void build_stratum_tile(lv_obj_t* tv) {
 
     // 总算力定位：unit 锚定到 chart 右上角（右端顶对齐 chart 右边缘），
     // value 紧贴 unit 左侧。chart 此时已创建，align_to 才有效。
-    // unit 相对 value 下移 4px（锚点 -4→0，value 相对 unit -5→-9），
+    // unit 相对 value 下移 2px（锚点 -4→-2，value 相对 unit -7），
     // 使 "TH/s" 底部与算力数字底部视觉对齐。
-    lv_obj_align_to(g_tiles.stratum_total_hashrate_unit, g_tiles.stratum_chart, LV_ALIGN_OUT_TOP_RIGHT, -4, 0);
+    lv_obj_align_to(g_tiles.stratum_total_hashrate_unit, g_tiles.stratum_chart, LV_ALIGN_OUT_TOP_RIGHT, -4, -2);
     lv_obj_align_to(g_tiles.stratum_total_hashrate, g_tiles.stratum_total_hashrate_unit, LV_ALIGN_OUT_LEFT_TOP, -4, -11);
 
     // Unit sits above the topmost Y tick (1.00 at y=18) so it never overlaps the
