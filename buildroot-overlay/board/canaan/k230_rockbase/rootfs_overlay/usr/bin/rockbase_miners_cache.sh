@@ -180,6 +180,20 @@ collect_once() {
         [ "$last_age" -lt 0 ] && last_age=0
         online=0
         [ "$lastshare" -gt 0 ] && [ "$last_age" -le "$OFFLINE_SECONDS" ] && online=1
+        # ckpool stops updating a miner's status file once it disconnects,
+        # so the hashrate fields freeze at the disconnect instant (e.g. an
+        # offline miner would otherwise keep showing "4.05T" for days).
+        # Report 0 for offline miners; cumulative fields (shares/bestshare)
+        # stay historical by design.
+        if [ "$online" = 1 ]; then
+          m_h1m=$(json_file_str hashrate1m "$user_file")
+          m_h5m=$(json_file_str hashrate5m "$user_file")
+          m_h1hr=$(json_file_str hashrate1hr "$user_file")
+          m_h1d=$(json_file_str hashrate1d "$user_file")
+          m_h7d=$(json_file_str hashrate7d "$user_file")
+        else
+          m_h1m=0; m_h5m=0; m_h1hr=0; m_h1d=0; m_h7d=0
+        fi
         worker_objects=$(extract_worker_objects "$user_file")
         worker_detail_count=$(printf '%s\n' "$worker_objects" | sed '/^[[:space:]]*$/d' | wc -l)
         [ -z "$worker_detail_count" ] && worker_detail_count=0
@@ -194,11 +208,11 @@ collect_once() {
         printf '      "lastshare_ago": %s,\n' "$(json_str "$(format_time_ago "$lastshare" "$now")")"
         printf '      "workers": %s,\n' "$(json_num "$(json_file_num workers "$user_file")" "$worker_detail_count")"
         printf '      "worker_detail_count": %s,\n' "$(json_num "$worker_detail_count" 0)"
-        printf '      "hashrate1m": %s,\n' "$(json_str "$(json_file_str hashrate1m "$user_file")")"
-        printf '      "hashrate5m": %s,\n' "$(json_str "$(json_file_str hashrate5m "$user_file")")"
-        printf '      "hashrate1hr": %s,\n' "$(json_str "$(json_file_str hashrate1hr "$user_file")")"
-        printf '      "hashrate1d": %s,\n' "$(json_str "$(json_file_str hashrate1d "$user_file")")"
-        printf '      "hashrate7d": %s,\n' "$(json_str "$(json_file_str hashrate7d "$user_file")")"
+        printf '      "hashrate1m": %s,\n' "$(json_str "$m_h1m")"
+        printf '      "hashrate5m": %s,\n' "$(json_str "$m_h5m")"
+        printf '      "hashrate1hr": %s,\n' "$(json_str "$m_h1hr")"
+        printf '      "hashrate1d": %s,\n' "$(json_str "$m_h1d")"
+        printf '      "hashrate7d": %s,\n' "$(json_str "$m_h7d")"
         printf '      "shares": %s,\n' "$(json_num "$(json_file_num shares "$user_file")" 0)"
         printf '      "bestshare": %s,\n' "$(json_num "$(json_file_num bestshare "$user_file")" 0)"
         printf '      "bestever": %s,\n' "$(json_num "$(json_file_num bestever "$user_file")" 0)"
@@ -215,6 +229,16 @@ collect_once() {
           [ "$w_age" -lt 0 ] && w_age=0
           w_online=0
           [ "$w_last" -gt 0 ] && [ "$w_age" -le "$OFFLINE_SECONDS" ] && w_online=1
+          # Same stale-hashrate rule as the miner level, per worker.
+          if [ "$w_online" = 1 ]; then
+            w_h1m=$(json_text_str hashrate1m "$obj")
+            w_h5m=$(json_text_str hashrate5m "$obj")
+            w_h1hr=$(json_text_str hashrate1hr "$obj")
+            w_h1d=$(json_text_str hashrate1d "$obj")
+            w_h7d=$(json_text_str hashrate7d "$obj")
+          else
+            w_h1m=0; w_h5m=0; w_h1hr=0; w_h1d=0; w_h7d=0
+          fi
           [ "${worker_first:-1}" = 1 ] || printf ',\n'
           worker_first=0
           printf '        {\n'
@@ -224,11 +248,11 @@ collect_once() {
           printf '          "lastshare": %s,\n' "$(json_num "$w_last" 0)"
           printf '          "lastshare_age_seconds": %s,\n' "$(json_num "$w_age" 0)"
           printf '          "lastshare_ago": %s,\n' "$(json_str "$(format_time_ago "$w_last" "$now")")"
-          printf '          "hashrate1m": %s,\n' "$(json_str "$(json_text_str hashrate1m "$obj")")"
-          printf '          "hashrate5m": %s,\n' "$(json_str "$(json_text_str hashrate5m "$obj")")"
-          printf '          "hashrate1hr": %s,\n' "$(json_str "$(json_text_str hashrate1hr "$obj")")"
-          printf '          "hashrate1d": %s,\n' "$(json_str "$(json_text_str hashrate1d "$obj")")"
-          printf '          "hashrate7d": %s,\n' "$(json_str "$(json_text_str hashrate7d "$obj")")"
+          printf '          "hashrate1m": %s,\n' "$(json_str "$w_h1m")"
+          printf '          "hashrate5m": %s,\n' "$(json_str "$w_h5m")"
+          printf '          "hashrate1hr": %s,\n' "$(json_str "$w_h1hr")"
+          printf '          "hashrate1d": %s,\n' "$(json_str "$w_h1d")"
+          printf '          "hashrate7d": %s,\n' "$(json_str "$w_h7d")"
           printf '          "shares": %s,\n' "$(json_num "$(json_text_num shares "$obj")" 0)"
           printf '          "bestshare": %s,\n' "$(json_num "$(json_text_num bestshare "$obj")" 0)"
           printf '          "bestever": %s\n' "$(json_num "$(json_text_num bestever "$obj")" 0)"
