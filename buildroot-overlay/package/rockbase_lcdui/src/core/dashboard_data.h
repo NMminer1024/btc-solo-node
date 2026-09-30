@@ -121,7 +121,14 @@ bool read_text_file(const char* path, std::string& out, size_t max_size = 65536)
 std::string read_product_version();
 std::string read_timezone_key();
 std::string timezone_posix_spec(const std::string& key);
-bool load_miners_chart_data(DashboardData& data);
-bool load_dashboard_data(DashboardData& data);
+// The cache paths default to the on-board locations; the host unit tests
+// pass fixture files instead. On-board behavior is unchanged.
+bool load_miners_chart_data(DashboardData& data,
+                            const char* miners_path = kMinersCachePath,
+                            const char* history_path = kMinersHistoryCachePath);
+bool load_dashboard_data(DashboardData& data,
+                         const char* status_path = kStatusCachePath,
+                         const char* miners_path = kMinersCachePath,
+                         const char* history_path = kMinersHistoryCachePath);
 
 }  // namespace lcdui

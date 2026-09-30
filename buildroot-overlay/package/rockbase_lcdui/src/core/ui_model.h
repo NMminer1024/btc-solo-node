@@ -108,6 +108,11 @@ struct UiModel {
 
 uint32_t bitcoin_stage_index(const DashboardData& data);
 HeightCardModel make_height_card_model(const DashboardData& data, const std::string& blocks);
-bool build_ui_model(UiModel& model);
+// Cache paths default to the on-board locations; the host unit tests pass
+// fixture files. On-board behavior is unchanged.
+bool build_ui_model(UiModel& model,
+                    const char* status_path = kStatusCachePath,
+                    const char* miners_path = kMinersCachePath,
+                    const char* history_path = kMinersHistoryCachePath);
 
 }  // namespace lcdui

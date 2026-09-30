@@ -44,5 +44,15 @@ touchswipe: touchswipe.c
 drmshot: drmshot.c
 	$(CC) $(CFLAGS) -O2 -s -o $@ $< -I$(STAGING_DIR)/usr/include/drm $(LIBPATH) -ldrm
 
+# Host-side unit tests for the LVGL-free core layer. Uses the host compiler
+# (never the cross toolchain) and installs nothing into the image.
+HOST_CXX ?= g++
+TEST_BIN := /tmp/rockbase-lcdui-core-test
+test:
+	$(HOST_CXX) -std=gnu++17 -Wall -Wextra -O1 -I. -o $(TEST_BIN) \
+		core/test/test_core.cpp core/dashboard_data.cpp core/format_utils.cpp \
+		core/json_parse.cpp core/ui_model.cpp
+	$(TEST_BIN) $(CURDIR)/core/test/fixtures
+
 clean:
 	rm -f $(BIN) $(CALIB) $(DEBUG_TOOLS) $(OBJS) $(FONT_OBJS)

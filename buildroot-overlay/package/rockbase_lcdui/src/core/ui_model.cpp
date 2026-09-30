@@ -71,9 +71,10 @@ HeightCardModel make_height_card_model(const DashboardData& data, const std::str
     return card;
 }
 
-bool build_ui_model(UiModel& model) {
+bool build_ui_model(UiModel& model, const char* status_path, const char* miners_path,
+                    const char* history_path) {
     DashboardData data;
-    if (!load_dashboard_data(data)) {
+    if (!load_dashboard_data(data, status_path, miners_path, history_path)) {
         model.status_available = false;
         return false;
     }

@@ -111,9 +111,10 @@ std::string timezone_posix_spec(const std::string& key) {
     return "UTC0";
 }
 
-bool load_miners_chart_data(DashboardData& data) {
+bool load_miners_chart_data(DashboardData& data, const char* miners_path,
+                            const char* history_path) {
     std::string miners_json;
-    if (!read_text_file(kMinersCachePath, miners_json, 262144)) {
+    if (!read_text_file(miners_path, miners_json, 262144)) {
         return false;
     }
 
@@ -157,7 +158,7 @@ bool load_miners_chart_data(DashboardData& data) {
     data.miners_snapshot.total_miners = static_cast<int>(data.miners_snapshot.miners.size());
 
     std::string history_json;
-    if (!read_text_file(kMinersHistoryCachePath, history_json, 262144)) {
+    if (!read_text_file(history_path, history_json, 262144)) {
         return true;
     }
 
@@ -189,9 +190,10 @@ bool load_miners_chart_data(DashboardData& data) {
     return true;
 }
 
-bool load_dashboard_data(DashboardData& data) {
+bool load_dashboard_data(DashboardData& data, const char* status_path,
+                         const char* miners_path, const char* history_path) {
     std::string json;
-    if (!read_text_file(kStatusCachePath, json)) {
+    if (!read_text_file(status_path, json)) {
         return false;
     }
 
@@ -280,7 +282,7 @@ bool load_dashboard_data(DashboardData& data) {
     data.dns_secondary = json_value(network, "dns_secondary");
     data.net_rx_display = json_value(network, "net_rx_display");
     data.net_tx_display = json_value(network, "net_tx_display");
-    load_miners_chart_data(data);
+    load_miners_chart_data(data, miners_path, history_path);
     return true;
 }
 
