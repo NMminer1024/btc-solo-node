@@ -48,7 +48,11 @@ LV_FONT_DECLARE(dseg7c700_font_32);
 #include "core/json_parse.h"
 #include "core/ui_model.h"
 
-using namespace lcdui;  // LVGL-free core data/model layer (see core/)
+// LVGL-free core data/model layer. main.cpp only orchestrates the view
+// (pager / pages / overlays / touch); all status parsing + per-page model
+// building lives in core/ (see the ARCHITECTURE note in
+// core/dashboard_data.h and run `make test` before touching it).
+using namespace lcdui;
 
 namespace {
 

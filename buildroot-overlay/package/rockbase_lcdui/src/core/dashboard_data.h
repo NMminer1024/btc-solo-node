@@ -2,7 +2,24 @@
 
 // Status data layer: reads the JSON caches written by rockbase_statusd.sh
 // and the stratum service into a flat DashboardData struct.
-// Pure standard C++ (no LVGL) so this layer can be unit-tested on the host.
+//
+// ARCHITECTURE — the core/ layer (extracted from main.cpp, 2026-09, see
+// commits e7eb8ba / a450255):
+//   data (dashboard_data)  -> JSON caches -> DashboardData
+//   model (ui_model)       -> DashboardData -> per-page UiModel
+//   shared helpers         -> json_parse / format_utils
+// Rules:
+//   - LVGL-FREE: anything in core/ must compile on the host without LVGL
+//     (that is what makes it unit-testable); view/pager/overlay/touch code
+//     stays in main.cpp and the *_overlay.* files.
+//   - TESTED: run `make test` (host g++, core/test/test_core.cpp, 300
+//     checks against real board JSON captures in core/test/fixtures/)
+//     before changing behavior here; pin new quirks as new assertions.
+//   - The load_* / build_ui_model paths default to the on-board cache
+//     locations; the host tests inject fixture paths via the same
+//     parameters — on-board behavior is unchanged.
+//   - Shared data-only types (PeerGeo / MinerInfo / MinersSnapshot) live
+//     here; the LVGL overlays alias them (PeerMapOverlay::Geo etc.).
 
 #include <cstddef>
 #include <cstdint>
