@@ -132,6 +132,8 @@ struct TileRuntime {
     lv_obj_t* stratum_legend_6h = nullptr;
     lv_obj_t* stratum_legend_1d = nullptr;
     lv_obj_t* stratum_total_hashrate = nullptr;
+    lv_obj_t* stratum_total_hashrate_dot = nullptr;
+    lv_obj_t* stratum_total_hashrate_frac = nullptr;
     lv_obj_t* stratum_total_hashrate_unit = nullptr;
     lv_obj_t* stratum_best_share_prefix = nullptr;
     lv_obj_t* stratum_best_share_value = nullptr;
@@ -1653,7 +1655,15 @@ HashrateDisplay format_hashrate_display(double value_ghs) {
     return {scaled, kUnits[unit_index]};
 }
 
-std::string format_hashrate_value(double value_ghs) {
+struct HashrateValueParts {
+    std::string int_part;
+    std::string frac_part;
+};
+
+// 数值拆成整数/小数两部分：小数点由独立的金色圆点对象渲染
+// （stratum_total_hashrate_dot），因为 DSEG7 原生小数点只有数字高度的
+// ~1/4，24px 下几乎看不清。
+HashrateValueParts format_hashrate_value_parts(double value_ghs) {
     const HashrateDisplay display = format_hashrate_display(value_ghs);
     char buf[32];
     if (display.scaled >= 100.0) {
@@ -1665,7 +1675,16 @@ std::string format_hashrate_value(double value_ghs) {
     else {
         std::snprintf(buf, sizeof(buf), "%.2f", display.scaled);
     }
-    return buf;
+    HashrateValueParts parts;
+    const std::string text = buf;
+    const size_t dot = text.find('.');
+    if (dot != std::string::npos) {
+        parts.int_part = text.substr(0, dot);
+        parts.frac_part = text.substr(dot + 1);
+    } else {
+        parts.int_part = text;
+    }
+    return parts;
 }
 
 std::string format_share_value(double value) {
@@ -2663,14 +2682,38 @@ bool update_stratum_chart(const StratumPageModel& model) {
             lv_label_set_text(g_tiles.stratum_total_hashrate, "");
             lv_label_set_text(g_tiles.stratum_total_hashrate_unit, "");
         } else {
-            lv_label_set_text(g_tiles.stratum_total_hashrate, format_hashrate_value(total_ghs).c_str());
+            const HashrateValueParts parts = format_hashrate_value_parts(total_ghs);
+            lv_label_set_text(g_tiles.stratum_total_hashrate, parts.int_part.c_str());
             lv_label_set_text(g_tiles.stratum_total_hashrate_unit, format_hashrate_display(total_ghs).unit);
+            if (!parts.frac_part.empty()) {
+                lv_label_set_text(g_tiles.stratum_total_hashrate_frac, parts.frac_part.c_str());
+                lv_obj_remove_flag(g_tiles.stratum_total_hashrate_frac, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_remove_flag(g_tiles.stratum_total_hashrate_dot, LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_add_flag(g_tiles.stratum_total_hashrate_frac, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_add_flag(g_tiles.stratum_total_hashrate_dot, LV_OBJ_FLAG_HIDDEN);
+            }
         }
         lv_point_t unit_size {};
         lv_text_get_size(&unit_size, lv_label_get_text(g_tiles.stratum_total_hashrate_unit),
                          &lv_font_montserrat_16, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-        lv_obj_align_to(g_tiles.stratum_total_hashrate, g_tiles.stratum_total_hashrate_unit,
-                        LV_ALIGN_OUT_LEFT_TOP, 72 - unit_size.x - 4, -11);
+        // 小数部分：与整数部分同字体（MID -9：unit 下移 4px 后保持数值位置不变）。
+        lv_obj_align_to(g_tiles.stratum_total_hashrate_frac, g_tiles.stratum_total_hashrate_unit,
+                        LV_ALIGN_OUT_LEFT_MID, 72 - unit_size.x - 4, -9);
+        if (lv_obj_has_flag(g_tiles.stratum_total_hashrate_dot, LV_OBJ_FLAG_HIDDEN)) {
+            // 无小数：整数部分右边缘直接贴单位左侧 4px。
+            lv_obj_align_to(g_tiles.stratum_total_hashrate, g_tiles.stratum_total_hashrate_unit,
+                            LV_ALIGN_OUT_LEFT_MID, 72 - unit_size.x - 4, -9);
+        } else {
+            // 小数点：6px 圆点，位于小数部分左侧 4px，中心下移 10px
+            // （12 偏下、8 偏上，10 居中）。
+            lv_obj_align_to(g_tiles.stratum_total_hashrate_dot, g_tiles.stratum_total_hashrate_frac,
+                            LV_ALIGN_OUT_LEFT_MID, -4, 10);
+            // 整数部分：右边缘贴小数点左侧 4px（点 6px + 两侧各 4px = 14px），
+            // 与小数部分同中心（基线一致）。
+            lv_obj_align_to(g_tiles.stratum_total_hashrate, g_tiles.stratum_total_hashrate_frac,
+                            LV_ALIGN_OUT_LEFT_MID, -14, 0);
+        }
     }
     if (g_tiles.stratum_y_unit != nullptr) {
         lv_label_set_text(g_tiles.stratum_y_unit, axis_display.unit);
@@ -3423,7 +3466,21 @@ void build_stratum_tile(lv_obj_t* tv) {
     g_tiles.stratum_total_hashrate = add_label(chart_panel, "", 0, 0, &dseg7c700_font_24, lv_color_hex(0xf0b44c));
     lv_obj_set_width(g_tiles.stratum_total_hashrate, 120);
     lv_obj_set_style_text_align(g_tiles.stratum_total_hashrate, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_letter_space(g_tiles.stratum_total_hashrate, 2, 0);
     lv_label_set_long_mode(g_tiles.stratum_total_hashrate, LV_LABEL_LONG_MODE_CLIP);
+    // 小数部分（与整数部分同字体同色）。小数点用独立 6px 金色圆点对象：
+    // DSEG7 原生小数点只有数字高度的 ~1/4，24px 下几乎看不清。
+    g_tiles.stratum_total_hashrate_frac = add_label(chart_panel, "", 0, 0, &dseg7c700_font_24, lv_color_hex(0xf0b44c));
+    lv_obj_set_style_text_letter_space(g_tiles.stratum_total_hashrate_frac, 2, 0);
+    g_tiles.stratum_total_hashrate_dot = lv_obj_create(chart_panel);
+    make_static(g_tiles.stratum_total_hashrate_dot);
+    lv_obj_set_size(g_tiles.stratum_total_hashrate_dot, 6, 6);
+    lv_obj_set_style_radius(g_tiles.stratum_total_hashrate_dot, 3, 0);
+    lv_obj_set_style_bg_color(g_tiles.stratum_total_hashrate_dot, lv_color_hex(0xf0b44c), 0);
+    lv_obj_set_style_bg_opa(g_tiles.stratum_total_hashrate_dot, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(g_tiles.stratum_total_hashrate_dot, 0, 0);
+    lv_obj_add_flag(g_tiles.stratum_total_hashrate_frac, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(g_tiles.stratum_total_hashrate_dot, LV_OBJ_FLAG_HIDDEN);
 
     g_tiles.stratum_legend_5m = add_label(chart_panel, "5m", 0, 0, &lv_font_montserrat_16, lv_color_hex(0x51c7a3));
     g_tiles.stratum_legend_6h = add_label(chart_panel, "6h", 0, 0, &lv_font_montserrat_16, lv_color_hex(0x7fa16c));
@@ -3473,9 +3530,11 @@ void build_stratum_tile(lv_obj_t* tv) {
     lv_chart_set_series_values(g_tiles.stratum_chart, g_tiles.stratum_series_1d, zeros.data(), zeros.size());
     lv_chart_refresh(g_tiles.stratum_chart);
 
-    // 总算力定位：unit 锚定到 chart 右上角上方 4px（右端顶对齐 chart 右边缘），
+    // 总算力定位：unit 锚定到 chart 右上角（右端顶对齐 chart 右边缘），
     // value 紧贴 unit 左侧。chart 此时已创建，align_to 才有效。
-    lv_obj_align_to(g_tiles.stratum_total_hashrate_unit, g_tiles.stratum_chart, LV_ALIGN_OUT_TOP_RIGHT, -4, -4);
+    // unit 相对 value 下移 4px（锚点 -4→0，value 相对 unit -5→-9），
+    // 使 "TH/s" 底部与算力数字底部视觉对齐。
+    lv_obj_align_to(g_tiles.stratum_total_hashrate_unit, g_tiles.stratum_chart, LV_ALIGN_OUT_TOP_RIGHT, -4, 0);
     lv_obj_align_to(g_tiles.stratum_total_hashrate, g_tiles.stratum_total_hashrate_unit, LV_ALIGN_OUT_LEFT_TOP, -4, -11);
 
     // Unit sits above the topmost Y tick (1.00 at y=18) so it never overlaps the
