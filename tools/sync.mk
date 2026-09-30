@@ -24,6 +24,17 @@ $(BR_SRC_DIR)/.download_extract:
 # $(error $(BR_OVERLAY_FS))
 $(BR_SRC_DIR)/.overlay_sync: $(BR_SRC_DIR)/.download_extract $(BR_OVERLAY_FS)
 	rsync -a  $(BR_OVERLAY_DIR)/ $(BR_SRC_DIR)/ --exclude "*-overlay"  --exclude "linux-6.6.22" --exclude "linux/*.patch"
+	# Delete-sync the rootfs_overlay dirs: the plain rsync above does not
+	# remove files we deleted from the overlay source, so dead files (e.g.
+	# /etc/ckpool, root/bitcoind/bitcoin.conf, rockbase_boot_progress.sh)
+	# lingered in $(BR_SRC_DIR) and kept landing in the image. Scoped to
+	# rootfs_overlay only on purpose: a tree-wide --delete would destroy
+	# the SDK-provided buildroot sources, and patches/fragments have their
+	# own sync rules (linux/*.patch is excluded above).
+	@for d in $(wildcard $(BR_OVERLAY_DIR)/board/*/*/rootfs_overlay/); do \
+		dst=$$(printf '%s' "$$d" | sed 's|^$(BR_OVERLAY_DIR)/|$(BR_SRC_DIR)/|'); \
+		rsync -a --delete "$$d" "$$dst"; \
+	done
 	@touch $@
 
 output/.uboot_overlay_sync:$(UBOOT_OVERLAY_FS)
