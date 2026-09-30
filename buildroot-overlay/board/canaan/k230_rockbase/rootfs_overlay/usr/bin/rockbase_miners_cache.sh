@@ -8,8 +8,13 @@ USERS_DIR=${USERS_DIR:-${LOGDIR}/users}
 CACHE_DIR=${CACHE_DIR:-/run/rockbase}
 CACHE_FILE=${CACHE_FILE:-${CACHE_DIR}/miners.json}
 PID_FILE=${PID_FILE:-/var/run/rockbase-miners-cache.pid}
-MIN_SLEEP=${MINERS_MIN_SLEEP:-60}
-MAX_SLEEP=${MINERS_MAX_SLEEP:-120}
+# Reads only small ckpool status files (config partition, ~6KB, rewritten by
+# ckpool itself) and writes the cache to tmpfs (/run/rockbase). The jittered
+# interval was cut from 60-120s so the Stratum page hashrate/miners list is
+# near-realtime; the extra SD read is ~6KB a few times a minute. Keep the
+# jitter so it never locks step with the other shards.
+MIN_SLEEP=${MINERS_MIN_SLEEP:-15}
+MAX_SLEEP=${MINERS_MAX_SLEEP:-25}
 OFFLINE_SECONDS=${MINERS_OFFLINE_SECONDS:-1800}
 STALE_SECONDS=${MINERS_STALE_SECONDS:-300}
 

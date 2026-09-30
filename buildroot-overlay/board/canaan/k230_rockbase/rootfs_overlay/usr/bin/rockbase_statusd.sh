@@ -20,14 +20,24 @@ BTC_RPC_TIMEOUT=60
 # timeouts that emptied the peer list on the web peer-map.
 CONN_RPC_TIMEOUT=30
 SYNC_HEADER_LAG=2
-SYSTEM_INTERVAL=15
+# Shard refresh cadence. The cheap shards (system/network) read only /proc,
+# sysfs and statfs and write their state to tmpfs (/tmp/rockbase-status), so
+# they cost no SD I/O and are kept fast to match the lcdui 5s consume tick.
+# The expensive ones are deliberately slow:
+SYSTEM_INTERVAL=5
+# getblockchaininfo (RPC) + `du -sm chainstate` (SD metadata read on the
+# block partition): 10m normal / 60s during IBD.
 BITCOIN_CHAIN_INTERVAL=600
 BITCOIN_CHAIN_IBD_INTERVAL=60
 BITCOIN_CHAIN_RETRY_INTERVAL=20
+# getpeerinfo (RPC): 6-23s per call under IBD load; do not speed up.
 BITCOIN_CONN_INTERVAL=45
+# debug.log tail (SD read on the block partition, 4x per round). Kept at 20s
+# ON PURPOSE: block time only changes ~every 10m, so a faster poll buys
+# little but adds SD read churn on the same partition bitcoind is writing.
 BITCOIN_LOG_INTERVAL=20
 STRATUM_INTERVAL=30
-NETWORK_INTERVAL=20
+NETWORK_INTERVAL=5
 SELF_GEO_INTERVAL=21600
 
 SYSTEM_STATE=${STATE_DIR}/system.state
