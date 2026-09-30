@@ -40,6 +40,33 @@ description: 'Develop and debug Rockbase LVGL LCD UI. Covers tileview, swipe, DR
 - 300ms 吸附动画
 - 触摸释放时立即 snap 到目标页面
 
+### 开机视频（预渲染帧序列，A 方案）
+
+开机 logo 支持播放短视频。**K230 rootfs 不装 ffmpeg/解码器**，所以采用离线预渲染：
+host 端把 mp4 解码成 YUV420P 帧序列，板子开机逐帧读 → YUV→ARGB8888 → 软件旋转 →
+直接写 DRM buffer commit，**零新增运行时依赖**，不碰 LVGL 主循环。
+
+- 源视频：`/usr/share/rockbase-lcdui/boot-video-src.mp4`（用户放置）
+- 预渲染产物：`/usr/share/rockbase-lcdui/boot-video/{frames.yuv,meta.txt}`
+  （`frames.yuv` = 连续 YUV420P 帧，每帧 `W*H*1.5` 字节；`meta.txt` = `宽 高 帧数 fps`）
+- 生成工具：`tools/gen_boot_video.py`（host 端跑，需 ffmpeg；缩放/letterbox 到 800×480，
+  上限 15fps / 130 帧 ≈ 8s / ~75MB）
+- 运行时：`src/boot_video.{h,cpp}`（`bootvideo::Player`）+ `main.cpp` 的 `play_boot_video()`
+- **开机流程（当前）**：背光 GPIO（line 25）是 on/off 使能脚（**非 PWM 调光**）。
+  背光由 `play_boot_video()` 内部管理，顺序：
+  ① 先 commit 一帧**不透明黑帧**（擦掉 DSI framebuffer 里 U-Boot 残留画面，否则复位冷启动
+  开背光瞬间会直接点亮残留画面而非从黑渐亮）→ ② `set_backlight(1)` 点亮（此时屏幕已黑）→
+  ③ 播放循环**帧从第 0 帧就推进**，同时前 1 秒做**内容渐亮**（`kBootVideoFadeInMs=1000`，
+  每帧按 `tick_ms()-start_ms` 算亮度因子 0→255 缩放逐像素 RGB，所以渐亮期间视频已经在动）→
+  ④ 视频末尾 `fade_boot_video_to_black()` 渐变到黑（`kBootVideoFadeMs=600`）→
+  ⑤ dashboard 从黑场淡入（`kDashboardFadeMs=500`）。
+  无 `boot-video/` 时回退静态 logo 停留（此时 `main()` 才 `set_backlight(1)`）。
+  注意：`fade_backlight_in()`（PWM 渐亮）代码保留但**不再调用**——硬件不支持 PWM 调光。
+  渐亮用「内容亮度」而非「物理背光」实现，drmshot 抓 framebuffer 能量化验证（亮度递增 + 帧间差非零）。
+- 安全上限 `kBootVideoMaxMs=10000`，防开机卡死
+- **恢复静态 logo**：取消 `main()` 里 `build_boot_scene(screen)` 那行注释即可
+  （`boot_layer` 非空时自动走 logo 淡出分支，视频分支被跳过）
+
 ---
 
 ## 开发规则
@@ -56,6 +83,10 @@ description: 'Develop and debug Rockbase LVGL LCD UI. Covers tileview, swipe, DR
 - 如果串口/SSH 正常但 LCD 停住 → 优先排查 `rockbase-lcdui` 是否卡在非正常 sleep
 - 不要在显示路径里做文件 IO
 - 触摸期间应延后部分状态刷新
+- **直接写 DRM framebuffer 的像素字节序**：ARGB8888 内存字节序是 **B,G,R,A**（LSB 字节 = B），
+  所以 `uint32_t` 值必须是 `0xAARRGGBB`（`(A<<24)|(R<<16)|(G<<8)|B`）。
+  若误写成 `0xAABBGGRR`（R/B 互换），黄色会变青蓝、红色会变青色——典型症状是"颜色不对但画面正常"。
+  参考 `tools/gen_world_map_image.py` 注释与 `boot_video.cpp` 的 YUV→ARGB 转换。
 
 ## UI 目视验证（截屏闭环）
 
@@ -68,6 +99,27 @@ description: 'Develop and debug Rockbase LVGL LCD UI. Covers tileview, swipe, DR
 - 完整命令与陷阱见 skill: `rockbase-screenshot`
 - 要验证**非首页**（Stratum/System/Network）或点按钮关弹窗 → 用
   **`rockbase-swipe` skill** 注入触摸事件切页，再截屏。
+
+---
+
+## 开机视频更新流程
+
+换开机视频只需两步（host 端）：
+
+```bash
+# 1. 放源视频（覆盖即可，任意分辨率/编码，工具会缩放+letterbox 到 800x480）
+cp your.mp4 buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/usr/share/rockbase-lcdui/boot-video-src.mp4
+
+# 2. 预渲染成帧序列
+python3 tools/gen_boot_video.py
+```
+
+产物 `boot-video/{frames.yuv,meta.txt}` 随 rootfs overlay 打进镜像。
+热部署验证时：scp `rockbase-lcdui` 二进制 + `boot-video/` 目录到板子，
+`S03lcdui stop` → 替换二进制 → `S03lcdui start`，再用 `drmshot` 在开机 8s 窗口内连抓几帧确认播放与颜色。
+
+> 注意：`boot-video-src.mp4` 是源素材，**不必**打进镜像（镜像只需 `boot-video/` 帧序列）。
+> 若不想让源视频进镜像，可在 `.gitignore` 或构建前移除它。
 
 ---
 

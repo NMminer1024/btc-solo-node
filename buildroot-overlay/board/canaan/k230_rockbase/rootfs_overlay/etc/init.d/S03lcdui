@@ -6,6 +6,9 @@
 DAEMON=/usr/bin/rockbase-lcdui
 PIDFILE=/var/run/rockbase-lcdui.pid
 LOGFILE=/dev/null
+# Written by rockbase-lcdui once its boot animation (video) finishes. The init
+# sequence blocks on this so heavy services start only after the video.
+BOOT_DONE_FLAG=/run/rockbase/lcdui-boot-done
 if [ -r /etc/TZ ]; then
 	TZ="$(sed 's/[[:space:]]//g' </etc/TZ 2>/dev/null)"
 	# 时区名 -> POSIX TZ（启动时导出给 lcdui 进程）。
@@ -60,6 +63,23 @@ is_running() {
 	kill -0 "${pid}" 2>/dev/null
 }
 
+# Block the boot sequence until lcdui finishes its boot animation (video).
+# Keeps heavy services (bitcoind, blockdata, wifi, ...) from starting in
+# parallel and stuttering the video. The flag appears as soon as the video
+# ends, so this returns promptly; the 30s cap is only a safety net so a stuck
+# lcdui never blocks boot, and it bails early if lcdui dies.
+wait_for_boot_done() {
+	rm -f "${BOOT_DONE_FLAG}"
+	local i=0
+	while [ $i -lt 300 ]; do
+		[ -f "${BOOT_DONE_FLAG}" ] && return 0
+		is_running || return 0
+		sleep 0.1
+		i=$((i + 1))
+	done
+	return 0
+}
+
 start_service() {
 	[ -x "${DAEMON}" ] || return 0
 	if is_running; then
@@ -75,6 +95,7 @@ start_service() {
 		tail -n 20 "${LOGFILE}" 2>/dev/null
 		return 1
 	fi
+	wait_for_boot_done
 }
 
 stop_service() {
@@ -85,6 +106,7 @@ stop_service() {
 		kill -9 "${pid}" >/dev/null 2>&1 || true
 	fi
 	rm -f "${PIDFILE}"
+	rm -f "${BOOT_DONE_FLAG}"
 }
 
 case "$1" in

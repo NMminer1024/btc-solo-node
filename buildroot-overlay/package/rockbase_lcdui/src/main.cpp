@@ -42,6 +42,7 @@ LV_FONT_DECLARE(dseg7c700_font_32);
 #include "wifi_config_overlay.h"
 #include "ota_overlay.h"
 #include "firmware_update_overlay.h"
+#include "boot_video.h"
 
 namespace {
 
@@ -68,6 +69,10 @@ constexpr uint32_t kDisplayRefrPeriodMs = 10;
 constexpr uint32_t kPresentIntervalMs = 20;
 constexpr size_t kStratumChartMaxPoints = 500;
 constexpr const char* kBootLogoRawPath = "/usr/share/rockbase-lcdui/boot-logo-800x480.argb";
+constexpr const char* kBootVideoDir = "/usr/share/rockbase-lcdui/boot-video";
+constexpr uint32_t kBootVideoMaxMs = 10000;  // safety cap so boot never stalls
+constexpr uint32_t kBootVideoFadeMs = 600;   // video -> black fade-out before dashboard
+constexpr uint32_t kBootVideoFadeInMs = 1000;  // content fade-in from black at boot
 constexpr const char* kProductVersionPath = "/etc/version/product_version";
 constexpr const char* kStatusCachePath = "/tmp/status-api.json";
 constexpr const char* kMinersCachePath = "/run/rockbase/miners.json";
@@ -383,6 +388,7 @@ RollingNumber g_bitcoin_height_total_roll;
 uint32_t g_bitcoin_roll_pending = 0;
 bool g_bitcoin_roll_active = false;
 RawImage g_boot_logo;
+bootvideo::Player g_boot_video;
 RawImage g_page_bg[kTileCount];
 static uint32_t* g_tile_cache[kTileCount] = {};  // pre-rendered physical frames per tile
 bool g_custom_frame_presenting = false;
@@ -568,6 +574,10 @@ bool init_backlight_gpio(int initial_value) {
     return true;
 }
 
+// NOTE: Backlight GPIO line 25 is an on/off enable, NOT a PWM dimming line.
+// The LED boost driver smooths fast toggling to constant-on, so this function
+// has no visible effect. Kept for reference; the "fade in" is now done in
+// video content (see play_boot_video, kBootVideoFadeInMs).
 void fade_backlight_in() {
     constexpr int steps = 20;
     constexpr int period_us = 1000;
@@ -4043,6 +4053,115 @@ void run_hold_screen() {
     cleanup_display();
 }
 
+// Fade the last video frame to black over `ms` milliseconds (40ms steps).
+// Re-renders the last YUV frame each step and scales RGB toward 0, so the
+// screen eases out to black right before the dashboard fades in.
+void fade_boot_video_to_black(int last_index, uint32_t ms) {
+    if (g_buffer == nullptr || g_buffer->map == nullptr) return;
+    const uint32_t stride_px = g_buffer->stride / sizeof(uint32_t);
+    constexpr uint32_t kStepMs = 40;
+    const uint32_t total_steps = ms / kStepMs;
+    if (total_steps == 0) return;
+    const uint32_t px_count = g_buffer->size / sizeof(uint32_t);
+
+    for (uint32_t step = 1; step <= total_steps; ++step) {
+        if (g_stop) break;
+        const uint32_t factor = (total_steps - step) * 255U / total_steps;  // 255 -> 0
+        auto* dst = static_cast<uint32_t*>(g_buffer->map);
+        g_boot_video.render_frame(last_index, dst, stride_px);
+        if (factor < 255) {
+            for (uint32_t i = 0; i < px_count; ++i) {
+                const uint32_t p = dst[i];
+                const uint32_t r = ((p >> 16) & 0xFF) * factor / 255U;
+                const uint32_t g = ((p >> 8) & 0xFF) * factor / 255U;
+                const uint32_t b = (p & 0xFF) * factor / 255U;
+                dst[i] = 0xFF000000u | (r << 16) | (g << 8) | b;
+            }
+        }
+        if (present_display_buffer() != 0) {
+            std::fprintf(stderr, "rockbase-lcdui: boot-video fade commit failed\n");
+        }
+        const uint32_t step_start = tick_ms();
+        while (!g_stop && tick_ms() - step_start < kStepMs) {
+            usleep(2000);
+        }
+    }
+}
+
+// Play the pre-rendered boot video (Plan A). Commits an opaque black frame
+// BEFORE turning the backlight on (wiping any U-Boot residual image so a cold
+// boot starts from black), then plays the video while easing in: frames advance
+// from the very start and pixel brightness ramps 0 -> 255 over the first
+// kBootVideoFadeInMs, so the video is already "moving" as the screen fades in.
+// Ends by fading the last frame to black. Capped by kBootVideoMaxMs.
+void play_boot_video() {
+    if (!g_boot_video.ready || g_buffer == nullptr || g_buffer->map == nullptr) {
+        return;
+    }
+    const uint32_t stride_px = g_buffer->stride / sizeof(uint32_t);
+    const uint32_t frame_ms = 1000U / static_cast<uint32_t>(g_boot_video.fps);
+    const uint32_t px_count = g_buffer->size / sizeof(uint32_t);
+    std::printf("rockbase-lcdui: playing boot video (%d frames @ %dfps)\n",
+                g_boot_video.frame_count, g_boot_video.fps);
+    std::fflush(stdout);
+
+    // The backlight line is an on/off enable (no PWM dimming), so turning it on
+    // with a stale U-Boot image still in the DSI framebuffer would light the
+    // screen up directly. Commit opaque black first so the fade-in starts from
+    // a clean black screen.
+    {
+        auto* dst = static_cast<uint32_t*>(g_buffer->map);
+        for (uint32_t i = 0; i < px_count; ++i) {
+            dst[i] = 0xFF000000u;  // opaque black (A=FF, R=G=B=0)
+        }
+        if (present_display_buffer() != 0) {
+            std::fprintf(stderr, "rockbase-lcdui: boot-video pre-black commit failed\n");
+        }
+    }
+    set_backlight(1);
+
+    const uint32_t start_ms = tick_ms();
+    int last_index = 0;
+    for (int index = 0; index < g_boot_video.frame_count; ++index) {
+        if (g_stop) break;
+        if (tick_ms() - start_ms > kBootVideoMaxMs) break;
+        last_index = index;
+
+        auto* dst = static_cast<uint32_t*>(g_buffer->map);
+        g_boot_video.render_frame(index, dst, stride_px);
+
+        // Ease in while the video plays: brightness ramps 0 -> 255 over the
+        // first kBootVideoFadeInMs, applied to whichever frame is current, so
+        // the video keeps moving underneath the fade-in.
+        const uint32_t elapsed = tick_ms() - start_ms;
+        const uint32_t bright = elapsed >= kBootVideoFadeInMs
+            ? 255U : (elapsed * 255U) / kBootVideoFadeInMs;
+        if (bright < 255) {
+            for (uint32_t i = 0; i < px_count; ++i) {
+                const uint32_t p = dst[i];
+                const uint32_t r = ((p >> 16) & 0xFF) * bright / 255U;
+                const uint32_t g = ((p >> 8) & 0xFF) * bright / 255U;
+                const uint32_t b = (p & 0xFF) * bright / 255U;
+                dst[i] = 0xFF000000u | (r << 16) | (g << 8) | b;
+            }
+        }
+
+        if (present_display_buffer() != 0) {
+            std::fprintf(stderr, "rockbase-lcdui: boot-video commit failed\n");
+        }
+
+        // Pace to the source fps. present_display_buffer rate-limits to
+        // kPresentIntervalMs (20ms), so a 15fps (66ms) frame interval is safe.
+        const uint32_t frame_start = tick_ms();
+        while (!g_stop && tick_ms() - frame_start < frame_ms) {
+            usleep(2000);
+        }
+    }
+
+    // Ease out to black before the dashboard fades in.
+    fade_boot_video_to_black(last_index, kBootVideoFadeMs);
+}
+
 }  // namespace
 
 int main() {
@@ -4063,6 +4182,7 @@ int main() {
     }
 
     load_argb_image(kBootLogoRawPath, g_boot_logo);
+    g_boot_video.load(kBootVideoDir);
     for (uint32_t index = 0; index < kTileCount; ++index) {
         load_argb_image(kPageBgRawPaths[index], g_page_bg[index]);
     }
@@ -4078,33 +4198,67 @@ int main() {
     lv_obj_remove_style_all(screen);
     lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
-    lv_obj_t* boot_layer = build_boot_scene(screen);
-    lv_obj_t* fade_mask = lv_obj_create(screen);
-    lv_obj_remove_style_all(fade_mask);
-    make_static(fade_mask);
-    lv_obj_set_size(fade_mask, kUiWidth, kUiHeight);
-    lv_obj_set_pos(fade_mask, 0, 0);
-    lv_obj_set_style_bg_color(fade_mask, lv_color_hex(0x000000), 0);
-    lv_obj_set_style_bg_opa(fade_mask, LV_OPA_COVER, 0);
-    lv_refr_now(disp);
-    if (backlight_ready) {
-        set_backlight(1);
-        lv_obj_fade_out(fade_mask, kBacklightFadeMs, 0);
-        run_lv_for(kBacklightFadeMs + 20);
-        lv_obj_delete(fade_mask);
-        fade_mask = nullptr;
+
+    // --- Static boot logo (DISABLED: boot now plays the video directly). ---
+    // Kept commented so it can be restored later. To restore the static logo,
+    // uncomment the build_boot_scene call below (and leave the boot_layer
+    // fade-out block near the end of this function intact).
+    // lv_obj_t* boot_layer = build_boot_scene(screen);
+    lv_obj_t* boot_layer = nullptr;
+
+    // Boot straight into the video (no static logo hold). play_boot_video owns
+    // the backlight: it commits a black frame first, then turns the backlight
+    // on, then plays the video with a content fade-in (the backlight line is an
+    // on/off enable, no PWM dimming). If no video is present, turn the
+    // backlight on and fall back to the static hold.
+    if (g_boot_video.ready) {
+        play_boot_video();
     }
     else {
-        lv_obj_delete(fade_mask);
-        fade_mask = nullptr;
+        if (backlight_ready) {
+            set_backlight(1);
+        }
+        run_lv_for(kBootLogoHoldMs);
     }
-    run_lv_for(kBootLogoHoldMs);
+
+    // Signal the init system that the boot animation is done. S03lcdui blocks
+    // the boot sequence until this flag appears, so heavy services (bitcoind,
+    // blockdata, wifi, ...) only start after the video finishes and do not
+    // steal CPU/SD I/O and stutter the boot video.
+    {
+        int flag_fd = open("/run/rockbase/lcdui-boot-done",
+                           O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (flag_fd >= 0) {
+            close(flag_fd);
+        }
+    }
+
     build_tile_stage(screen);
     build_tile_caches_from_snapshots();
-    lv_obj_move_to_index(boot_layer, lv_obj_get_child_count(screen) - 1);
-    lv_obj_fade_out(boot_layer, kDashboardFadeMs, 0);
-    run_lv_for(kDashboardFadeMs + 80);
-    lv_obj_delete(boot_layer);
+
+    if (boot_layer != nullptr) {
+        // Static-logo path (currently disabled): fade the logo out to reveal
+        // the dashboard.
+        lv_obj_move_to_index(boot_layer, lv_obj_get_child_count(screen) - 1);
+        lv_obj_fade_out(boot_layer, kDashboardFadeMs, 0);
+        run_lv_for(kDashboardFadeMs + 80);
+        lv_obj_delete(boot_layer);
+    }
+    else {
+        // Video path: the screen is black after the video fade-out, so ease the
+        // dashboard in from black with a short fade mask.
+        lv_obj_t* dash_mask = lv_obj_create(screen);
+        lv_obj_remove_style_all(dash_mask);
+        make_static(dash_mask);
+        lv_obj_set_size(dash_mask, kUiWidth, kUiHeight);
+        lv_obj_set_pos(dash_mask, 0, 0);
+        lv_obj_set_style_bg_color(dash_mask, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(dash_mask, LV_OPA_COVER, 0);
+        lv_refr_now(disp);
+        lv_obj_fade_out(dash_mask, kDashboardFadeMs, 0);
+        run_lv_for(kDashboardFadeMs + 80);
+        lv_obj_delete(dash_mask);
+    }
     g_show_page_indicator = true;
     lv_refr_now(disp);
 
