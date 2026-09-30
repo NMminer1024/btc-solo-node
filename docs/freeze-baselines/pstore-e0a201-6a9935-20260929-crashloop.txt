@@ -1,0 +1,154 @@
+[    5.004488] EXT4-fs (mmcblk1p3): recovery complete
+[    5.010133] EXT4-fs (mmcblk1p3): mounted filesystem 189352a0-4346-42b3-96d5-25e19c2ade85 r/w with ordered data mode. Quota mode: disabled.
+[   10.817220] 8189fs: loading out-of-tree module taints kernel.
+[   13.480300] warning: `iwconfig' uses wireless extensions which will stop working for Wi-Fi 7 hardware; use nl80211
+[   33.752128] EXT4-fs (mmcblk1p4): recovery complete
+[   33.758222] EXT4-fs (mmcblk1p4): mounted filesystem c6560dcc-7680-4362-b942-85f7ea3ede68 r/w with ordered data mode. Quota mode: disabled.
+[   33.795032] zram0: detected capacity change from 0 to 262144
+[   33.806692] Adding 131068k swap on /dev/zram0.  Priority:-2 extents:1 across:131068k SS
+[   35.440853] [rb-mmc-diag] claim release host=mmc1 releaser=894:kworker/0:2H owner=4631:rockbase-geoip claim_cnt=1 held_ms=520 contended=0
+[  506.214800] sysrq: Show Blocked State
+[  826.155500] sysrq: Show Blocked State
+[ 1513.537562] sysrq: Show Blocked State
+[ 1705.648950] sysrq: Show Blocked State
+[ 2145.700782] sysrq: Show Blocked State
+[ 2145.704575] task:b-msghand       state:D stack:0     pid:13545 ppid:1      flags:0x00000000
+[ 2145.712998] Call Trace:
+[ 2145.715468] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 2145.720716] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 2145.725612] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 2145.730762] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 2145.736963] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 2145.742463] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 2145.747615] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 2145.753472] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 2145.759057] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 2145.764906] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 2145.770238] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 2602.920735] sysrq: Show Blocked State
+[ 3123.827489] sysrq: Show Blocked State
+[ 3694.368664] sysrq: Show Blocked State
+[ 3949.669350] sysrq: Show Blocked State
+[ 4844.997956] sysrq: Show Blocked State
+[ 5193.925020] sysrq: Show Blocked State
+[ 5440.366705] sysrq: Show Blocked State
+[ 5999.470385] sysrq: Show Blocked State
+[ 5999.474170] task:b-msghand       state:D stack:0     pid:13545 ppid:1      flags:0x00000000
+[ 5999.482573] Call Trace:
+[ 5999.485030] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 5999.490276] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 5999.495166] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 5999.500317] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 5999.506516] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 5999.512031] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 5999.517185] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 5999.523029] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 5999.528613] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 5999.534461] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 5999.539785] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 6118.733455] sysrq: Show Blocked State
+[ 6144.599513] [rb-mmc-diag] claim release host=mmc1 releaser=29507:kworker/0:2H owner=13545:b-msghand claim_cnt=1 held_ms=644 contended=0
+[ 6422.473319] sysrq: Show Blocked State
+[ 7267.101182] sysrq: Show Blocked State
+[ 7409.172011] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=63:kworker/u2:2 claim_cnt=1 held_ms=560 contended=0
+[ 7445.685021] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=63:kworker/u2:2 claim_cnt=1 held_ms=720 contended=0
+[ 7482.418914] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=63:kworker/u2:2 claim_cnt=1 held_ms=844 contended=0
+[ 7514.154051] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=63:kworker/u2:2 claim_cnt=1 held_ms=800 contended=0
+[ 7545.581332] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=63:kworker/u2:2 claim_cnt=1 held_ms=776 contended=0
+[ 7552.532284] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=20:kworker/u2:1 claim_cnt=1 held_ms=1000 contended=0
+[ 7555.606447] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=20:kworker/u2:1 claim_cnt=1 held_ms=808 contended=0
+[ 7566.609177] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=20:kworker/u2:1 claim_cnt=1 held_ms=10972 contended=0
+[ 7573.606148] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=4927:kworker/0:1H claim_cnt=1 held_ms=6884 contended=0
+[ 7587.948803] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=4927:kworker/0:1H claim_cnt=1 held_ms=14232 contended=0
+[ 7595.083734] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=4927:kworker/0:1H claim_cnt=1 held_ms=7068 contended=0
+[ 7600.683289] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=4927:kworker/0:1H claim_cnt=1 held_ms=5484 contended=0
+[ 7606.238413] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=4927:kworker/0:1H claim_cnt=1 held_ms=5492 contended=0
+[ 7615.120773] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=4927:kworker/0:1H claim_cnt=1 held_ms=8820 contended=0
+[ 7620.701700] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=4927:kworker/0:1H claim_cnt=1 held_ms=5460 contended=0
+[ 7626.293969] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=4927:kworker/0:1H claim_cnt=1 held_ms=5508 contended=0
+[ 7635.328469] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=4927:kworker/0:1H claim_cnt=1 held_ms=8976 contended=0
+[ 7640.940875] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=4927:kworker/0:1H claim_cnt=1 held_ms=5488 contended=0
+[ 7647.975529] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=4927:kworker/0:1H claim_cnt=1 held_ms=6976 contended=0
+[ 7651.907466] [rb-mmc-diag] claim release host=mmc1 releaser=4927:kworker/0:1H owner=4927:kworker/0:1H claim_cnt=1 held_ms=3848 contended=0
+[ 7654.137486] EXT4-fs (mmcblk1p1): orphan cleanup on readonly fs
+[ 7654.143862] EXT4-fs (mmcblk1p1): mounted filesystem 787f1c36-57f3-4cca-9881-08b0631c96a5 ro with ordered data mode. Quota mode: disabled.
+[ 7654.180434] EXT4-fs (mmcblk1p1): unmounting filesystem 787f1c36-57f3-4cca-9881-08b0631c96a5.
+[ 7657.274996] EXT4-fs (mmcblk1p3): unmounting filesystem 189352a0-4346-42b3-96d5-25e19c2ade85.
+[ 7657.614250] EXT4-fs (mmcblk1p4): unmounting filesystem c6560dcc-7680-4362-b942-85f7ea3ede68.
+[ 7657.643040] reboot: Restarting system
+
+=== BOOT2 ===
+[    5.614044] EXT4-fs (mmcblk1p3): mounted filesystem 189352a0-4346-42b3-96d5-25e19c2ade85 r/w with ordered data mode. Quota mode: disabled.
+[   11.683684] 8189fs: loading out-of-tree module taints kernel.
+[   14.420145] warning: `iwconfig' uses wireless extensions which will stop working for Wi-Fi 7 hardware; use nl80211
+[   53.286894] EXT4-fs (mmcblk1p4): mounted filesystem c6560dcc-7680-4362-b942-85f7ea3ede68 r/w with ordered data mode. Quota mode: disabled.
+[   53.323959] zram0: detected capacity change from 0 to 262144
+[   53.335866] Adding 131068k swap on /dev/zram0.  Priority:-2 extents:1 across:131068k SS
+[  292.469649] sysrq: Show Blocked State
+[ 1415.322078] sysrq: Show Blocked State
+[ 1620.869227] sysrq: Show Blocked State
+[ 1743.570855] sysrq: Show Blocked State
+[ 1991.786458] sysrq: Show Blocked State
+[ 2399.622040] sysrq: Show Blocked State
+[ 2711.953625] sysrq: Show Blocked State
+[ 3057.226855] sysrq: Show Blocked State
+[ 3475.965001] sysrq: Show Blocked State
+[ 3756.093571] sysrq: Show Blocked State
+[ 4387.275311] sysrq: Show Blocked State
+[ 4387.279131] task:b-msghand       state:D stack:0     pid:14293 ppid:1      flags:0x00000000
+[ 4387.287546] Call Trace:
+[ 4387.289996] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 4387.295268] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 4387.300184] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 4387.305339] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 4387.311540] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 4387.317039] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 4387.322190] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 4387.328044] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 4387.333629] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 4387.339476] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 4387.344809] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 4559.941108] sysrq: Show Blocked State
+[ 5064.582437] sysrq: Show Blocked State
+[ 5415.138962] sysrq: Show Blocked State
+[ 5561.749155] sysrq: Show Blocked State
+[ 6192.735182] sysrq: Show Blocked State
+[ 6611.599965] sysrq: Show Blocked State
+[ 7208.334326] sysrq: Show Blocked State
+[ 7506.630756] sysrq: Show Blocked State
+[ 7628.709167] sysrq: Show Blocked State
+[ 8091.888523] sysrq: Show Blocked State
+[ 8373.772332] sysrq: Show Blocked State
+[ 8951.221954] sysrq: Show Blocked State
+[ 9091.948545] sysrq: Show Blocked State
+[ 9283.232733] sysrq: Show Blocked State
+[ 9283.236505] task:kworker/u2:0    state:D stack:0     pid:11    ppid:2      flags:0x00000000
+[ 9283.244942] Workqueue: events_unbound commit_work
+[ 9283.249679] Call Trace:
+[ 9283.252149] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 9283.257398] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 9283.262288] [<ffffffff80b63af6>] schedule_timeout+0x7e/0xee
+[ 9283.267873] [<ffffffff8060de22>] drm_atomic_helper_wait_for_vblanks.part.0+0x18a/0x202
+[ 9283.275811] [<ffffffff8060eb12>] drm_atomic_helper_commit_tail_rpm+0x5e/0x72
+[ 9283.282880] [<ffffffff8060f7bc>] commit_tail+0x76/0x128
+[ 9283.288122] [<ffffffff8060f87e>] commit_work+0x10/0x18
+[ 9283.293278] [<ffffffff800321c0>] process_one_work+0x104/0x1fa
+[ 9283.299047] [<ffffffff8003251c>] worker_thread+0x266/0x34a
+[ 9283.304555] [<ffffffff8003a3ee>] kthread+0xc4/0xde
+[ 9283.309364] [<ffffffff80b64d92>] ret_from_fork+0xe/0x1c
+
+=== BOOT1 ===
+[    5.029063] EXT4-fs (mmcblk1p3): recovery complete
+[    5.034897] EXT4-fs (mmcblk1p3): mounted filesystem 189352a0-4346-42b3-96d5-25e19c2ade85 r/w with ordered data mode. Quota mode: disabled.
+[   11.041986] 8189fs: loading out-of-tree module taints kernel.
+[   13.747232] warning: `iwconfig' uses wireless extensions which will stop working for Wi-Fi 7 hardware; use nl80211
+[   32.237899] EXT4-fs (mmcblk1p4): recovery complete
+[   32.243827] EXT4-fs (mmcblk1p4): mounted filesystem c6560dcc-7680-4362-b942-85f7ea3ede68 r/w with ordered data mode. Quota mode: disabled.
+[   32.280508] zram0: detected capacity change from 0 to 262144
+[   32.292322] Adding 131068k swap on /dev/zram0.  Priority:-2 extents:1 across:131068k SS
+[  345.916802] sysrq: Show Blocked State
+
+=== boot_audit ===
+1970-01-01T00:00:04Z event=boot_start boot_id=1970-01-01T00:00:04Z prev_shutdown=unclean prev_boot_id=none prev_boot_epoch=0 uptime_now=4
+1970-01-01T00:00:03Z event=boot_start boot_id=1970-01-01T00:00:03Z prev_shutdown=unclean prev_boot_id=1970-01-01T00:00:04Z prev_boot_epoch=4 uptime_now=3
+1970-01-01T00:00:03Z event=boot_start boot_id=1970-01-01T00:00:03Z prev_shutdown=unclean prev_boot_id=1970-01-01T00:00:03Z prev_boot_epoch=3 uptime_now=3
