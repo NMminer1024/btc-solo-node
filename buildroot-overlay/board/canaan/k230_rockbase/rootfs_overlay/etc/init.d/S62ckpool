@@ -60,7 +60,7 @@ start_waiter() {
                 # 8*cores+8). The 27 ckpool threads otherwise grow ~9 x 64MB
                 # arenas (RSS 233MB on 1G board), starving page cache.
                 # NOTE: no apostrophes allowed in this comment (inside sh -c '...').
-                MALLOC_ARENA_MAX=2 ckpool -c "'"${CONF}"'" > "'"${LOGFILE}"'" 2>&1 &
+                MALLOC_ARENA_MAX=2 ckpool -B -c "'"${CONF}"'" > "'"${LOGFILE}"'" 2>&1 &
                 sleep 2
 
                 if pidof ckpool >/dev/null 2>&1; then
@@ -90,7 +90,7 @@ start_ckpool() {
     mkdir -p "${LOGDIR}"
     trim_log
     # MALLOC_ARENA_MAX: cap glibc per-thread malloc arenas (see waiter above).
-    MALLOC_ARENA_MAX=2 ckpool -c "${CONF}" > "${LOGFILE}" 2>&1 &
+    MALLOC_ARENA_MAX=2 ckpool -B -c "${CONF}" > "${LOGFILE}" 2>&1 &
     sleep 2
     is_running
 }
