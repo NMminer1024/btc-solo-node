@@ -20,9 +20,9 @@ Defaults:
               usr/share/rockbase-lcdui/boot-video-src.mp4
     out_dir = .../usr/share/rockbase-lcdui/boot-video
 
-The video is scaled to exactly 800x480 (the logical UI size). If the source
-aspect ratio differs, it is letterboxed onto a black 800x480 canvas so the
-image is never stretched.
+The video is scaled to exactly 800x480 (the logical UI size). The source is
+stretched to fill the full canvas (no letterboxing), so a slight distortion is
+accepted when the source aspect ratio differs from 5:3.
 """
 
 import os
@@ -106,11 +106,10 @@ def main():
         print(f"note: capping {n_frames} frames to {MAX_FRAMES}")
         n_frames = MAX_FRAMES
 
-    # scale to fit 800x480 preserving aspect, pad to black, force fps,
+    # scale to exactly 800x480 (force stretch, no letterbox) -> force fps ->
     # emit planar yuv420p. -frames:v caps the count.
     vf = (
-        f"scale={W}:{H}:force_original_aspect_ratio=decrease,"
-        f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black,"
+        f"scale={W}:{H},"
         f"fps={TARGET_FPS},format=yuv420p"
     )
     cmd = [

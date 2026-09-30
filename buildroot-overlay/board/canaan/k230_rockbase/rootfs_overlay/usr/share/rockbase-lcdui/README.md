@@ -24,5 +24,6 @@ python3 tools/gen_boot_video.py
 This decodes the clip into a contiguous YUV420P frame sequence under
 `boot-video/` (`frames.yuv` + `meta.txt`). The K230 rootfs ships no video
 decoder, so the board plays the pre-rendered frames at boot (Plan A). The
-video is scaled/letterboxed to 800x480 and capped at 15fps / 130 frames
-(~75MB max, ~8s). If `boot-video/` is absent, the static logo is shown instead.
+video is stretched to fill 800x480 (slight distortion accepted) and capped
+at 15fps / 130 frames (~75MB max, ~8s). If `boot-video/` is absent, the
+static logo is shown instead.

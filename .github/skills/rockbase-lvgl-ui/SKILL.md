@@ -49,7 +49,7 @@ host 端把 mp4 解码成 YUV420P 帧序列，板子开机逐帧读 → YUV→AR
 - 源视频：`/usr/share/rockbase-lcdui/boot-video-src.mp4`（用户放置）
 - 预渲染产物：`/usr/share/rockbase-lcdui/boot-video/{frames.yuv,meta.txt}`
   （`frames.yuv` = 连续 YUV420P 帧，每帧 `W*H*1.5` 字节；`meta.txt` = `宽 高 帧数 fps`）
-- 生成工具：`tools/gen_boot_video.py`（host 端跑，需 ffmpeg；缩放/letterbox 到 800×480，
+- 生成工具：`tools/gen_boot_video.py`（host 端跑，需 ffmpeg；拉伸铺满 800×480（轻微变形可接受），
   上限 15fps / 130 帧 ≈ 8s / ~75MB）
 - 运行时：`src/boot_video.{h,cpp}`（`bootvideo::Player`）+ `main.cpp` 的 `play_boot_video()`
 - **开机流程（当前）**：背光 GPIO（line 25）是 on/off 使能脚（**非 PWM 调光**）。
@@ -107,7 +107,7 @@ host 端把 mp4 解码成 YUV420P 帧序列，板子开机逐帧读 → YUV→AR
 换开机视频只需两步（host 端）：
 
 ```bash
-# 1. 放源视频（覆盖即可，任意分辨率/编码，工具会缩放+letterbox 到 800x480）
+# 1. 放源视频（覆盖即可，任意分辨率/编码，工具会拉伸铺满到 800x480）
 cp your.mp4 buildroot-overlay/board/canaan/k230_rockbase/rootfs_overlay/usr/share/rockbase-lcdui/boot-video-src.mp4
 
 # 2. 预渲染成帧序列
