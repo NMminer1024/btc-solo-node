@@ -1467,43 +1467,42 @@ daemon_loop() {
     next_bitcoin_chain=$((now + 45 + ($$ % 11)))
     next_self_geo=$((now + 60 + ($$ % 13)))
 
+    # One pass services EVERY shard that is due, then renders once. The
+    # previous if/continue cascade only serviced the first due shard per
+    # pass: on the single-core K230 one collect_system round (2s CPU sample
+    # window + subprocesses) takes 5-7s of wall time under load, i.e. longer
+    # than SYSTEM_INTERVAL=5s, so the system branch matched on every pass and
+    # the lower-priority shards (stratum/conn/chain) were starved forever —
+    # the peer count froze at the boot-time value (0 while bitcoind was
+    # still starting).
     while :; do
         now=$(now_epoch)
+        rendered=0
 
         if [ "${now}" -ge "${next_system}" ]; then
             collect_system >/dev/null 2>&1 || true
-            render_final_cache >/dev/null 2>&1 || true
             next_system=$((now + SYSTEM_INTERVAL))
-            sleep 1
-            continue
+            rendered=1
         fi
         if [ "${now}" -ge "${next_bitcoin_log}" ]; then
             collect_bitcoin_log >/dev/null 2>&1 || true
-            render_final_cache >/dev/null 2>&1 || true
             next_bitcoin_log=$((now + BITCOIN_LOG_INTERVAL))
-            sleep 1
-            continue
+            rendered=1
         fi
         if [ "${now}" -ge "${next_network}" ]; then
             collect_network >/dev/null 2>&1 || true
-            render_final_cache >/dev/null 2>&1 || true
             next_network=$((now + NETWORK_INTERVAL))
-            sleep 1
-            continue
+            rendered=1
         fi
         if [ "${now}" -ge "${next_stratum}" ]; then
             collect_stratum >/dev/null 2>&1 || true
-            render_final_cache >/dev/null 2>&1 || true
             next_stratum=$((now + STRATUM_INTERVAL))
-            sleep 1
-            continue
+            rendered=1
         fi
         if [ "${now}" -ge "${next_bitcoin_conn}" ]; then
             collect_bitcoin_conn >/dev/null 2>&1 || true
-            render_final_cache >/dev/null 2>&1 || true
             next_bitcoin_conn=$((now + BITCOIN_CONN_INTERVAL))
-            sleep 1
-            continue
+            rendered=1
         fi
         if [ "${now}" -ge "${next_bitcoin_chain}" ]; then
             if collect_bitcoin_chain >/dev/null 2>&1; then
@@ -1511,18 +1510,17 @@ daemon_loop() {
             else
                 next_bitcoin_chain=$((now + BITCOIN_CHAIN_RETRY_INTERVAL))
             fi
-            render_final_cache >/dev/null 2>&1 || true
-            sleep 1
-            continue
+            rendered=1
         fi
         if [ "${now}" -ge "${next_self_geo}" ]; then
             collect_self_geo >/dev/null 2>&1 || true
-            render_final_cache >/dev/null 2>&1 || true
             next_self_geo=$((now + SELF_GEO_INTERVAL))
-            sleep 1
-            continue
+            rendered=1
         fi
 
+        if [ "${rendered}" -eq 1 ]; then
+            render_final_cache >/dev/null 2>&1 || true
+        fi
         sleep 1
     done
 }
