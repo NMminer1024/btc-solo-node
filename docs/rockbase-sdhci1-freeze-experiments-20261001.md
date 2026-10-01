@@ -1,6 +1,6 @@
 # K230 sdhci1@91581000 无 PHY 校准冻结根因验证实验（2026-10-01 立项）
 
-> 状态：基线已采集（124.38），实验 1/2/3 待执行。
+> 状态：实验 1 泡机中（124.38，2026-10-01 09:35 UTC 起），实验 2/3 待执行。
 > 关联文档：`docs/rockbase-freeze-milestones.md`（历史排查里程碑）、
 > `docs/freeze-baselines/dmesg-e0cafa-cdd6b3-20261001-dstate-episode.txt`（本次活体证据）。
 
@@ -60,6 +60,7 @@
 | `rtl8189fs/0003-refine-sdio-freeze-diagnostics.patch` | 6ba05289648e8b045a6e30fe96d10e41 | 诊断细化 |
 | `rtl8189fs/0004-close-sdio-diagnostic-gaps.patch` | b5fbfe7be76f11a6533e3b43a95958e0 | 诊断补漏 |
 | `rtl8189fs/0009-enable-dynamic-tx-power.patch` | 9e91d4ef817dcf7163ca4d34c81d3a07 | Realtek DTP 动态发射功率（降热） |
+| `linux/0036-rockbase-sdhci1-delay-line-exp1.patch` | 0e6e75e9b5d5a77563e802f44f86403a | **实验 1（进行中）**：sdhci1 加 PHY 延迟线（rx=0x0d/tx=0xc0）；2026-10-01 已按本补丁内容就地改树并热部署 dtb（md5 5840c32e）到 124.38 |
 
 ### 已禁用（实验过/搁置的候选修复与判别）
 
@@ -144,3 +145,44 @@ dd if=/dev/mmcblk1p4 of=/dev/null bs=32M count=1 iflag=direct   # M4 x3
   `dmesg > /tmp/dmesg-<ts>.txt` 并 scp 回本机归档到 `docs/freeze-baselines/`。
 - 任何一档实验若出现 >10min 长卡死（M2 max > 600000ms）：立即回滚该档，
   记录为反证。
+
+## 5. 执行记录
+
+### 5.1 实验 1 部署（2026-10-01，124.38）
+
+- 补丁：`buildroot-overlay/board/canaan/k230_rockbase/patches/linux/0036-rockbase-sdhci1-delay-line-exp1.patch`
+  （DTS-only，`k230-rockbase.dts` + `k230-rockbase-lcd.dts` 的 `&mmc_sd1` 各加
+  `rx_delay_line = <0x0d>; tx_delay_line = <0xc0>;`，与 mmc_sd0 实测值一致）。
+  `patch -p1 --dry-run` 对干净源树验证通过。
+- 驱动链路核实：`sdhci-of-kendryte.c` 读 DTB 两个属性，probe 时写 PHY 寄存器
+  `DWC_MSHC_SDCLKDL_DC`(0x300+0x1E=0x31E) 与 `DWC_MSHC_SMPLDL_CNFG`(0x300+0x20=0x320)；
+  无成功日志，值 >256 才告警。
+- 构建：整树 make buildroot 不会重编 dtb（linux 包增量跳过 dtbs，syncconfig
+  环境不全无法直接 `make dtbs`）；按 `.k230-rockbase-lcd.dtb.cmd` 记录的原始命令
+  （gcc -E + scripts/dtc/dtc）手动重编了两个 dtb。
+  反编译确认 `sdhci1@91581000` 节点含新属性（exp0 反编译无）。
+- 产物存证：
+  - 新 dtb（k230-rockbase-lcd）md5 = `5840c32e70f1afef9da4e069d7e06adc`
+  - 原 dtb md5 = `27a3fcc51d7a3f5fe6c95175c637ccb3`（与基线板上一致）
+- 部署方式：热部署 `/boot/k.dtb`（板上 `/boot` 在 A/B slot 根文件系统内，
+  非独立 boot 分区）。原 dtb 备份 `/boot/k.dtb.exp0.bak`。重启生效。
+- **回滚方式**：`cp /boot/k.dtb.exp0.bak /boot/k.dtb && reboot`
+  （或 `cp` 回 27a3fcc5 版本后重启）。
+- OTA 注意：板上 `rockbase-ota.sh` 仅 check 不自动 apply，泡机期不会自动刷
+  v0.1.01；**实验期间禁止在 web/LCD 上 apply 升级**（apply 会整槽替换，
+  实验 dtb 与热部署的 statusd 修复都会丢失，泡机作废）。
+- 泡机起点：2026-10-01 09:35 UTC（新 boot 确认，peers=9 @09:43，
+  block 969436，load ~2.3）。
+
+### 5.2 实验 1 启动期观察（09:35 boot，待泡机结论）
+
+- **启动期伪中断依旧出现**：`[1.808] mmc1: Got command interrupt 0x00000001
+  even though no command operation was in progress` + 全零 Int stat 寄存器 dump，
+  与 exp0（1.86s）签名一致 → 延迟线未消除该事件。注意：该事件不是判据
+  （判据是 M1/M2），但说明它可能不完全由 CMD/DATA 时序裕量导致
+  （或该事件发生在延迟线配置之后仍无法避免，需实验 3 的寄存器快照进一步判别）。
+- 运行时 PHY 寄存器读回：devmem 读 sdhci1 主寄存器 0x91581000=0x00、
+  PHY 块 0x9158131E/0x320=0xFFFFFFFF；对照 sdhci0 0x91580000=0x01、
+  0x9158031C=0x00400101 可读 → 空闲时 sdhci1 总线被门控，devmem 读回不可靠，
+  不能用作"延迟线已写入"的证据；验证以 device-tree 属性 + 驱动代码路径为准
+  （/proc/device-tree/soc/sdhci1@91581000/{rx,tx}_delay_line = 0x0d/0xc0 已确认）。
