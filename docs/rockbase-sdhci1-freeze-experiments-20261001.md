@@ -217,6 +217,15 @@ dd if=/dev/mmcblk1p4 of=/dev/null bs=32M count=1 iflag=direct   # M4 x3
   0x9158031C=0x00400101 可读 → 空闲时 sdhci1 总线被门控，devmem 读回不可靠，
   不能用作"延迟线已写入"的证据；验证以 device-tree 属性 + 驱动代码路径为准
   （/proc/device-tree/soc/sdhci1@91581000/{rx,tx}_delay_line = 0x0d/0xc0 已确认）。
+- **I/O 窗口复读（10:10 UTC，边跑 dd 边读，排除"空闲门控"解释）**：
+  sdhci1 主寄存器 0x91581000 在传输中可读且随状态变化（0x2E1/0x1ED/0x3C8…），
+  但 PHY 块 0x9158131E 仍 devmem segfault、0x91581320 仍全 F
+  → **sdhci1 的 PHY 寄存器块对用户态完全不可访问**（非门控时机问题），
+  读回验证只能走内核内路径（见通用纪律"判无效前先验证生效"的 pr_info 方案）。
+- **机制旁证**：对照实例 sdhci0 的 RX 寄存器 0x91580320 读回 0x0D，与其
+  DTS `rx_delay_line=0x0d` 一致 → 该组寄存器读回的就是 DTS 编程值，
+  延迟线机制本身是真实落地的。（sdhci0 TX 读回 0x40 与期望 0x20 不符，
+  疑似 CNFG 高位编码影响读回，待寄存器手册确认，不影响 RX 旁证。）
 
 ### 5.3 结果记录（每档泡机结束/中止时填写）
 
