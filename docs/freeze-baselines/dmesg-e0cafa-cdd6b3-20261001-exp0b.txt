@@ -1,0 +1,640 @@
+[    0.000000] Linux version 6.6.36 (bitpony@station-ubuntu) (riscv64-unknown-linux-gnu-gcc (Xuantie-900 linux-6.6.0 glibc gcc Toolchain V3.0.2 B-20250410) 14.1.1 20240710, GNU ld (GNU Binutils) 2.42.0.20240618) #2 SMP Wed Sep 30 23:51:50 CST 2026
+[    0.000000] Machine model: RockBase K230
+[    0.000000] SBI specification v2.0 detected
+[    0.000000] SBI implementation ID=0x1 Version=0x10004
+[    0.000000] SBI TIME extension detected
+[    0.000000] SBI IPI extension detected
+[    0.000000] SBI RFENCE extension detected
+[    0.000000] printk: debug: ignoring loglevel setting.
+[    0.000000] printk: debug: skip boot console de-registration.
+[    0.000000] efi: UEFI not found.
+[    0.000000] OF: reserved mem: 0x0000000000000000..0x000000000003ffff (256 KiB) nomap non-reusable mmode_resv1@0
+[    0.000000] OF: reserved mem: 0x0000000000040000..0x000000000005ffff (128 KiB) nomap non-reusable mmode_resv0@40000
+[    0.000000] OF: reserved mem: 0x000000003fc00000..0x000000003fffffff (4096 KiB) nomap non-reusable ramoops@3fc00000
+[    0.000000] cma: Reserved 64 MiB at 0x000000003bc00000 on node -1
+[    0.000000] Zone ranges:
+[    0.000000]   DMA32    [mem 0x0000000000000000-0x000000003fdfffff]
+[    0.000000]   Normal   empty
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000000000000-0x000000000005ffff]
+[    0.000000]   node   0: [mem 0x0000000000060000-0x000000003fbfffff]
+[    0.000000]   node   0: [mem 0x000000003fc00000-0x000000003fdfffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000000000000-0x000000003fdfffff]
+[    0.000000] On node 0, zone DMA32: 512 pages in unavailable ranges
+[    0.000000] SBI HSM extension detected
+[    0.000000] riscv: base ISA extensions acdfimv
+[    0.000000] riscv: ELF capabilities acdfimv
+[    0.000000] percpu: Embedded 20 pages/cpu s41528 r8192 d32200 u81920
+[    0.000000] pcpu-alloc: s41528 r8192 d32200 u81920 alloc=20*4096
+[    0.000000] pcpu-alloc: [0] 0 
+[    0.000000] Kernel command line: root=/dev/mmcblk1p2 rw rootwait rootfstype=ext4 console=ttyS0,115200 earlycon=sbi ignore_loglevel log_buf_len=4M keep_bootcon printk.always_kmsg_dump=1
+[    0.000000] printk: log_buf_len: 4194304 bytes
+[    0.000000] printk: early log buf free: 1046544(99%)
+[    0.000000] Dentry cache hash table entries: 131072 (order: 8, 1048576 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 65536 (order: 7, 524288 bytes, linear)
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 257544
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] Virtual kernel memory layout:
+[    0.000000]       fixmap : 0xffffffc6fea00000 - 0xffffffc6ff000000   (6144 kB)
+[    0.000000]       pci io : 0xffffffc6ff000000 - 0xffffffc700000000   (  16 MB)
+[    0.000000]      vmemmap : 0xffffffc700000000 - 0xffffffc800000000   (4096 MB)
+[    0.000000]      vmalloc : 0xffffffc800000000 - 0xffffffd800000000   (  64 GB)
+[    0.000000]      modules : 0xffffffff0170f000 - 0xffffffff80000000   (2024 MB)
+[    0.000000]       lowmem : 0xffffffd800000000 - 0xffffffd83fe00000   (1022 MB)
+[    0.000000]       kernel : 0xffffffff80000000 - 0xffffffffffffffff   (2047 MB)
+[    0.000000] Memory: 901692K/1046528K available (11659K kernel code, 4450K rwdata, 5630K rodata, 456K init, 1401K bss, 79300K reserved, 65536K cma-reserved)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] rcu: Hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU restricting CPUs from NR_CPUS=64 to nr_cpu_ids=1.
+[    0.000000] rcu: 	RCU debug extended QS entry/exit.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=1
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] riscv-intc: 64 local interrupts mapped
+[    0.000000] plic: interrupt-controller@f00000000: mapped 208 interrupts with 1 handlers for 2 contexts.
+[    0.000000] riscv: providing IPIs using SBI IPI extension
+[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] clocksource: riscv_clocksource: mask: 0xffffffffffffffff max_cycles: 0x63a1e71a3, max_idle_ns: 440795203123 ns
+[    0.000000] sched_clock: 64 bits at 27MHz, resolution 37ns, wraps every 4398046511093ns
+[    0.000364] Console: colour dummy device 80x25
+[    0.000411] Calibrating delay loop (skipped), value calculated using timer frequency.. 54.00 BogoMIPS (lpj=108000)
+[    0.000422] pid_max: default: 32768 minimum: 301
+[    0.000491] LSM: initializing lsm=capability,integrity
+[    0.000572] Mount-cache hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.000582] Mountpoint-cache hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.002152] RCU Tasks Trace: Setting shift to 0 and lim to 1 rcu_task_cb_adjust=1.
+[    0.002238] riscv: ELF compat mode supported
+[    0.002267] ASID allocator using 16 bits (65536 entries)
+[    0.002404] rcu: Hierarchical SRCU implementation.
+[    0.002409] rcu: 	Max phase no-delay instances is 1000.
+[    0.002806] EFI services will not be available.
+[    0.003003] smp: Bringing up secondary CPUs ...
+[    0.003020] smp: Brought up 1 node, 1 CPU
+[    0.003662] devtmpfs: initialized
+[    0.012364] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.012383] futex hash table entries: 256 (order: 2, 16384 bytes, linear)
+[    0.013776] pinctrl core: initialized pinctrl subsystem
+[    0.014523] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.015679] DMA: preallocated 128 KiB GFP_KERNEL pool for atomic allocations
+[    0.015827] DMA: preallocated 128 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+[    0.015888] audit: initializing netlink subsys (disabled)
+[    0.016500] thermal_sys: Registered thermal governor 'step_wise'
+[    0.016564] audit: type=2000 audit(0.012:1): state=initialized audit_enabled=0 res=1
+[    0.016579] cpuidle: using governor menu
+[    0.040157] cpu0: Ratio of byte access time to unaligned word access is 6.32, unaligned accesses are fast
+[    0.042090] pstore: Using crash dump compression: deflate
+[    0.042102] printk: console [ramoops-1] enabled
+[    0.042524] pstore: Registered ramoops as persistent store backend
+[    0.042537] ramoops: using 0x400000@0x3fc00000, ecc: 0
+[    0.047618] platform soc: Fixed dependency cycle(s) with /soc/interrupt-controller@f00000000
+[    0.103895] platform 90840000.vo: Fixed dependency cycle(s) with /soc/dsi@90850000
+[    0.104031] platform 90840000.vo: Fixed dependency cycle(s) with /soc/dsi@90850000
+[    0.104091] platform 90850000.dsi: Fixed dependency cycle(s) with /soc/dsi@90850000/panel@0
+[    0.104109] platform 90850000.dsi: Fixed dependency cycle(s) with /soc/vo@90840000
+[    0.106390] HugeTLB: registered 1.00 GiB page size, pre-allocated 0 pages
+[    0.106409] HugeTLB: 16380 KiB vmemmap can be freed for a 1.00 GiB page
+[    0.106418] HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
+[    0.106425] HugeTLB: 28 KiB vmemmap can be freed for a 2.00 MiB page
+[    0.106989] ACPI: Interpreter disabled.
+[    0.107393] k230-powerdomain 91103000.sysctl_power: powerdomain init ok
+[    0.107922] iommu: Default domain type: Translated
+[    0.107940] iommu: DMA domain TLB invalidation policy: strict mode
+[    0.108336] SCSI subsystem initialized
+[    0.108555] libata version 3.00 loaded.
+[    0.108768] usbcore: registered new interface driver usbfs
+[    0.108802] usbcore: registered new interface driver hub
+[    0.108839] usbcore: registered new device driver usb
+[    0.109787] mc: Linux media interface: v0.10
+[    0.109859] videodev: Linux video capture interface: v2.00
+[    0.110116] Advanced Linux Sound Architecture Driver Initialized.
+[    0.110846] vgaarb: loaded
+[    0.111256] clocksource: Switched to clocksource riscv_clocksource
+[    0.111654] pnp: PnP ACPI: disabled
+[    0.119042] NET: Registered PF_INET protocol family
+[    0.119179] IP idents hash table entries: 16384 (order: 5, 131072 bytes, linear)
+[    0.120287] tcp_listen_portaddr_hash hash table entries: 512 (order: 2, 16384 bytes, linear)
+[    0.120336] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    0.120353] TCP established hash table entries: 8192 (order: 4, 65536 bytes, linear)
+[    0.120407] TCP bind hash table entries: 8192 (order: 7, 524288 bytes, linear)
+[    0.121942] TCP: Hash tables configured (established 8192 bind 8192)
+[    0.122067] UDP hash table entries: 512 (order: 3, 49152 bytes, linear)
+[    0.122166] UDP-Lite hash table entries: 512 (order: 3, 49152 bytes, linear)
+[    0.122390] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.122971] RPC: Registered named UNIX socket transport module.
+[    0.122991] RPC: Registered udp transport module.
+[    0.122998] RPC: Registered tcp transport module.
+[    0.123003] RPC: Registered tcp-with-tls transport module.
+[    0.123008] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    0.123980] PCI: CLS 0 bytes, default 64
+[    0.124885] Initialise system trusted keyrings
+[    0.125306] workingset: timestamp_bits=46 max_order=18 bucket_order=0
+[    0.125934] NFS: Registering the id_resolver key type
+[    0.125975] Key type id_resolver registered
+[    0.125983] Key type id_legacy registered
+[    0.126009] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
+[    0.126018] nfs4flexfilelayout_init: NFSv4 Flexfile Layout Driver Registering...
+[    0.126213] fuse: init (API version 7.39)
+[    0.126370] 9p: Installing v9fs 9p2000 file system support
+[    0.126569] NET: Registered PF_ALG protocol family
+[    0.126586] Key type asymmetric registered
+[    0.126594] Asymmetric key parser 'x509' registered
+[    0.126650] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 242)
+[    0.126661] io scheduler mq-deadline registered
+[    0.126670] io scheduler kyber registered
+[    0.126697] io scheduler bfq registered
+[    0.129543] k230-iomux 91105000.iomux: K230 IOMUX driver registered
+[    0.129903] k230-iomux 91000080.pmuiomux: K230 IOMUX driver registered
+[    0.143142] [K230_RESET]:sysctl reset phy addr 0x91101000
+[    0.143154] [K230_RESET]: ok!
+[    0.186097] Serial: 8250/16550 driver, 4 ports, IRQ sharing disabled
+[    0.188541] printk: console [ttyS0] disabled
+[    0.208911] 91400000.serial: ttyS0 at MMIO 0x91400000 (irq = 78, base_baud = 3125000) is a 16550A
+[    0.208951] printk: console [ttyS0] enabled
+[    1.168198] 91403000.serial: ttyS3 at MMIO 0x91403000 (irq = 79, base_baud = 3125000) is a 16550A
+[    1.178356] SuperH (H)SCI(F) driver initialized
+[    1.184677] random: crng init done
+[    1.188133] k230-rng 91213000.trng: K230 TRNG driver register!
+[    1.195366] canaan-vo 90840000.vo: probe
+[    1.199957] canaan-mipi-dsi 90850000.dsi: Fixed dependency cycle(s) with /soc/dsi@90850000/panel@0
+[    1.209039] mipi-dsi 90850000.dsi.0: Fixed dependency cycle(s) with /soc/dsi@90850000
+[    1.216987] canaan-panel-dsi 90850000.dsi.0: Couldn't get our reset GPIO, error: -2
+[    1.224674] canaan-panel-dsi 90850000.dsi.0: Couldn't get our backlight_gpio GPIO, error: -2
+[    1.233151] canaan-mipi-dsi 90850000.dsi: Attached device universal
+[    1.240679] canaan-vo 90840000.vo: background color is 808000
+[    1.246652] canaan-drm soc:display-subsystem: bound 90840000.vo (ops 0xffffffff80c7b528)
+[    1.254818] canaan-drm soc:display-subsystem: bound 90850000.dsi (ops 0xffffffff80c7ba48)
+[    1.264094] [drm] Initialized canaan-drm 1.0.0 20230501 for soc:display-subsystem on minor 0
+[    1.272677] canaan-drm soc:display-subsystem: [drm] bpp/depth value of 32/24 not supported
+[    1.280982] canaan-drm soc:display-subsystem: [drm] No compatible format found
+[    1.289938] canaan-drm soc:display-subsystem: [drm] *ERROR* fbdev: Failed to setup generic emulation (ret=-22)
+[    1.300013] canaan-drm soc:display-subsystem: [drm:canaan_drm_bind] Canaan K230 DRM driver register successfully
+[    1.311078] canaan-drm soc:display-subsystem: [drm] bpp/depth value of 32/24 not supported
+[    1.319402] canaan-drm soc:display-subsystem: [drm] No compatible format found
+[    1.331610] loop: module loaded
+[    1.336648] canaan-drm soc:display-subsystem: [drm] *ERROR* fbdev: Failed to setup generic emulation (ret=-22)
+[    1.363146] zram: Added device: zram0
+[    1.368461] misc mmz: registered.
+[    1.375614] e1000e: Intel(R) PRO/1000 Network Driver
+[    1.380612] e1000e: Copyright(c) 1999 - 2015 Intel Corporation.
+[    1.387991] usbcore: registered new device driver r8152-cfgselector
+[    1.394341] usbcore: registered new interface driver r8152
+[    1.399863] usbcore: registered new interface driver asix
+[    1.405303] usbcore: registered new interface driver ax88179_178a
+[    1.411430] usbcore: registered new interface driver cdc_ether
+[    1.417301] usbcore: registered new interface driver net1080
+[    1.422992] usbcore: registered new interface driver cdc_subset
+[    1.428948] usbcore: registered new interface driver zaurus
+[    1.434556] usbcore: registered new interface driver cdc_ncm
+[    1.440250] usbcore: registered new interface driver r8153_ecm
+[    1.447104] dwc2 91500000.usb: supply vusb_d not found, using dummy regulator
+[    1.454434] dwc2 91500000.usb: supply vusb_a not found, using dummy regulator
+[    1.461830] dwc2 91500000.usb: Configuration mismatch. dr_mode forced to host
+[    1.485211] dwc2 91500000.usb: DWC OTG Controller
+[    1.489968] dwc2 91500000.usb: new USB bus registered, assigned bus number 1
+[    1.497058] dwc2 91500000.usb: irq 84, io mem 0x91500000
+[    1.502522] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.06
+[    1.510805] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    1.518039] usb usb1: Product: DWC OTG Controller
+[    1.522751] usb usb1: Manufacturer: Linux 6.6.36 dwc2_hsotg
+[    1.528332] usb usb1: SerialNumber: 91500000.usb
+[    1.533444] hub 1-0:1.0: USB hub found
+[    1.537283] hub 1-0:1.0: 1 port detected
+[    1.541754] dwc2 91540000.usb: supply vusb_d not found, using dummy regulator
+[    1.549109] dwc2 91540000.usb: supply vusb_a not found, using dummy regulator
+[    1.556560] dwc2 91540000.usb: Configuration mismatch. dr_mode forced to host
+[    1.581356] dwc2 91540000.usb: DWC OTG Controller
+[    1.586112] dwc2 91540000.usb: new USB bus registered, assigned bus number 2
+[    1.593198] dwc2 91540000.usb: irq 85, io mem 0x91540000
+[    1.598669] usb usb2: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.06
+[    1.606960] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    1.614193] usb usb2: Product: DWC OTG Controller
+[    1.618906] usb usb2: Manufacturer: Linux 6.6.36 dwc2_hsotg
+[    1.624486] usb usb2: SerialNumber: 91540000.usb
+[    1.629568] hub 2-0:1.0: USB hub found
+[    1.633407] hub 2-0:1.0: 1 port detected
+[    1.638170] usbcore: registered new interface driver uas
+[    1.643598] usbcore: registered new interface driver usb-storage
+[    1.649921] mousedev: PS/2 mouse device common for all mice
+[    1.656500] i2c_dev: i2c /dev entries driver
+[    1.662528] MVX dev: Linlon v5276 identified. cores=1, nlsid=4, id=0. (mvx_dev.c:416)
+[    1.670692] usbcore: registered new interface driver uvcvideo
+[    1.705642] sdhci: Secure Digital Host Controller Interface driver
+[    1.711890] sdhci: Copyright(c) Pierre Ossman
+[    1.716843] sdhci-pltfm: SDHCI platform and OF driver helper
+[    1.725330] Kendryte crypto driver probe!
+[    1.729906] Kendryte sha256 driver probe!
+[    1.734513] Kendryte RSA driver probe!
+[    1.738528] usbcore: registered new interface driver usbhid
+[    1.744133] usbhid: USB HID core driver
+[    1.751375] riscv-pmu-sbi: SBI PMU extension is available
+[    1.756840] riscv-pmu-sbi: 16 firmware and 18 hardware counters
+[    1.787264] mmc0: SDHCI controller on 91580000.sdhci0 [91580000.sdhci0] using ADMA
+[    1.794934] mmc1: SDHCI controller on 91581000.sdhci1 [91581000.sdhci1] using ADMA
+[    1.808296] mmc1: Got command interrupt 0x00000001 even though no command operation was in progress.
+[    1.817443] mmc1: sdhci: ============ SDHCI REGISTER DUMP ===========
+[    1.823886] mmc1: sdhci: Sys addr:  0x00000000 | Version:  0x00000005
+[    1.830328] mmc1: sdhci: Blk size:  0x00000000 | Blk cnt:  0x00000000
+[    1.836769] mmc1: sdhci: Argument:  0x00000000 | Trn mode: 0x00000000
+[    1.843210] mmc1: sdhci: Present:   0x03ff0000 | Host ctl: 0x00000001
+[    1.849650] mmc1: sdhci: Power:     0x0000000f | Blk gap:  0x00000000
+[    1.856090] mmc1: sdhci: Wake-up:   0x00000000 | Clock:    0x00007d27
+[    1.862531] mmc1: sdhci: Timeout:   0x00000000 | Int stat: 0x00000000
+[    1.868971] mmc1: sdhci: Int enab:  0x00ff1083 | Sig enab: 0x00ff1083
+[    1.875412] mmc1: sdhci: ACmd stat: 0x00000000 | Slot int: 0x00000000
+[    1.881852] mmc1: sdhci: Caps:      0x276a6481 | Caps_1:   0x08008071
+[    1.888293] mmc1: sdhci: Cmd:       0x00000502 | Max curr: 0x00000000
+[    1.894733] mmc1: sdhci: Resp[0]:   0x000001aa | Resp[1]:  0x00000000
+[    1.901173] mmc1: sdhci: Resp[2]:   0x00000000 | Resp[3]:  0x00000000
+[    1.907613] mmc1: sdhci: Host ctl2: 0x00000000
+[    1.912057] mmc1: sdhci: ADMA Err:  0x00000000 | ADMA Ptr: 0x00000000
+[    1.918497] mmc1: sdhci: ============================================
+[    1.929484] mmc0: new high speed SDIO card at address 0001
+[    1.958335] mmc1: new high speed SDHC card at address aaaa
+[    1.964299] mmcblk1: mmc1:aaaa SK32G 29.7 GiB
+[    1.970310]  mmcblk1: p1 p2 p3 p4
+[    2.187133] NET: Registered PF_INET6 protocol family
+[    2.192910] Segment Routing with IPv6
+[    2.196655] In-situ OAM (IOAM) with IPv6
+[    2.200642] sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
+[    2.207036] NET: Registered PF_PACKET protocol family
+[    2.212226] 9pnet: Installing 9P2000 support
+[    2.216591] Key type dns_resolver registered
+[    2.220923] start plist test
+[    2.227154] end plist test
+[    2.237877] Loading compiled-in X.509 certificates
+[    2.248087] debug_vm_pgtable: [debug_vm_pgtable         ]: Validating architecture page table helpers
+[    2.268615] edt_ft5x06 1-0038: supply vcc not found, using dummy regulator
+[    2.275706] edt_ft5x06 1-0038: supply iovcc not found, using dummy regulator
+[    2.283945] cfg80211: Loading compiled-in X.509 certificates for regulatory database
+[    2.293148] Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+[    2.299517] Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+[    2.306860] clk: Disabling unused clocks
+[    2.310900] ALSA device list:
+[    2.313894]   #0: K230_I2S_INNO
+[    2.317336] platform regulatory.0: Direct firmware load for regulatory.db failed with error -2
+[    2.326000] cfg80211: failed to load regulatory.db
+[    2.632202] input: generic ft5x06 (79) as /devices/platform/soc/91408000.i2c/i2c-1/1-0038/input/input0
+[    2.715525] EXT4-fs (mmcblk1p2): mounted filesystem 6b6e9619-e344-4abf-9209-a9d77ddd5738 r/w with ordered data mode. Quota mode: disabled.
+[    2.728067] VFS: Mounted root (ext4 filesystem) on device 179:2.
+[    2.734862] devtmpfs: mounted
+[    2.737979] Freeing unused kernel image (initmem) memory: 452K
+[    2.743831] Kernel memory protection not selected by kernel config.
+[    2.750116] Run /sbin/init as init process
+[    2.754221]   with arguments:
+[    2.757197]     /sbin/init
+[    2.759913]   with environment:
+[    2.763055]     HOME=/
+[    2.765422]     TERM=linux
+[    2.887297] EXT4-fs (mmcblk1p2): re-mounted 6b6e9619-e344-4abf-9209-a9d77ddd5738 r/w. Quota mode: disabled.
+[    5.231354] [rb-mmc-diag] claim release host=mmc1 releaser=30:kworker/0:1H owner=159:rockbase-lcdui claim_cnt=1 held_ms=736 contended=0
+[    6.752709] [rb-mmc-diag] claim release host=mmc1 releaser=30:kworker/0:1H owner=159:rockbase-lcdui claim_cnt=1 held_ms=1468 contended=0
+[   36.498373] EXT4-fs (mmcblk1p3): mounted filesystem 189352a0-4346-42b3-96d5-25e19c2ade85 r/w with ordered data mode. Quota mode: disabled.
+[   42.310635] 8189fs: loading out-of-tree module taints kernel.
+[   44.949020] warning: `iwconfig' uses wireless extensions which will stop working for Wi-Fi 7 hardware; use nl80211
+[   59.484785] EXT4-fs (mmcblk1p4): mounted filesystem c6560dcc-7680-4362-b942-85f7ea3ede68 r/w with ordered data mode. Quota mode: disabled.
+[   59.553645] zram0: detected capacity change from 0 to 262144
+[   59.593582] Adding 131068k swap on /dev/zram0.  Priority:-2 extents:1 across:131068k SS
+[  217.562495] busybox[2870]: unhandled signal 11 code 0x2 at 0x0000002acbc47e40 in busybox[2acbc2f000+b1000]
+[  217.572190] CPU: 0 PID: 2870 Comm: busybox Tainted: G           O       6.6.36 #2
+[  217.579677] Hardware name: RockBase K230 (DT)
+[  217.584035] epc : 0000002acbc47e40 ra : 0000002acbc47d68 sp : 0000003ff46429c0
+[  217.591259]  gp : 0000002acbce4800 tp : 0000003fb94ef7b0 t0 : 000000000216f6d7
+[  217.598482]  t1 : 0000002acbc3b5cc t2 : ffffffffffffffff s0 : 0000000000000020
+[  217.605705]  s1 : 000000009158131e a0 : 0000000000000000 a1 : 0000000000001000
+[  217.612927]  a2 : 0000000000000001 a3 : 0000000000000001 a4 : 0000000000000003
+[  217.620148]  a5 : 0000000000000020 a6 : 0000000000000000 a7 : 00000000000000de
+[  217.627371]  s2 : 0000003ff4642c98 s3 : 0000003fb94ee31e s4 : 0000002aca98eb86
+[  217.634592]  s5 : 0000002aca998278 s6 : 0000000000000008 s7 : 0000002aca998448
+[  217.641814]  s8 : 0000002aca998278 s9 : 0000000000000002 s10: 0000000000000014
+[  217.649035]  s11: 0000002aca99a5f8 t3 : 0000003fb95962b8 t4 : 0000003fb95c89b0
+[  217.656257]  t5 : 000000000000000f t6 : 000000000000002f
+[  217.661568] status: 8000000200006020 badaddr: 0000003fb94ee31e cause: 0000000000000005
+[  217.676122] devmem[2871]: unhandled signal 11 code 0x2 at 0x0000002ab79bae40 in busybox[2ab79a2000+b1000]
+[  217.685732] CPU: 0 PID: 2871 Comm: devmem Tainted: G           O       6.6.36 #2
+[  217.693132] Hardware name: RockBase K230 (DT)
+[  217.697490] epc : 0000002ab79bae40 ra : 0000002ab79bad68 sp : 0000003fe0eaaa40
+[  217.704713]  gp : 0000002ab7a57800 tp : 0000003fbc2a57b0 t0 : 000000000216f6d7
+[  217.711935]  t1 : 0000002ab79ae5cc t2 : ffffffffffffffff s0 : 0000000000000020
+[  217.719157]  s1 : 000000009158131e a0 : 0000000000000000 a1 : 0000000000001000
+[  217.726379]  a2 : 0000000000000001 a3 : 0000000000000001 a4 : 0000000000000003
+[  217.733601]  a5 : 0000000000000020 a6 : 0000000000000000 a7 : 00000000000000de
+[  217.740822]  s2 : 0000003fe0eaaca0 s3 : 0000003fbc2a431e s4 : 0000002aca98eb86
+[  217.748044]  s5 : 0000002aca998278 s6 : 0000000000000008 s7 : 0000002aca998448
+[  217.755265]  s8 : 0000002aca998278 s9 : 0000000000000002 s10: 0000000000000014
+[  217.762487]  s11: 0000002aca99a5e0 t3 : 0000003fbc34c2b8 t4 : 0000003fbc37e9b0
+[  217.769708]  t5 : 000000000000000f t6 : 000000000000002f
+[  217.775019] status: 8000000200006020 badaddr: 0000003fbc2a431e cause: 0000000000000005
+[  217.882512] busybox[2905]: unhandled signal 11 code 0x2 at 0x0000002ab608de40 in busybox[2ab6075000+b1000]
+[  217.892211] CPU: 0 PID: 2905 Comm: busybox Tainted: G           O       6.6.36 #2
+[  217.899698] Hardware name: RockBase K230 (DT)
+[  217.904056] epc : 0000002ab608de40 ra : 0000002ab608dd68 sp : 0000003ff6f189c0
+[  217.911279]  gp : 0000002ab612a800 tp : 0000003fac7157b0 t0 : 000000000216f6d7
+[  217.918503]  t1 : 0000002ab60815cc t2 : ffffffffffffffff s0 : 0000000000000020
+[  217.925725]  s1 : 000000009158031e a0 : 0000000000000000 a1 : 0000000000001000
+[  217.932948]  a2 : 0000000000000001 a3 : 0000000000000001 a4 : 0000000000000003
+[  217.940169]  a5 : 0000000000000020 a6 : 0000000000000000 a7 : 00000000000000de
+[  217.947391]  s2 : 0000003ff6f18c98 s3 : 0000003fac71431e s4 : 0000002aca98eb86
+[  217.954614]  s5 : 0000002aca998278 s6 : 0000000000000008 s7 : 0000002aca998448
+[  217.961836]  s8 : 0000002aca998278 s9 : 0000000000000002 s10: 0000000000000014
+[  217.969058]  s11: 0000002aca99a5f8 t3 : 0000003fac7bc2b8 t4 : 0000003fac7ee9b0
+[  217.976280]  t5 : 000000000000000f t6 : 000000000000002f
+[  217.981591] status: 8000000200006020 badaddr: 0000003fac71431e cause: 0000000000000005
+[  218.144294] devmem[2952]: unhandled signal 11 code 0x2 at 0x0000002adef4de40 in busybox[2adef35000+b1000]
+[  218.153904] CPU: 0 PID: 2952 Comm: devmem Tainted: G           O       6.6.36 #2
+[  218.161304] Hardware name: RockBase K230 (DT)
+[  218.165662] epc : 0000002adef4de40 ra : 0000002adef4dd68 sp : 0000003fd0904a40
+[  218.172886]  gp : 0000002adefea800 tp : 0000003f803e67b0 t0 : 000000000216f6d7
+[  218.180109]  t1 : 0000002adef415cc t2 : ffffffffffffffff s0 : 0000000000000020
+[  218.187332]  s1 : 000000009158031e a0 : 0000000000000000 a1 : 0000000000001000
+[  218.194554]  a2 : 0000000000000001 a3 : 0000000000000001 a4 : 0000000000000003
+[  218.201775]  a5 : 0000000000000020 a6 : 0000000000000000 a7 : 00000000000000de
+[  218.208997]  s2 : 0000003fd0904ca0 s3 : 0000003f803e531e s4 : 0000002aca98eb86
+[  218.216218]  s5 : 0000002aca998278 s6 : 0000000000000008 s7 : 0000002aca998448
+[  218.223440]  s8 : 0000002aca998278 s9 : 0000000000000002 s10: 0000000000000014
+[  218.230663]  s11: 0000002aca99a5e0 t3 : 0000003f8048d2b8 t4 : 0000003f804bf9b0
+[  218.237884]  t5 : 000000000000000f t6 : 000000000000002f
+[  218.243196] status: 8000000200006020 badaddr: 0000003f803e531e cause: 0000000000000005
+[  229.491728] sysrq: Show Blocked State
+[  359.525412] sysrq: Show Blocked State
+[  829.457289] sysrq: Show Blocked State
+[  961.033728] sysrq: Show Blocked State
+[ 1089.484143] sysrq: Show Blocked State
+[ 1212.228295] sysrq: Show Blocked State
+[ 1457.482321] sysrq: Show Blocked State
+[ 2023.123461] sysrq: Show Blocked State
+[ 2219.695285] sysrq: Show Blocked State
+[ 2506.344080] busybox[9623]: unhandled signal 11 code 0x2 at 0x0000002ad2fd0e40 in busybox[2ad2fb8000+b1000]
+[ 2506.353776] CPU: 0 PID: 9623 Comm: busybox Tainted: G           O       6.6.36 #2
+[ 2506.361264] Hardware name: RockBase K230 (DT)
+[ 2506.365621] epc : 0000002ad2fd0e40 ra : 0000002ad2fd0d68 sp : 0000003ffc22f9c0
+[ 2506.372844]  gp : 0000002ad306d800 tp : 0000003fb39bd7b0 t0 : 000000000216f6d7
+[ 2506.380067]  t1 : 0000002ad2fc45cc t2 : ffffffffffffffff s0 : 0000000000000020
+[ 2506.387289]  s1 : 000000009158131e a0 : 0000000000000000 a1 : 0000000000001000
+[ 2506.394511]  a2 : 0000000000000001 a3 : 0000000000000001 a4 : 0000000000000003
+[ 2506.401733]  a5 : 0000000000000020 a6 : 0000000000000000 a7 : 00000000000000de
+[ 2506.408955]  s2 : 0000003ffc22fc98 s3 : 0000003fb39bc31e s4 : 0000002ab55f8b86
+[ 2506.416176]  s5 : 0000002ab5602278 s6 : 0000000000000008 s7 : 0000002ab5602448
+[ 2506.423398]  s8 : 0000002ab5602278 s9 : 0000000000000002 s10: 0000000000000014
+[ 2506.430620]  s11: 0000002ab5604f60 t3 : 0000003fb3a642b8 t4 : 0000003fb3a969b0
+[ 2506.437842]  t5 : 000000000000000f t6 : 000000000000002f
+[ 2506.443153] status: 8000000200006020 badaddr: 0000003fb39bc31e cause: 0000000000000005
+[ 2506.894304] busybox[9672]: unhandled signal 11 code 0x2 at 0x0000002ad448be40 in busybox[2ad4473000+b1000]
+[ 2506.904649] CPU: 0 PID: 9672 Comm: busybox Tainted: G           O       6.6.36 #2
+[ 2506.912137] Hardware name: RockBase K230 (DT)
+[ 2506.916496] epc : 0000002ad448be40 ra : 0000002ad448bd68 sp : 0000003fe5a9b9c0
+[ 2506.923719]  gp : 0000002ad4528800 tp : 0000003f9fa677b0 t0 : 000000000216f6d7
+[ 2506.930941]  t1 : 0000002ad447f5cc t2 : ffffffffffffffff s0 : 0000000000000020
+[ 2506.938163]  s1 : 000000009158131e a0 : 0000000000000000 a1 : 0000000000001000
+[ 2506.945385]  a2 : 0000000000000001 a3 : 0000000000000001 a4 : 0000000000000003
+[ 2506.952607]  a5 : 0000000000000020 a6 : 0000000000000000 a7 : 00000000000000de
+[ 2506.959828]  s2 : 0000003fe5a9bc98 s3 : 0000003f9fa6631e s4 : 0000002ab55f8b86
+[ 2506.967050]  s5 : 0000002ab5602278 s6 : 0000000000000008 s7 : 0000002ab5602448
+[ 2506.974273]  s8 : 0000002ab5602278 s9 : 0000000000000002 s10: 0000000000000014
+[ 2506.981495]  s11: 0000002ab5604f60 t3 : 0000003f9fb0e2b8 t4 : 0000003f9fb409b0
+[ 2506.988717]  t5 : 000000000000000f t6 : 000000000000002f
+[ 2506.994028] status: 8000000200006020 badaddr: 0000003f9fa6631e cause: 0000000000000005
+[ 2507.477500] busybox[9786]: unhandled signal 11 code 0x2 at 0x0000002ad894fe40 in busybox[2ad8937000+b1000]
+[ 2507.487197] CPU: 0 PID: 9786 Comm: busybox Tainted: G           O       6.6.36 #2
+[ 2507.494685] Hardware name: RockBase K230 (DT)
+[ 2507.499042] epc : 0000002ad894fe40 ra : 0000002ad894fd68 sp : 0000003ff44ec9c0
+[ 2507.506266]  gp : 0000002ad89ec800 tp : 0000003faa0707b0 t0 : 000000000216f6d7
+[ 2507.513489]  t1 : 0000002ad89435cc t2 : ffffffffffffffff s0 : 0000000000000020
+[ 2507.520712]  s1 : 000000009158131e a0 : 0000000000000000 a1 : 0000000000001000
+[ 2507.527935]  a2 : 0000000000000001 a3 : 0000000000000001 a4 : 0000000000000003
+[ 2507.535157]  a5 : 0000000000000020 a6 : 0000000000000000 a7 : 00000000000000de
+[ 2507.542378]  s2 : 0000003ff44ecc98 s3 : 0000003faa06f31e s4 : 0000002ab55f8b86
+[ 2507.549601]  s5 : 0000002ab5602278 s6 : 0000000000000008 s7 : 0000002ab5602448
+[ 2507.556823]  s8 : 0000002ab5602278 s9 : 0000000000000002 s10: 0000000000000014
+[ 2507.564046]  s11: 0000002ab5604f60 t3 : 0000003faa1172b8 t4 : 0000003faa1499b0
+[ 2507.571268]  t5 : 000000000000000f t6 : 000000000000002f
+[ 2507.576579] status: 8000000200006020 badaddr: 0000003faa06f31e cause: 0000000000000005
+[ 2507.990363] busybox[9917]: unhandled signal 11 code 0x2 at 0x0000002ac64dfe40 in busybox[2ac64c7000+b1000]
+[ 2508.000061] CPU: 0 PID: 9917 Comm: busybox Tainted: G           O       6.6.36 #2
+[ 2508.007550] Hardware name: RockBase K230 (DT)
+[ 2508.011908] epc : 0000002ac64dfe40 ra : 0000002ac64dfd68 sp : 0000003fe6d859c0
+[ 2508.019132]  gp : 0000002ac657c800 tp : 0000003f87a4b7b0 t0 : 000000000216f6d7
+[ 2508.026355]  t1 : 0000002ac64d35cc t2 : ffffffffffffffff s0 : 0000000000000020
+[ 2508.033578]  s1 : 000000009158131e a0 : 0000000000000000 a1 : 0000000000001000
+[ 2508.040800]  a2 : 0000000000000001 a3 : 0000000000000001 a4 : 0000000000000003
+[ 2508.048013]  a5 : 0000000000000020 a6 : 0000000000000000 a7 : 00000000000000de
+[ 2508.055235]  s2 : 0000003fe6d85c98 s3 : 0000003f87a4a31e s4 : 0000002ab55f8b86
+[ 2508.062458]  s5 : 0000002ab5602278 s6 : 0000000000000008 s7 : 0000002ab5602448
+[ 2508.069681]  s8 : 0000002ab5602278 s9 : 0000000000000002 s10: 0000000000000014
+[ 2508.076903]  s11: 0000002ab5604f60 t3 : 0000003f87af22b8 t4 : 0000003f87b249b0
+[ 2508.084125]  t5 : 000000000000000f t6 : 000000000000002f
+[ 2508.089435] status: 8000000200006020 badaddr: 0000003f87a4a31e cause: 0000000000000005
+[ 2508.130339] [rb-mmc-diag] claim release host=mmc1 releaser=13875:kworker/0:0H owner=9621:dd claim_cnt=1 held_ms=804 contended=0
+[ 2508.545468] busybox[10055]: unhandled signal 11 code 0x2 at 0x0000002acd23fe40 in busybox[2acd227000+b1000]
+[ 2508.555252] CPU: 0 PID: 10055 Comm: busybox Tainted: G           O       6.6.36 #2
+[ 2508.562826] Hardware name: RockBase K230 (DT)
+[ 2508.567183] epc : 0000002acd23fe40 ra : 0000002acd23fd68 sp : 0000003fde3309c0
+[ 2508.574406]  gp : 0000002acd2dc800 tp : 0000003f989cb7b0 t0 : 000000000216f6d7
+[ 2508.581629]  t1 : 0000002acd2335cc t2 : ffffffffffffffff s0 : 0000000000000020
+[ 2508.588851]  s1 : 000000009158131e a0 : 0000000000000000 a1 : 0000000000001000
+[ 2508.596074]  a2 : 0000000000000001 a3 : 0000000000000001 a4 : 0000000000000003
+[ 2508.603295]  a5 : 0000000000000020 a6 : 0000000000000000 a7 : 00000000000000de
+[ 2508.610518]  s2 : 0000003fde330c98 s3 : 0000003f989ca31e s4 : 0000002ab55f8b86
+[ 2508.617740]  s5 : 0000002ab5602278 s6 : 0000000000000008 s7 : 0000002ab5602448
+[ 2508.624962]  s8 : 0000002ab5602278 s9 : 0000000000000002 s10: 0000000000000014
+[ 2508.632184]  s11: 0000002ab5604f60 t3 : 0000003f98a722b8 t4 : 0000003f98aa49b0
+[ 2508.639406]  t5 : 000000000000000f t6 : 000000000000002f
+[ 2508.644717] status: 8000000200006020 badaddr: 0000003f989ca31e cause: 0000000000000005
+[ 2509.070876] busybox[10201]: unhandled signal 11 code 0x2 at 0x0000002ac1ad7e40 in busybox[2ac1abf000+b1000]
+[ 2509.080661] CPU: 0 PID: 10201 Comm: busybox Tainted: G           O       6.6.36 #2
+[ 2509.088235] Hardware name: RockBase K230 (DT)
+[ 2509.092592] epc : 0000002ac1ad7e40 ra : 0000002ac1ad7d68 sp : 0000003ff4c7a9c0
+[ 2509.099816]  gp : 0000002ac1b74800 tp : 0000003fa96ee7b0 t0 : 000000000216f6d7
+[ 2509.107038]  t1 : 0000002ac1acb5cc t2 : ffffffffffffffff s0 : 0000000000000020
+[ 2509.114261]  s1 : 000000009158131e a0 : 0000000000000000 a1 : 0000000000001000
+[ 2509.121483]  a2 : 0000000000000001 a3 : 0000000000000001 a4 : 0000000000000003
+[ 2509.128706]  a5 : 0000000000000020 a6 : 0000000000000000 a7 : 00000000000000de
+[ 2509.135928]  s2 : 0000003ff4c7ac98 s3 : 0000003fa96ed31e s4 : 0000002ab55f8b86
+[ 2509.143150]  s5 : 0000002ab5602278 s6 : 0000000000000008 s7 : 0000002ab5602448
+[ 2509.150373]  s8 : 0000002ab5602278 s9 : 0000000000000002 s10: 0000000000000014
+[ 2509.157595]  s11: 0000002ab5604f60 t3 : 0000003fa97952b8 t4 : 0000003fa97c79b0
+[ 2509.164817]  t5 : 000000000000000f t6 : 000000000000002f
+[ 2509.170128] status: 8000000200006020 badaddr: 0000003fa96ed31e cause: 0000000000000005
+[ 2509.250062] sysrq: Show Blocked State
+[ 2509.253856] task:b-msghand       state:D stack:0     pid:20997 ppid:1      flags:0x00000000
+[ 2509.262285] Call Trace:
+[ 2509.264755] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 2509.270012] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 2509.274910] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 2509.280071] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 2509.286294] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 2509.291804] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 2509.296964] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 2509.302817] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 2509.308409] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 2509.314264] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 2509.319597] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 2509.325300] task:dd              state:D stack:0     pid:9621  ppid:9620   flags:0x00000000
+[ 2509.333667] Call Trace:
+[ 2509.336121] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 2509.341359] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 2509.346247] [<ffffffff80b63af6>] schedule_timeout+0x7e/0xee
+[ 2509.351832] [<ffffffff80b5dc92>] io_schedule_timeout+0x3a/0x52
+[ 2509.357676] [<ffffffff803bf068>] blk_io_schedule+0x24/0x3c
+[ 2509.363175] [<ffffffff803bad20>] blkdev_direct_IO.part.0+0x3d0/0x4b8
+[ 2509.369539] [<ffffffff803bb0ae>] blkdev_read_iter+0x98/0x124
+[ 2509.375208] [<ffffffff801d4552>] vfs_read+0x1c6/0x264
+[ 2509.380274] [<ffffffff801d4da4>] ksys_read+0x58/0xcc
+[ 2509.385254] [<ffffffff801d4e2c>] __riscv_sys_read+0x14/0x1c
+[ 2509.390839] [<ffffffff80b5b946>] do_trap_ecall_u+0x124/0x136
+[ 2509.396508] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 2509.755438] busybox[10305]: unhandled signal 11 code 0x2 at 0x0000002ad9924e40 in busybox[2ad990c000+b1000]
+[ 2509.765223] CPU: 0 PID: 10305 Comm: busybox Tainted: G           O       6.6.36 #2
+[ 2509.772798] Hardware name: RockBase K230 (DT)
+[ 2509.777155] epc : 0000002ad9924e40 ra : 0000002ad9924d68 sp : 0000003fe73e39c0
+[ 2509.784379]  gp : 0000002ad99c1800 tp : 0000003fba16c7b0 t0 : 000000000216f6d7
+[ 2509.791602]  t1 : 0000002ad99185cc t2 : ffffffffffffffff s0 : 0000000000000020
+[ 2509.798824]  s1 : 000000009158131e a0 : 0000000000000000 a1 : 0000000000001000
+[ 2509.806046]  a2 : 0000000000000001 a3 : 0000000000000001 a4 : 0000000000000003
+[ 2509.813268]  a5 : 0000000000000020 a6 : 0000000000000000 a7 : 00000000000000de
+[ 2509.820490]  s2 : 0000003fe73e3c98 s3 : 0000003fba16b31e s4 : 0000002ab55f8b86
+[ 2509.827712]  s5 : 0000002ab5602278 s6 : 0000000000000008 s7 : 0000002ab5602448
+[ 2509.834934]  s8 : 0000002ab5602278 s9 : 0000000000000002 s10: 0000000000000014
+[ 2509.842156]  s11: 0000002ab5604f60 t3 : 0000003fba2132b8 t4 : 0000003fba2459b0
+[ 2509.849378]  t5 : 000000000000000f t6 : 000000000000002f
+[ 2509.854689] status: 0000000200004020 badaddr: 0000003fba16b31e cause: 0000000000000005
+[ 2510.220279] busybox[10437]: unhandled signal 11 code 0x2 at 0x0000002ac9f09e40 in busybox[2ac9ef1000+b1000]
+[ 2510.230063] CPU: 0 PID: 10437 Comm: busybox Tainted: G           O       6.6.36 #2
+[ 2510.237638] Hardware name: RockBase K230 (DT)
+[ 2510.241995] epc : 0000002ac9f09e40 ra : 0000002ac9f09d68 sp : 0000003fd18699c0
+[ 2510.249219]  gp : 0000002ac9fa6800 tp : 0000003fa53097b0 t0 : 000000000216f6d7
+[ 2510.256442]  t1 : 0000002ac9efd5cc t2 : ffffffffffffffff s0 : 0000000000000020
+[ 2510.263665]  s1 : 000000009158131e a0 : 0000000000000000 a1 : 0000000000001000
+[ 2510.270888]  a2 : 0000000000000001 a3 : 0000000000000001 a4 : 0000000000000003
+[ 2510.278110]  a5 : 0000000000000020 a6 : 0000000000000000 a7 : 00000000000000de
+[ 2510.285332]  s2 : 0000003fd1869c98 s3 : 0000003fa530831e s4 : 0000002ab55f8b86
+[ 2510.292554]  s5 : 0000002ab5602278 s6 : 0000000000000008 s7 : 0000002ab5602448
+[ 2510.299775]  s8 : 0000002ab5602278 s9 : 0000000000000002 s10: 0000000000000014
+[ 2510.306998]  s11: 0000002ab5604f60 t3 : 0000003fa53b02b8 t4 : 0000003fa53e29b0
+[ 2510.314220]  t5 : 000000000000000f t6 : 000000000000002f
+[ 2510.319532] status: 8000000200006020 badaddr: 0000003fa530831e cause: 0000000000000005
+[ 2510.404565] [rb-mmc-diag] claim release host=mmc1 releaser=13875:kworker/0:0H owner=9621:dd claim_cnt=1 held_ms=1604 contended=0
+[ 2510.641963] busybox[10441]: unhandled signal 11 code 0x2 at 0x0000002ac8b19e40 in busybox[2ac8b01000+b1000]
+[ 2510.651747] CPU: 0 PID: 10441 Comm: busybox Tainted: G           O       6.6.36 #2
+[ 2510.659321] Hardware name: RockBase K230 (DT)
+[ 2510.663679] epc : 0000002ac8b19e40 ra : 0000002ac8b19d68 sp : 0000003ffcdd39c0
+[ 2510.670902]  gp : 0000002ac8bb6800 tp : 0000003f945a37b0 t0 : 000000000216f6d7
+[ 2510.678124]  t1 : 0000002ac8b0d5cc t2 : ffffffffffffffff s0 : 0000000000000020
+[ 2510.685347]  s1 : 000000009158131e a0 : 0000000000000000 a1 : 0000000000001000
+[ 2510.692569]  a2 : 0000000000000001 a3 : 0000000000000001 a4 : 0000000000000003
+[ 2510.699791]  a5 : 0000000000000020 a6 : 0000000000000000 a7 : 00000000000000de
+[ 2510.707013]  s2 : 0000003ffcdd3c98 s3 : 0000003f945a231e s4 : 0000002ab55f8b86
+[ 2510.714235]  s5 : 0000002ab5602278 s6 : 0000000000000008 s7 : 0000002ab5602448
+[ 2510.721456]  s8 : 0000002ab5602278 s9 : 0000000000000002 s10: 0000000000000014
+[ 2510.728678]  s11: 0000002ab5604f60 t3 : 0000003f9464a2b8 t4 : 0000003f9467c9b0
+[ 2510.735900]  t5 : 000000000000000f t6 : 000000000000002f
+[ 2510.741212] status: 8000000200006020 badaddr: 0000003f945a231e cause: 0000000000000005
+[ 2511.070465] busybox[10498]: unhandled signal 11 code 0x2 at 0x0000002ab9f10e40 in busybox[2ab9ef8000+b1000]
+[ 2511.080248] CPU: 0 PID: 10498 Comm: busybox Tainted: G           O       6.6.36 #2
+[ 2511.087822] Hardware name: RockBase K230 (DT)
+[ 2511.092180] epc : 0000002ab9f10e40 ra : 0000002ab9f10d68 sp : 0000003fdd9089c0
+[ 2511.099404]  gp : 0000002ab9fad800 tp : 0000003f879787b0 t0 : 000000000216f6d7
+[ 2511.106627]  t1 : 0000002ab9f045cc t2 : ffffffffffffffff s0 : 0000000000000020
+[ 2511.113848]  s1 : 000000009158131e a0 : 0000000000000000 a1 : 0000000000001000
+[ 2511.121071]  a2 : 0000000000000001 a3 : 0000000000000001 a4 : 0000000000000003
+[ 2511.128293]  a5 : 0000000000000020 a6 : 0000000000000000 a7 : 00000000000000de
+[ 2511.135515]  s2 : 0000003fdd908c98 s3 : 0000003f8797731e s4 : 0000002ab55f8b86
+[ 2511.142737]  s5 : 0000002ab5602278 s6 : 0000000000000008 s7 : 0000002ab5602448
+[ 2511.149958]  s8 : 0000002ab5602278 s9 : 0000000000000002 s10: 0000000000000014
+[ 2511.157180]  s11: 0000002ab5604f60 t3 : 0000003f87a1f2b8 t4 : 0000003f87a519b0
+[ 2511.164402]  t5 : 000000000000000f t6 : 000000000000002f
+[ 2511.169713] status: 8000000200006020 badaddr: 0000003f8797731e cause: 0000000000000005
+[ 2913.996389] sysrq: Show Blocked State
+[ 2914.000207] task:b-msghand       state:D stack:0     pid:20997 ppid:1      flags:0x00000000
+[ 2914.008626] Call Trace:
+[ 2914.011076] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 2914.016327] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 2914.021217] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 2914.026374] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 2914.032579] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 2914.038078] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 2914.043237] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 2914.049087] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 2914.054672] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 2914.060520] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 2914.065851] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 3045.249579] sysrq: Show Blocked State
+[ 3045.253381] task:b-msghand       state:D stack:0     pid:20997 ppid:1      flags:0x00000000
+[ 3045.261807] Call Trace:
+[ 3045.264273] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 3045.269529] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 3045.274420] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 3045.279570] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 3045.285766] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 3045.291266] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 3045.296417] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 3045.302266] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 3045.307851] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 3045.313700] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 3045.319022] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 3344.097848] sysrq: Show Blocked State
+[ 3544.702444] sysrq: Show Blocked State
+[ 3544.706236] task:b-msghand       state:D stack:0     pid:20997 ppid:1      flags:0x00000000
+[ 3544.714660] Call Trace:
+[ 3544.717130] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 3544.722395] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 3544.727296] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 3544.732447] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 3544.738642] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 3544.744142] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 3544.749307] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 3544.755152] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 3544.760737] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 3544.766590] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 3544.771914] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 3970.259180] sysrq: Show Blocked State
+[ 4118.560009] sysrq: Show Blocked State
+[ 4278.776997] sysrq: Show Blocked State
+[ 4667.647985] sysrq: Show Blocked State
+[ 4925.086408] sysrq: Show Blocked State
+[ 5265.624402] sysrq: Show Blocked State
+[ 5425.765866] sysrq: Show Blocked State
+[ 5576.801997] sysrq: Show Blocked State
+[ 5840.927428] sysrq: Show Blocked State
+[ 5840.931210] task:b-msghand       state:D stack:0     pid:14371 ppid:1      flags:0x00000000
+[ 5840.939654] Call Trace:
+[ 5840.942104] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 5840.947374] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 5840.952285] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 5840.957452] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 5840.963655] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 5840.969173] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 5840.974331] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 5840.980182] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 5840.985768] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 5840.991616] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 5840.996944] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 5989.757478] sysrq: Show Blocked State
+[ 6369.284447] sysrq: Show Blocked State
+[ 6542.932351] sysrq: Show Blocked State
+[ 6782.728445] sysrq: Show Blocked State
+[ 8018.707293] sysrq: Show Blocked State
+[ 8502.200530] sysrq: Show Blocked State
+[ 9286.530354] sysrq: Show Blocked State
+[ 9697.123029] sysrq: Show Blocked State
+[ 9914.714153] sysrq: Show Blocked State
+[10142.285790] sysrq: Show Blocked State
+[10462.428783] sysrq: Show Blocked State
+[10624.274282] sysrq: Show Blocked State
+[10799.361205] sysrq: Show Blocked State
+[11053.504403] sysrq: Show Blocked State
+[11555.883546] sysrq: Show Blocked State
+[11555.887376] task:b-msghand       state:D stack:0     pid:27498 ppid:1      flags:0x00000000
+[11555.895780] Call Trace:
+[11555.898230] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[11555.903483] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[11555.908412] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[11555.913569] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[11555.919766] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[11555.925264] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[11555.930415] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[11555.936271] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[11555.941862] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[11555.947711] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[11555.953043] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64

@@ -1,0 +1,52 @@
+== exp0b start 2026-10-01 11:37:26 bitcoind STOPPED ==
+T+1m 11:42:26 m1_total=27 load=1.39 up=7693.61
+[  229.491728] sysrq: Show Blocked State
+[  359.525412] sysrq: Show Blocked State
+[  829.457289] sysrq: Show Blocked State
+[  961.033728] sysrq: Show Blocked State
+[ 1089.484143] sysrq: Show Blocked State
+[ 1212.228295] sysrq: Show Blocked State
+[ 1457.482321] sysrq: Show Blocked State
+[ 2023.123461] sysrq: Show Blocked State
+[ 2219.695285] sysrq: Show Blocked State
+[ 2509.250062] sysrq: Show Blocked State
+[ 2913.996389] sysrq: Show Blocked State
+[ 3045.249579] sysrq: Show Blocked State
+[ 3344.097848] sysrq: Show Blocked State
+[ 3544.702444] sysrq: Show Blocked State
+[ 3970.259180] sysrq: Show Blocked State
+[ 4118.560009] sysrq: Show Blocked State
+[ 4278.776997] sysrq: Show Blocked State
+[ 4667.647985] sysrq: Show Blocked State
+[ 4925.086408] sysrq: Show Blocked State
+[ 5265.624402] sysrq: Show Blocked State
+[ 5425.765866] sysrq: Show Blocked State
+[ 5576.801997] sysrq: Show Blocked State
+[ 5840.927428] sysrq: Show Blocked State
+[ 5989.757478] sysrq: Show Blocked State
+[ 6369.284447] sysrq: Show Blocked State
+[ 6542.932351] sysrq: Show Blocked State
+[ 6782.728445] sysrq: Show Blocked State
+T+2m 11:47:26 m1_total=27 load=1.52 up=7993.78
+T+3m 11:52:26 m1_total=28 load=1.86 up=8293.93
+[ 8018.707293] sysrq: Show Blocked State
+T+4m 11:57:26 m1_total=29 load=1.47 up=8593.98
+[ 8502.200530] sysrq: Show Blocked State
+T+5m 12:02:26 m1_total=29 load=1.64 up=8894.04
+T+6m 12:07:26 m1_total=29 load=1.24 up=9194.09
+T+7m 12:12:26 m1_total=30 load=2.32 up=9494.16
+[ 9286.530354] sysrq: Show Blocked State
+T+8m 12:17:26 m1_total=31 load=1.50 up=9794.33
+[ 9697.123029] sysrq: Show Blocked State
+T+9m 12:22:26 m1_total=32 load=1.05 up=10094.43
+[ 9914.714153] sysrq: Show Blocked State
+T+10m 12:27:27 m1_total=33 load=1.42 up=10394.53
+[10142.285790] sysrq: Show Blocked State
+T+11m 12:32:27 m1_total=35 load=1.01 up=10694.64
+[10462.428783] sysrq: Show Blocked State
+[10624.274282] sysrq: Show Blocked State
+T+12m 12:37:27 m1_total=36 load=1.22 up=10994.79
+[10799.361205] sysrq: Show Blocked State
+T+13m 12:42:27 m1_total=37 load=1.01 up=11294.89
+[11053.504403] sysrq: Show Blocked State
+== exp0b end 2026-10-01 12:42:27 ==

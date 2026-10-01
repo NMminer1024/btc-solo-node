@@ -237,9 +237,28 @@ m1_sysrq / m1_dstate / m2_n / m2_max_ms / m2_avg_ms / load / block / peers）；
 |---|---|---|---|---|---|---|---|
 | 基线 exp0 | 27a3fcc5 | 01:26–09:11 (9/30–10/1) | 7.77h | 12.2 | 2876/1107 | —（参照） | 见 §3 |
 | exp1-A rx=0x0d/tx=0xc0 | 5840c32e | 09:35–11:00 (10/1) | 1.43h（用户判定提前终止） | **13.3**（19 次/1.43h，基线 12.2） | 1604/1153（含 2 次自测 dd 制造） | **无正向收益** | 1.43h 速率与基线重合且无下降趋势，提前终止；启动期伪中断未消失（§5.2）；DTB 保留在板上，exp0b 复用 |
-| exp0b 进程归因（停 bitcoind 1h） | 5840c32e | 11:37–12:42 (10/1，第 2 次尝试） | 1h | 待填 | 待填 | 待填 | 观察中；判据：M1 显著下降→辅证"bitcoind 读 SD 主导 D 事件"；不降→"任何 SD 读者都踩雷"，矛头更钉控制器本身。**第 1 次尝试（11:00:14 起）作废**：仅用 `bitcoin-cli stop`，supervisord 60s 巡检后 22s 即自动拉起（日志 "restart bitcoind: pattern not found"），bitcoind 实际只停 ~30s。修正：先落用户停止标志 `/run/rockbase/bitcoind-user-stopped`（`/usr/bin/rockbase_supervisord.sh` 见标志即跳过重启，11:35:51 日志 "skip bitcoind: user-stopped flag present" 确认生效），再停；新 T0=11:37:25，重启 bitcoind 前先删标志 |
+| exp0b 进程归因（停 bitcoind 1h） | 5840c32e | 11:37–12:42 (10/1，第 2 次尝试） | 1.08h | **9.2**（10 次/1.08h；同期运行段 13.3，基线 12.2） | 1604/1153（n=4 累计，与 exp1-A 持平，无恶化） | **未归零、降幅不显著**（Poisson p≈0.15–0.22） | 判据结果=后半支：**停了 bitcoind D 事件仍 ~9 次/h** → bitcoind 读不是主触发源；12:31:16 栈捕获受害者 = **jbd2/mmcblk1p3（ext4 日志线程，SD 卡）**，12:34:10 出现 d=2；触发时 disk_wbusy=0%（卡响应迟滞，非队列积压）。**第 1 次尝试（11:00:14 起）作废**：仅 `bitcoin-cli stop` 被 supervisord 22s 后拉起；修正=先落 `/run/rockbase/bitcoind-user-stopped` 再停（"skip bitcoind: user-stopped flag present" 确认）。12:44 删标志恢复 bitcoind：block 969442、peers 爬坡、ckpool up，运行正常。事件时间戳/采集器全量：`freeze-baselines/exp0b-obs-log-20261001.txt`；dmesg：`freeze-baselines/dmesg-e0cafa-cdd6b3-20261001-exp0b.txt` |
 
 > 每档泡机结束：① 从上表所在板取终值填本表；② 完整 dmesg 存
 > `docs/freeze-baselines/dmesg-<board>-<date>-expN.txt`；③ 若中止/回滚，
 > 记录触发原因（红线事件）。所有源码改动（补丁）在实验结论出来前保持
 > 工作区未提交状态，结论为“无效”则直接删除补丁文件回基线。
+
+### 5.4 exp1 + exp0b 阶段性解读（2026-10-01 12:50 UTC）
+
+- **exp1（延迟线 rx=0x0d/tx=0xc0 镜像 sdhci0）**：1.43h 内 M1 13.3 次/h，
+  与基线 12.2 无差异 → 镜像"已知良好"值不构成修复。
+- **exp0b（停 bitcoind）**：M1 9.2 次/h，未归零、降幅不显著；受害者含
+  **内核 jbd2 日志线程**（与 bitcoind 无关）。两点含义：
+  1. D 事件由 SD 卡上的**任意读者**即可触发（jbd2、WiFi RTW 线程、
+     statusd、web、日志轮转都在读），"bitcoind 读放大主导"假设**不成立**；
+  2. 矛头继续指向 sdhci1 控制器/时序本身（或卡-控制器组合），与 §1.3
+     证据链一致。
+- **对假设的影响**："缺 PHY 延迟线校准"仍存活，但"镜像 sdhci0 的值即
+  足够"被否定——要么该实例需要**不同的**校准值（-36 组合需扫描），
+  要么根因不在 CMD/DATA 延迟线（PHY 电源/复位、时钟树、1.8V/信号完整性
+  等）。按 §4 纪律，**下一步先做负对照/取值扫描（exp1-B：rx=0x1f/
+  tx=0xff 等越界值）+ exp-3 的 pr_info 读回**，确认参数链真实生效且
+  响应不同取值，再决定是继续扫描还是转向 exp2（降速）/硬件侧。
+- 板上状态：exp1 DTB（5840c32e）在位；bitcoind 12:44 已恢复；user-stop
+  标志已删除；采集器 cron（exp1-snap 2h）保留。
