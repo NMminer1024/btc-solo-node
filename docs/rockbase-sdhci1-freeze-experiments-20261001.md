@@ -295,9 +295,50 @@ exp1-A 档实为基线复测。0036 补丁存档弃用。
 
 **修订后的实验阶梯**：
 1. ~~延迟线扫描~~ → 判死（硬件不存在）
-2. **exp2：&mmc_sd1 去掉 `cap-sd-highspeed`**（SD 卡 50MHz→25MHz，
-   频率轴换时序裕量；DTS-only，低风险）
-3. **exp-1c（新候选）：扫 sdhci1 实际可用的时序旋钮 `mshc_ctrl_r`**
-   （MSHC_CTRL_R=0x508，非 PHY 路径专用，控制 CMD/DATA 相对 cclk_tx
-   的边沿关系；当前 DTS=0x00）——这是 sdhci1 上真实存在的时序参数
-4. 硬件侧：换卡/示波器/1.8V-信号完整性（出软件域）
+2. **exp-1c：`mshc_ctrl_r` 扫描**（MSHC_CTRL_R=0x508，非 PHY 路径专用，
+   内核注释"Launches CMD/DATA with respect to positive edge of cclk_tx"；
+   当前 DTS=0x00）。第一候选 **0x01**（健康实例 0x508 低字节硬件默认值）
+3. **exp-1d（新，§5.6 发现）：给 sdhci1 使能 auto-tuning 位**
+   （AT_CTRL=0x540 |= 0x001F0000，健康实例实测已使能）
+4. **exp2：&mmc_sd1 去掉 `cap-sd-highspeed`**（50MHz→25MHz，频率轴）
+5. 硬件侧：换卡/示波器/1.8V-信号完整性（出软件域）
+
+### 5.6 手册/上游代码查证 + exp-1c/1d 实测对照（2026-10-01 16:30）
+
+**查证来源与结论**（用户要求"搜芯片手册核实不确定点"）：
+- **Kendryte 官方 K230 datasheet**（github.com/kendryte/k230_docs，
+  `en/00_hardware/K230_datasheet.md`）：2 个 SDxC 控制器（SD3.01/eMMC5.0），
+  明确列出 **"Supports auto-tuning"** → 0x540/0x544 那组 AT 寄存器即
+  采样相位自动调谐机制
+- **K230 Hardware Design Guide**（同库）：**"The MMC1 interface's
+  performance and pin count cannot meet the requirements for controlling
+  eMMC circuits, so it can only be used to control SD/TF card circuits"**
+  → MMC1（91581000，我们的 SD 卡）是**有意降配**的实例（MMC0 全配
+  eMMC5.0/HS200/8-bit）；与 PHY 延迟线寄存器组缺失、厂商硬编码
+  have_phy=0 完全自洽 → **延迟线缺失是硬件设计，不是缺陷/漏配**
+- **上游驱动**（ruyisdk/linux-xuantie-kernel @7d4e1f44，commit
+  9621f145 "k230 sd driver" 2024-06）：与板上驱动**逐字节一致**（无本地
+  魔改）；提交历史仅 2 条，未解释 have_phy 硬编码动机
+- **Kendryte 官方 U-Boot**（k230_linux_sdk → u-boot overlay
+  `drivers/mmc/snps_sdhci.c`）：同寄存器映射；默认延迟 0x40/0x0d（与
+  内核默认一致）；**完全不碰 mshc_ctrl_r**；PWRGOOD=BIT(1) 检查在
+  全 0xFF 死块上恒真 → U-Boot 对死块无感，与"U-Boot 能正常启动 SD"
+  无矛盾
+- **`mshc_ctrl_r`(0x508) 位语义**：公开资料（官方 docs/datasheet/HDG/
+  U-Boot/NuttX/第三方 fork）**均无定义**，仅内核一行注释 → 保持黑盒
+  扫描性质，不因"查不到"而放弃，也不做位级预测
+
+**实测对照（devmem，vendor 块 userspace 可读写）**：
+| 寄存器 | sdhci0（健康） | sdhci1（SD卡） | 解读 |
+|---|---|---|---|
+| 0x508 低字节 | **0x01**（硬件默认，驱动不写） | **0x00**（DTS 钉死，驱动每 RESET_ALL 重写） | exp-1c 首候选 0x01 的依据 |
+| 0x540 AT_CTRL | **0x1F1B0001**（AT 位 0x001F0000 全置位） | **0x01000004**（AT 位置 0） | **exp-1d 依据：auto-tuning 健康实例开着、病实例关着** |
+| 0x544 AT_STAT | 0x00000006 | 0x00000006 | 一致 |
+
+**热测试可行性（重大风险改善）**：vendor 块(0x500+)userspace 可
+devmem 读写 → exp-1c/1d **可免重启热实验**：devmem 写候选值 → 观察
+M1/M2 → devmem 写回。逃逸链：①ssh 活着则手动写回；②ssh 死则板上
+`rockbase_serial_healthd.sh` 软挂死兜底（持续 D/wbusy 超 PANIC_AFTER_SEC
+→ panic，kernel.panic=10 自动重启，重启即清 AT 位）；③mshc_ctrl_r
+在下次 RESET_ALL 时被驱动按 DTS 值重写（双重自愈）。**红线不变**：
+观察期出现 >10min 卡死立即回滚。
