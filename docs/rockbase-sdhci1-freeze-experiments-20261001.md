@@ -78,7 +78,8 @@
 | `rtl8189fs/0003-refine-sdio-freeze-diagnostics.patch` | 6ba05289648e8b045a6e30fe96d10e41 | 诊断细化 |
 | `rtl8189fs/0004-close-sdio-diagnostic-gaps.patch` | b5fbfe7be76f11a6533e3b43a95958e0 | 诊断补漏 |
 | `rtl8189fs/0009-enable-dynamic-tx-power.patch` | 9e91d4ef817dcf7163ca4d34c81d3a07 | Realtek DTP 动态发射功率（降热） |
-| `linux/0036-rockbase-sdhci1-delay-line-exp1.patch` | 0e6e75e9b5d5a77563e802f44f86403a | **实验 1（进行中）**：sdhci1 加 PHY 延迟线（rx=0x0d/tx=0xc0）；2026-10-01 已按本补丁内容就地改树并热部署 dtb（md5 5840c32e）到 124.38 |
+| `linux/0036-rockbase-sdhci1-delay-line-exp1.patch` | 0e6e75e9b5d5a77563e802f44f86403a | ~~实验 1~~ **已判定 no-op（§5.5）**：驱动对 91581000 硬编码 have_phy=0，DTS 延迟线属性从不被读取/写入；板上 dtb（5840c32e）功能上等同 exp0。保留存档，不再使用 |
+| `linux/0037-rockbase-sdhci1-phy-probe-exp1b.patch` | （见文件头） | **实验 1b（已部署 124.38，10/1 16:06）**：驱动诊断——①probe 只读 dump 两实例 PHY 块(0x300)寄存器；②延迟线写入+读回日志；③PHY_PWRGOOD 超时不再 fail probe（防变砖安全网）；④DTS 门控 `force_phy`（未启用）。内核 Image md5 8ca5f33e（旧版备份 /boot/Image.exp1a.bak，f8c37440）。诊断日志前缀 `rockbase-exp1b` |
 
 ### 已禁用（实验过/搁置的候选修复与判别）
 
@@ -236,8 +237,9 @@ m1_sysrq / m1_dstate / m2_n / m2_max_ms / m2_avg_ms / load / block / peers）；
 | 档 | DTB md5 | 泡机窗口 (UTC) | 时长 | M1 次/h | M2 max/avg ms | 结论 | 备注 |
 |---|---|---|---|---|---|---|---|
 | 基线 exp0 | 27a3fcc5 | 01:26–09:11 (9/30–10/1) | 7.77h | 12.2 | 2876/1107 | —（参照） | 见 §3 |
-| exp1-A rx=0x0d/tx=0xc0 | 5840c32e | 09:35–11:00 (10/1) | 1.43h（用户判定提前终止） | **13.3**（19 次/1.43h，基线 12.2） | 1604/1153（含 2 次自测 dd 制造） | **无正向收益** | 1.43h 速率与基线重合且无下降趋势，提前终止；启动期伪中断未消失（§5.2）；DTB 保留在板上，exp0b 复用 |
+| exp1-A rx=0x0d/tx=0xc0 | 5840c32e | 09:35–11:00 (10/1) | 1.43h（用户判定提前终止） | **13.3**（19 次/1.43h，基线 12.2） | 1604/1153（含 2 次自测 dd 制造） | **无正向收益 → 事后重定性为 no-op（§5.5）** | 1.43h 速率与基线重合；§5.5 查明驱动对 91581000 硬编码 have_phy=0，延迟线从未写入 → **该档实为基线复测**（13.3/h 与基线 12.2 一致，数据有效，结论改为"复测确认基线速率"）；启动期伪中断未消失（§5.2） |
 | exp0b 进程归因（停 bitcoind 1h） | 5840c32e | 11:37–12:42 (10/1，第 2 次尝试） | 1.08h | **9.2**（10 次/1.08h；同期运行段 13.3，基线 12.2） | 1604/1153（n=4 累计，与 exp1-A 持平，无恶化） | **未归零、降幅不显著**（Poisson p≈0.15–0.22） | 判据结果=后半支：**停了 bitcoind D 事件仍 ~9 次/h** → bitcoind 读不是主触发源；12:31:16 栈捕获受害者 = **jbd2/mmcblk1p3（ext4 日志线程，SD 卡）**，12:34:10 出现 d=2；触发时 disk_wbusy=0%（卡响应迟滞，非队列积压）。**第 1 次尝试（11:00:14 起）作废**：仅 `bitcoin-cli stop` 被 supervisord 22s 后拉起；修正=先落 `/run/rockbase/bitcoind-user-stopped` 再停（"skip bitcoind: user-stopped flag present" 确认）。12:44 删标志恢复 bitcoind：block 969442、peers 爬坡、ckpool up，运行正常。事件时间戳/采集器全量：`freeze-baselines/exp0b-obs-log-20261001.txt`；dmesg：`freeze-baselines/dmesg-e0cafa-cdd6b3-20261001-exp0b.txt` |
+| exp1b PHY 探测（驱动诊断） | dtb 5840c32e / **Image 8ca5f33e** | 10/1 16:06 部署+重启 | 探测型（无泡机指标） | — | — | **延迟线假设判死**（§5.5） | sdhci1@91581000 PHY 块(0x300)整块读回全 0xFF = 寄存器文件不存在；sdhci0 同法读回全吻合（写 tx=0xc0/rx=0x0d → 回读 cnfg=0x01/dc=0x40/smpl=0x0d），方法有效。force_phy 阶段 2 不做（写空寄存器+未知 0x540 AT 位，风险>收益）。板上保留诊断内核（日志前缀 rockbase-exp1b，含 PWRGOOD 超时安全网） |
 
 > 每档泡机结束：① 从上表所在板取终值填本表；② 完整 dmesg 存
 > `docs/freeze-baselines/dmesg-<board>-<date>-expN.txt`；③ 若中止/回滚，
@@ -254,11 +256,48 @@ m1_sysrq / m1_dstate / m2_n / m2_max_ms / m2_avg_ms / load / block / peers）；
      statusd、web、日志轮转都在读），"bitcoind 读放大主导"假设**不成立**；
   2. 矛头继续指向 sdhci1 控制器/时序本身（或卡-控制器组合），与 §1.3
      证据链一致。
-- **对假设的影响**："缺 PHY 延迟线校准"仍存活，但"镜像 sdhci0 的值即
-  足够"被否定——要么该实例需要**不同的**校准值（-36 组合需扫描），
-  要么根因不在 CMD/DATA 延迟线（PHY 电源/复位、时钟树、1.8V/信号完整性
-  等）。按 §4 纪律，**下一步先做负对照/取值扫描（exp1-B：rx=0x1f/
-  tx=0xff 等越界值）+ exp-3 的 pr_info 读回**，确认参数链真实生效且
-  响应不同取值，再决定是继续扫描还是转向 exp2（降速）/硬件侧。
-- 板上状态：exp1 DTB（5840c32e）在位；bitcoind 12:44 已恢复；user-stop
-  标志已删除；采集器 cron（exp1-snap 2h）保留。
+- **对假设的影响（2026-10-01 16:08 修订，§5.5 推翻本条旧结论）**：~~"缺
+  PHY 延迟线校准"仍存活~~ → **延迟线假设对 sdhci1 判死**（该实例 PHY
+  延迟线寄存器文件不存在，见 §5.5）。
+- 板上状态（16:08 更新）：exp1 DTB（5840c32e，功能上等同 exp0）+ **诊断
+  内核 Image（8ca5f33e，exp-1b，含只读 PHY 探测/写读回日志/PWRGOOD 超时
+  安全网/未启用的 force_phy 门控）**；bitcoind/ckpool 16:07 重启后正常；
+  旧内核备份 /boot/Image.exp1a.bak（f8c37440）；采集器 cron 保留。
+
+### 5.5 exp-1b PHY 探测：延迟线假设判死（2026-10-01 16:06 部署，16:07 重启验证）
+
+**代码事实**（`sdhci-of-kendryte.c` probe）：
+```c
+if (memcmp(host->hw_name, "91581000", 8) == 0) {
+    priv->have_phy = 0;   /* SD 卡实例：硬编码无 PHY */
+} else {
+    priv->have_phy = 1;   /* 仅 91580000（WiFi）走 PHY 延迟线路径 */
+}
+...
+if (priv->have_phy) { /* 只有此处才读 DTS rx/tx_delay_line 并写 0x300 块 */ }
+```
+→ exp1（0036 补丁，DTS 延迟线）对 sdhci1 **从未生效**（属性根本不读），
+exp1-A 档实为基线复测。0036 补丁存档弃用。
+
+**内核 probe 实测**（`rockbase-exp1b` 日志，10/1 16:07 boot）：
+```
+91580000.sdhci0: have_phy=1 dl:tx=0xc0 rx=0xd phy:cnfg=0x00890003 sdclkdl_dc=0x40 smpldl=0x0d
+91580000.sdhci0: delay write tx=0xc0 rx=0xd rb:sdclkdl_cnfg=0x01 sdclkdl_dc=0x40 smpldl=0x0d   ← 写入读回全吻合
+91581000.sdhci1: have_phy=0 phy:cnfg=0xffffffff cmd=0xff sdclkdl_cnfg=0xff sdclkdl_dc=0xff smpldl=0xff atdl=0xff
+```
+- sdhci1 的 0x300 PHY 寄存器组**整块读回全 0xFF**（与 userspace devmem
+  全 F 互证）= 寄存器文件未实现/不存在 → **该硬件上没有延迟线旋钮**，
+  与厂商硬编码 have_phy=0 的动机自洽
+- sdhci0 写入-读回链路 100% 吻合（含 tx>128 的 CNFG=1/DC=tx-128 编码），
+  排除"读回方法有问题"的备择解释
+- **阶段 2（force_phy）不做**：强制走 PHY 路径只是写空寄存器（no-op）+
+  附带 0x540 主块未知 AT 位（机制不明），风险>收益
+
+**修订后的实验阶梯**：
+1. ~~延迟线扫描~~ → 判死（硬件不存在）
+2. **exp2：&mmc_sd1 去掉 `cap-sd-highspeed`**（SD 卡 50MHz→25MHz，
+   频率轴换时序裕量；DTS-only，低风险）
+3. **exp-1c（新候选）：扫 sdhci1 实际可用的时序旋钮 `mshc_ctrl_r`**
+   （MSHC_CTRL_R=0x508，非 PHY 路径专用，控制 CMD/DATA 相对 cclk_tx
+   的边沿关系；当前 DTS=0x00）——这是 sdhci1 上真实存在的时序参数
+4. 硬件侧：换卡/示波器/1.8V-信号完整性（出软件域）
