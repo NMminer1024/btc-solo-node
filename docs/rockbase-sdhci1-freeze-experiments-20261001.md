@@ -236,7 +236,8 @@ m1_sysrq / m1_dstate / m2_n / m2_max_ms / m2_avg_ms / load / block / peers）；
 | 档 | DTB md5 | 泡机窗口 (UTC) | 时长 | M1 次/h | M2 max/avg ms | 结论 | 备注 |
 |---|---|---|---|---|---|---|---|
 | 基线 exp0 | 27a3fcc5 | 01:26–09:11 (9/30–10/1) | 7.77h | 12.2 | 2876/1107 | —（参照） | 见 §3 |
-| exp1-A rx=0x0d/tx=0xc0 | 5840c32e | 09:35–13:35 (10/1) | 4h 计划 | 待填 | 待填 | 待填 | 泡机中 |
+| exp1-A rx=0x0d/tx=0xc0 | 5840c32e | 09:35–11:00 (10/1) | 1.43h（用户判定提前终止） | **13.3**（19 次/1.43h，基线 12.2） | 1604/1153（含 2 次自测 dd 制造） | **无正向收益** | 1.43h 速率与基线重合且无下降趋势，提前终止；启动期伪中断未消失（§5.2）；DTB 保留在板上，exp0b 复用 |
+| exp0b 进程归因（停 bitcoind 1h） | 5840c32e | 11:37–12:42 (10/1，第 2 次尝试） | 1h | 待填 | 待填 | 待填 | 观察中；判据：M1 显著下降→辅证"bitcoind 读 SD 主导 D 事件"；不降→"任何 SD 读者都踩雷"，矛头更钉控制器本身。**第 1 次尝试（11:00:14 起）作废**：仅用 `bitcoin-cli stop`，supervisord 60s 巡检后 22s 即自动拉起（日志 "restart bitcoind: pattern not found"），bitcoind 实际只停 ~30s。修正：先落用户停止标志 `/run/rockbase/bitcoind-user-stopped`（`/usr/bin/rockbase_supervisord.sh` 见标志即跳过重启，11:35:51 日志 "skip bitcoind: user-stopped flag present" 确认生效），再停；新 T0=11:37:25，重启 bitcoind 前先删标志 |
 
 > 每档泡机结束：① 从上表所在板取终值填本表；② 完整 dmesg 存
 > `docs/freeze-baselines/dmesg-<board>-<date>-expN.txt`；③ 若中止/回滚，
