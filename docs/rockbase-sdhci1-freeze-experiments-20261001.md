@@ -8,7 +8,8 @@
 
 ### 1.1 现象
 
-- 板群（1G/2G 均有）不定期整机卡死：web/SSH 超时、LCD 冻结，靠 60s 硬件 WDT
+- 板群（Rockbase 1G/2G 及 01Studio 对比板均有，见 §1.2 硬件背景澄清）
+  不定期整机卡死：web/SSH 超时、LCD 冻结，靠 60s 硬件 WDT
   或 healthd D 状态兜底 panic 恢复；历史最长卡死 3.5h（2026-09-21，124.9）。
 - 2026-10-01 在 124.38（e0:ca:fa:cd:d6:b3，1G）开机 7.4h 内抓到 **93 次**
   healthd D 状态告警（约 12 次/小时），其中 9 次有完整任务转储：8 次受害者为
@@ -18,11 +19,26 @@
 
 ### 1.2 根因假设（当前最可能，~70%）
 
-**`sdhci1@91581000` 控制器实例没有 PHY 延迟线校准，而 1G 板把 SD 卡挂在它
-上面（2G 板把 WiFi 挂在它上面）——CMD/DATA 线电气时序余量不足，偶发边沿
-错误导致：幽灵中断 / 命令完成丢失 / 传输挂起。** 多数时候 SD 协议栈超时
+**`sdhci1@91581000` 控制器实例没有 PHY 延迟线校准，而 Rockbase 板把 SD 卡
+挂在它上面（01Studio 对比板把 WiFi 挂在它上面）——CMD/DATA 线电气时序余量
+不足，偶发边沿错误导致：幽灵中断 / 命令完成丢失 / 传输挂起。** 多数时候 SD 协议栈超时
 重试救回（微卡死）；小概率重试路径自身 wedged（host claim 持有分钟~小时）
 → 整机卡死。
+
+> **硬件背景澄清（2026-10-01 补记，用户确认）**：
+> - Rockbase 1G 与 2G 板**硬件相同**，仅内存大小有区别（U-Boot
+>   `detect_ddr_size()` 运行时探测，DDR 训练参数一致），SD 与 WiFi 接口
+>   接线**完全一致**：mmc0=SDIO WiFi（sdhci0@91580000，有 PHY 校准）、
+>   mmc1=SD 卡（sdhci1@91581000，无校准）。
+> - 历史排查文档（含 `rockbase-freeze-milestones.md`）中记录的所谓"2G 板"
+>   （`124.23`、`124.29` 等）**实际是 01Studio 的 2G 板**——当时为对比
+>   测试借用，profile 虽命名为 `k230_rockbase_2g_*`，硬件却是 01Studio，
+>   DTS 也 include 自 `k230-canmv-01studio-lcd.dts`。
+> - 因此"接线相反"的对比双方是 **Rockbase 板（SD 卡挂 91581000） vs
+>   01Studio 板（WiFi 挂 91581000）**，不是 Rockbase 1G vs 2G。
+>   `k230-canmv-01studio-lcd.dts` 的 `&mmc_sd1` 同样只有
+>   `mshc_ctrl_r = <0x00>`、无 `rx/tx_delay_line`——01Studio 板 WiFi
+>   恰好也走这个无校准实例。
 
 ### 1.3 证据链
 
@@ -35,8 +51,10 @@
    `&mmc_sd1`（SD 卡）**只有 `mshc_ctrl_r=0x00`，无任何延迟线**。驱动
    `sdhci-of-kendryte.c` 对 91581000 `have_phy=0`，reset 时只写 mshc_ctrl_r，
    完全跳过 PHY 时序校准（源码注释 "sdio:(fpga board)"）。
-3. 实例视角统一历史现象：1G 受害者=SD 卡（挂在 91581000）、2G 受害者=WiFi
-   （挂在 91581000）→ "两板频率相近、受害者随机" = 同一坏实例、不同设备。
+3. 实例视角统一历史现象：Rockbase 板受害者=SD 卡（挂在 91581000）、
+   01Studio 对比板受害者=WiFi（挂在 91581000）→ "两类板频率相近、
+   受害者随机" = 同一坏实例、不同设备。（见 §1.2 硬件背景澄清：
+   历史文档中的"2G 板"即 01Studio 板。）
 4. 已排除：SD 卡物理健康（sdhealth score 100 / io_errors 0）、WiFi 省电
    （09-24 实验）、WiFi 驱动软件并发（0005/0006 泡机无效）、ADMA 一致性
    （0034 PIO 泡机无效）、共享中断线（142/144 独立）。

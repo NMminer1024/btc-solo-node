@@ -1,6 +1,17 @@
 # Rockbase Freeze 调试里程碑
 
 > **⚠️ 2026-09 profile 合并说明**：1G/2G 已合并为单一 `k230_rockbase_defconfig`。本文正文中的 `k230_rockbase_1g_defconfig` / `k230_rockbase_2g_defconfig` 及 `k230-rockbase-2g-lcd.dts` 等为当时历史记录，现已过时（2G 专属 DTS/defconfig 已删除）。详见 `AGENTS.md`「Profile 合并记录」。
+>
+> **⚠️ 2026-10-01 硬件背景澄清（用户确认）**：本文正文中所有"2G 板"
+> （`124.23`、`124.29` 等）**实际是 01Studio 的 2G 板**——当时为对比
+> 测试借用，profile 虽命名为 `k230_rockbase_2g_*`，硬件却是 01Studio
+> （DTS include 自 `k230-canmv-01studio-lcd.dts`）。Rockbase 自身的
+> 1G 与 2G 板**硬件相同**（仅内存大小不同，U-Boot 运行时探测），SD 与
+> WiFi 接口接线一致（mmc0=WiFi@sdhci0 有 PHY 校准、mmc1=SD 卡@sdhci1
+> 无校准）；01Studio 板接线相反（WiFi 挂 sdhci1@91581000 无校准实例）。
+> 因此"1G/2G 受害者相反"的对比双方实为 **Rockbase vs 01Studio**，
+> 不是 Rockbase 1G vs 2G。详见
+> `docs/rockbase-sdhci1-freeze-experiments-20261001.md` §1.2。
 
 本文档保存 Freeze 排查中最重要的阶段性结论。临时流水材料可放在本地 `output/freeze-log.md`，重要结论应及时整理到本文档。
 
