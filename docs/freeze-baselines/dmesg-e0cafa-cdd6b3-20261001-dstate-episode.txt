@@ -1,0 +1,516 @@
+[    0.000000] Linux version 6.6.36 (bitpony@station-ubuntu) (riscv64-unknown-linux-gnu-gcc (Xuantie-900 linux-6.6.0 glibc gcc Toolchain V3.0.2 B-20250410) 14.1.1 20240710, GNU ld (GNU Binutils) 2.42.0.20240618) #2 SMP Wed Sep 30 23:51:50 CST 2026
+[    0.000000] Machine model: RockBase K230
+[    0.000000] SBI specification v2.0 detected
+[    0.000000] SBI implementation ID=0x1 Version=0x10004
+[    0.000000] SBI TIME extension detected
+[    0.000000] SBI IPI extension detected
+[    0.000000] SBI RFENCE extension detected
+[    0.000000] printk: debug: ignoring loglevel setting.
+[    0.000000] printk: debug: skip boot console de-registration.
+[    0.000000] efi: UEFI not found.
+[    0.000000] OF: reserved mem: 0x0000000000000000..0x000000000003ffff (256 KiB) nomap non-reusable mmode_resv1@0
+[    0.000000] OF: reserved mem: 0x0000000000040000..0x000000000005ffff (128 KiB) nomap non-reusable mmode_resv0@40000
+[    0.000000] OF: reserved mem: 0x000000003fc00000..0x000000003fffffff (4096 KiB) nomap non-reusable ramoops@3fc00000
+[    0.000000] cma: Reserved 64 MiB at 0x000000003bc00000 on node -1
+[    0.000000] Zone ranges:
+[    0.000000]   DMA32    [mem 0x0000000000000000-0x000000003fdfffff]
+[    0.000000]   Normal   empty
+[    0.000000] Movable zone start for each node
+[    0.000000] Early memory node ranges
+[    0.000000]   node   0: [mem 0x0000000000000000-0x000000000005ffff]
+[    0.000000]   node   0: [mem 0x0000000000060000-0x000000003fbfffff]
+[    0.000000]   node   0: [mem 0x000000003fc00000-0x000000003fdfffff]
+[    0.000000] Initmem setup node 0 [mem 0x0000000000000000-0x000000003fdfffff]
+[    0.000000] On node 0, zone DMA32: 512 pages in unavailable ranges
+[    0.000000] SBI HSM extension detected
+[    0.000000] riscv: base ISA extensions acdfimv
+[    0.000000] riscv: ELF capabilities acdfimv
+[    0.000000] percpu: Embedded 20 pages/cpu s41528 r8192 d32200 u81920
+[    0.000000] pcpu-alloc: s41528 r8192 d32200 u81920 alloc=20*4096
+[    0.000000] pcpu-alloc: [0] 0 
+[    0.000000] Kernel command line: root=/dev/mmcblk1p2 rw rootwait rootfstype=ext4 console=ttyS0,115200 earlycon=sbi ignore_loglevel log_buf_len=4M keep_bootcon printk.always_kmsg_dump=1
+[    0.000000] printk: log_buf_len: 4194304 bytes
+[    0.000000] printk: early log buf free: 1046544(99%)
+[    0.000000] Dentry cache hash table entries: 131072 (order: 8, 1048576 bytes, linear)
+[    0.000000] Inode-cache hash table entries: 65536 (order: 7, 524288 bytes, linear)
+[    0.000000] Built 1 zonelists, mobility grouping on.  Total pages: 257544
+[    0.000000] mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+[    0.000000] Virtual kernel memory layout:
+[    0.000000]       fixmap : 0xffffffc6fea00000 - 0xffffffc6ff000000   (6144 kB)
+[    0.000000]       pci io : 0xffffffc6ff000000 - 0xffffffc700000000   (  16 MB)
+[    0.000000]      vmemmap : 0xffffffc700000000 - 0xffffffc800000000   (4096 MB)
+[    0.000000]      vmalloc : 0xffffffc800000000 - 0xffffffd800000000   (  64 GB)
+[    0.000000]      modules : 0xffffffff0170f000 - 0xffffffff80000000   (2024 MB)
+[    0.000000]       lowmem : 0xffffffd800000000 - 0xffffffd83fe00000   (1022 MB)
+[    0.000000]       kernel : 0xffffffff80000000 - 0xffffffffffffffff   (2047 MB)
+[    0.000000] Memory: 901692K/1046528K available (11659K kernel code, 4450K rwdata, 5630K rodata, 456K init, 1401K bss, 79300K reserved, 65536K cma-reserved)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+[    0.000000] rcu: Hierarchical RCU implementation.
+[    0.000000] rcu: 	RCU restricting CPUs from NR_CPUS=64 to nr_cpu_ids=1.
+[    0.000000] rcu: 	RCU debug extended QS entry/exit.
+[    0.000000] 	Tracing variant of Tasks RCU enabled.
+[    0.000000] rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+[    0.000000] rcu: Adjusting geometry for rcu_fanout_leaf=16, nr_cpu_ids=1
+[    0.000000] NR_IRQS: 64, nr_irqs: 64, preallocated irqs: 0
+[    0.000000] riscv-intc: 64 local interrupts mapped
+[    0.000000] plic: interrupt-controller@f00000000: mapped 208 interrupts with 1 handlers for 2 contexts.
+[    0.000000] riscv: providing IPIs using SBI IPI extension
+[    0.000000] rcu: srcu_init: Setting srcu_struct sizes based on contention.
+[    0.000000] clocksource: riscv_clocksource: mask: 0xffffffffffffffff max_cycles: 0x63a1e71a3, max_idle_ns: 440795203123 ns
+[    0.000000] sched_clock: 64 bits at 27MHz, resolution 37ns, wraps every 4398046511093ns
+[    0.000365] Console: colour dummy device 80x25
+[    0.000413] Calibrating delay loop (skipped), value calculated using timer frequency.. 54.00 BogoMIPS (lpj=108000)
+[    0.000423] pid_max: default: 32768 minimum: 301
+[    0.000492] LSM: initializing lsm=capability,integrity
+[    0.000571] Mount-cache hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.000582] Mountpoint-cache hash table entries: 2048 (order: 2, 16384 bytes, linear)
+[    0.002154] RCU Tasks Trace: Setting shift to 0 and lim to 1 rcu_task_cb_adjust=1.
+[    0.002242] riscv: ELF compat mode supported
+[    0.002270] ASID allocator using 16 bits (65536 entries)
+[    0.002406] rcu: Hierarchical SRCU implementation.
+[    0.002412] rcu: 	Max phase no-delay instances is 1000.
+[    0.002808] EFI services will not be available.
+[    0.003007] smp: Bringing up secondary CPUs ...
+[    0.003023] smp: Brought up 1 node, 1 CPU
+[    0.003658] devtmpfs: initialized
+[    0.012272] clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+[    0.012291] futex hash table entries: 256 (order: 2, 16384 bytes, linear)
+[    0.013671] pinctrl core: initialized pinctrl subsystem
+[    0.014420] NET: Registered PF_NETLINK/PF_ROUTE protocol family
+[    0.015580] DMA: preallocated 128 KiB GFP_KERNEL pool for atomic allocations
+[    0.015729] DMA: preallocated 128 KiB GFP_KERNEL|GFP_DMA32 pool for atomic allocations
+[    0.015791] audit: initializing netlink subsys (disabled)
+[    0.016403] thermal_sys: Registered thermal governor 'step_wise'
+[    0.016466] audit: type=2000 audit(0.012:1): state=initialized audit_enabled=0 res=1
+[    0.016481] cpuidle: using governor menu
+[    0.040165] cpu0: Ratio of byte access time to unaligned word access is 6.32, unaligned accesses are fast
+[    0.044653] pstore: Using crash dump compression: deflate
+[    0.044666] printk: console [ramoops-1] enabled
+[    0.045075] pstore: Registered ramoops as persistent store backend
+[    0.045088] ramoops: using 0x400000@0x3fc00000, ecc: 0
+[    0.050166] platform soc: Fixed dependency cycle(s) with /soc/interrupt-controller@f00000000
+[    0.106144] platform 90840000.vo: Fixed dependency cycle(s) with /soc/dsi@90850000
+[    0.106283] platform 90840000.vo: Fixed dependency cycle(s) with /soc/dsi@90850000
+[    0.106343] platform 90850000.dsi: Fixed dependency cycle(s) with /soc/dsi@90850000/panel@0
+[    0.106362] platform 90850000.dsi: Fixed dependency cycle(s) with /soc/vo@90840000
+[    0.108640] HugeTLB: registered 1.00 GiB page size, pre-allocated 0 pages
+[    0.108658] HugeTLB: 16380 KiB vmemmap can be freed for a 1.00 GiB page
+[    0.108667] HugeTLB: registered 2.00 MiB page size, pre-allocated 0 pages
+[    0.108673] HugeTLB: 28 KiB vmemmap can be freed for a 2.00 MiB page
+[    0.109258] ACPI: Interpreter disabled.
+[    0.109656] k230-powerdomain 91103000.sysctl_power: powerdomain init ok
+[    0.110188] iommu: Default domain type: Translated
+[    0.110206] iommu: DMA domain TLB invalidation policy: strict mode
+[    0.110602] SCSI subsystem initialized
+[    0.110817] libata version 3.00 loaded.
+[    0.110988] usbcore: registered new interface driver usbfs
+[    0.111021] usbcore: registered new interface driver hub
+[    0.111056] usbcore: registered new device driver usb
+[    0.112009] mc: Linux media interface: v0.10
+[    0.112081] videodev: Linux video capture interface: v2.00
+[    0.112338] Advanced Linux Sound Architecture Driver Initialized.
+[    0.113268] vgaarb: loaded
+[    0.113688] clocksource: Switched to clocksource riscv_clocksource
+[    0.114094] pnp: PnP ACPI: disabled
+[    0.121281] NET: Registered PF_INET protocol family
+[    0.121417] IP idents hash table entries: 16384 (order: 5, 131072 bytes, linear)
+[    0.122524] tcp_listen_portaddr_hash hash table entries: 512 (order: 2, 16384 bytes, linear)
+[    0.122574] Table-perturb hash table entries: 65536 (order: 6, 262144 bytes, linear)
+[    0.122591] TCP established hash table entries: 8192 (order: 4, 65536 bytes, linear)
+[    0.122645] TCP bind hash table entries: 8192 (order: 7, 524288 bytes, linear)
+[    0.124182] TCP: Hash tables configured (established 8192 bind 8192)
+[    0.124304] UDP hash table entries: 512 (order: 3, 49152 bytes, linear)
+[    0.124402] UDP-Lite hash table entries: 512 (order: 3, 49152 bytes, linear)
+[    0.124628] NET: Registered PF_UNIX/PF_LOCAL protocol family
+[    0.125206] RPC: Registered named UNIX socket transport module.
+[    0.125225] RPC: Registered udp transport module.
+[    0.125232] RPC: Registered tcp transport module.
+[    0.125237] RPC: Registered tcp-with-tls transport module.
+[    0.125243] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    0.126215] PCI: CLS 0 bytes, default 64
+[    0.127070] Initialise system trusted keyrings
+[    0.127455] workingset: timestamp_bits=46 max_order=18 bucket_order=0
+[    0.128081] NFS: Registering the id_resolver key type
+[    0.128128] Key type id_resolver registered
+[    0.128137] Key type id_legacy registered
+[    0.128162] nfs4filelayout_init: NFSv4 File Layout Driver Registering...
+[    0.128172] nfs4flexfilelayout_init: NFSv4 Flexfile Layout Driver Registering...
+[    0.128374] fuse: init (API version 7.39)
+[    0.128531] 9p: Installing v9fs 9p2000 file system support
+[    0.128730] NET: Registered PF_ALG protocol family
+[    0.128748] Key type asymmetric registered
+[    0.128756] Asymmetric key parser 'x509' registered
+[    0.128806] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 242)
+[    0.128818] io scheduler mq-deadline registered
+[    0.128827] io scheduler kyber registered
+[    0.128855] io scheduler bfq registered
+[    0.131720] k230-iomux 91105000.iomux: K230 IOMUX driver registered
+[    0.132084] k230-iomux 91000080.pmuiomux: K230 IOMUX driver registered
+[    0.145324] [K230_RESET]:sysctl reset phy addr 0x91101000
+[    0.145337] [K230_RESET]: ok!
+[    0.188295] Serial: 8250/16550 driver, 4 ports, IRQ sharing disabled
+[    0.190762] printk: console [ttyS0] disabled
+[    0.211130] 91400000.serial: ttyS0 at MMIO 0x91400000 (irq = 78, base_baud = 3125000) is a 16550A
+[    0.211170] printk: console [ttyS0] enabled
+[    1.170417] 91403000.serial: ttyS3 at MMIO 0x91403000 (irq = 79, base_baud = 3125000) is a 16550A
+[    1.180560] SuperH (H)SCI(F) driver initialized
+[    1.186906] random: crng init done
+[    1.190360] k230-rng 91213000.trng: K230 TRNG driver register!
+[    1.197558] canaan-vo 90840000.vo: probe
+[    1.202195] canaan-mipi-dsi 90850000.dsi: Fixed dependency cycle(s) with /soc/dsi@90850000/panel@0
+[    1.211278] mipi-dsi 90850000.dsi.0: Fixed dependency cycle(s) with /soc/dsi@90850000
+[    1.219228] canaan-panel-dsi 90850000.dsi.0: Couldn't get our reset GPIO, error: -2
+[    1.226918] canaan-panel-dsi 90850000.dsi.0: Couldn't get our backlight_gpio GPIO, error: -2
+[    1.235395] canaan-mipi-dsi 90850000.dsi: Attached device universal
+[    1.242950] canaan-vo 90840000.vo: background color is 808000
+[    1.248929] canaan-drm soc:display-subsystem: bound 90840000.vo (ops 0xffffffff80c7b528)
+[    1.257098] canaan-drm soc:display-subsystem: bound 90850000.dsi (ops 0xffffffff80c7ba48)
+[    1.266383] [drm] Initialized canaan-drm 1.0.0 20230501 for soc:display-subsystem on minor 0
+[    1.274968] canaan-drm soc:display-subsystem: [drm] bpp/depth value of 32/24 not supported
+[    1.283272] canaan-drm soc:display-subsystem: [drm] No compatible format found
+[    1.292203] canaan-drm soc:display-subsystem: [drm] *ERROR* fbdev: Failed to setup generic emulation (ret=-22)
+[    1.302281] canaan-drm soc:display-subsystem: [drm:canaan_drm_bind] Canaan K230 DRM driver register successfully
+[    1.313350] canaan-drm soc:display-subsystem: [drm] bpp/depth value of 32/24 not supported
+[    1.321681] canaan-drm soc:display-subsystem: [drm] No compatible format found
+[    1.333881] loop: module loaded
+[    1.338919] canaan-drm soc:display-subsystem: [drm] *ERROR* fbdev: Failed to setup generic emulation (ret=-22)
+[    1.365401] zram: Added device: zram0
+[    1.370746] misc mmz: registered.
+[    1.377917] e1000e: Intel(R) PRO/1000 Network Driver
+[    1.382910] e1000e: Copyright(c) 1999 - 2015 Intel Corporation.
+[    1.390293] usbcore: registered new device driver r8152-cfgselector
+[    1.396641] usbcore: registered new interface driver r8152
+[    1.402163] usbcore: registered new interface driver asix
+[    1.407602] usbcore: registered new interface driver ax88179_178a
+[    1.413729] usbcore: registered new interface driver cdc_ether
+[    1.419600] usbcore: registered new interface driver net1080
+[    1.425292] usbcore: registered new interface driver cdc_subset
+[    1.431244] usbcore: registered new interface driver zaurus
+[    1.436856] usbcore: registered new interface driver cdc_ncm
+[    1.442552] usbcore: registered new interface driver r8153_ecm
+[    1.449406] dwc2 91500000.usb: supply vusb_d not found, using dummy regulator
+[    1.456733] dwc2 91500000.usb: supply vusb_a not found, using dummy regulator
+[    1.464124] dwc2 91500000.usb: Configuration mismatch. dr_mode forced to host
+[    1.487519] dwc2 91500000.usb: DWC OTG Controller
+[    1.492276] dwc2 91500000.usb: new USB bus registered, assigned bus number 1
+[    1.499367] dwc2 91500000.usb: irq 84, io mem 0x91500000
+[    1.504832] usb usb1: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.06
+[    1.513114] usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    1.520347] usb usb1: Product: DWC OTG Controller
+[    1.525060] usb usb1: Manufacturer: Linux 6.6.36 dwc2_hsotg
+[    1.530642] usb usb1: SerialNumber: 91500000.usb
+[    1.535751] hub 1-0:1.0: USB hub found
+[    1.539595] hub 1-0:1.0: 1 port detected
+[    1.544068] dwc2 91540000.usb: supply vusb_d not found, using dummy regulator
+[    1.551422] dwc2 91540000.usb: supply vusb_a not found, using dummy regulator
+[    1.558868] dwc2 91540000.usb: Configuration mismatch. dr_mode forced to host
+[    1.583786] dwc2 91540000.usb: DWC OTG Controller
+[    1.588543] dwc2 91540000.usb: new USB bus registered, assigned bus number 2
+[    1.595630] dwc2 91540000.usb: irq 85, io mem 0x91540000
+[    1.601091] usb usb2: New USB device found, idVendor=1d6b, idProduct=0002, bcdDevice= 6.06
+[    1.609377] usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+[    1.616611] usb usb2: Product: DWC OTG Controller
+[    1.621324] usb usb2: Manufacturer: Linux 6.6.36 dwc2_hsotg
+[    1.626904] usb usb2: SerialNumber: 91540000.usb
+[    1.631986] hub 2-0:1.0: USB hub found
+[    1.635824] hub 2-0:1.0: 1 port detected
+[    1.640594] usbcore: registered new interface driver uas
+[    1.646021] usbcore: registered new interface driver usb-storage
+[    1.652343] mousedev: PS/2 mouse device common for all mice
+[    1.658941] i2c_dev: i2c /dev entries driver
+[    1.664975] MVX dev: Linlon v5276 identified. cores=1, nlsid=4, id=0. (mvx_dev.c:416)
+[    1.673135] usbcore: registered new interface driver uvcvideo
+[    1.708046] sdhci: Secure Digital Host Controller Interface driver
+[    1.714294] sdhci: Copyright(c) Pierre Ossman
+[    1.719259] sdhci-pltfm: SDHCI platform and OF driver helper
+[    1.727729] Kendryte crypto driver probe!
+[    1.732303] Kendryte sha256 driver probe!
+[    1.736897] Kendryte RSA driver probe!
+[    1.740910] usbcore: registered new interface driver usbhid
+[    1.746518] usbhid: USB HID core driver
+[    1.753758] riscv-pmu-sbi: SBI PMU extension is available
+[    1.759221] riscv-pmu-sbi: 16 firmware and 18 hardware counters
+[    1.789698] mmc0: SDHCI controller on 91580000.sdhci0 [91580000.sdhci0] using ADMA
+[    1.797367] mmc1: SDHCI controller on 91581000.sdhci1 [91581000.sdhci1] using ADMA
+[    1.810720] mmc1: Got command interrupt 0x00000001 even though no command operation was in progress.
+[    1.819866] mmc1: sdhci: ============ SDHCI REGISTER DUMP ===========
+[    1.826309] mmc1: sdhci: Sys addr:  0x00000000 | Version:  0x00000005
+[    1.832750] mmc1: sdhci: Blk size:  0x00000000 | Blk cnt:  0x00000000
+[    1.839191] mmc1: sdhci: Argument:  0x00000000 | Trn mode: 0x00000000
+[    1.845632] mmc1: sdhci: Present:   0x03ff0000 | Host ctl: 0x00000001
+[    1.852073] mmc1: sdhci: Power:     0x0000000f | Blk gap:  0x00000000
+[    1.858514] mmc1: sdhci: Wake-up:   0x00000000 | Clock:    0x00007d27
+[    1.864955] mmc1: sdhci: Timeout:   0x00000000 | Int stat: 0x00000000
+[    1.871396] mmc1: sdhci: Int enab:  0x00ff1083 | Sig enab: 0x00ff1083
+[    1.877837] mmc1: sdhci: ACmd stat: 0x00000000 | Slot int: 0x00000000
+[    1.884277] mmc1: sdhci: Caps:      0x276a6481 | Caps_1:   0x08008071
+[    1.890718] mmc1: sdhci: Cmd:       0x00000502 | Max curr: 0x00000000
+[    1.897159] mmc1: sdhci: Resp[0]:   0x000001aa | Resp[1]:  0x00000000
+[    1.903599] mmc1: sdhci: Resp[2]:   0x00000000 | Resp[3]:  0x00000000
+[    1.910030] mmc1: sdhci: Host ctl2: 0x00000000
+[    1.914474] mmc1: sdhci: ADMA Err:  0x00000000 | ADMA Ptr: 0x00000000
+[    1.920914] mmc1: sdhci: ============================================
+[    1.931910] mmc0: new high speed SDIO card at address 0001
+[    1.960834] mmc1: new high speed SDHC card at address aaaa
+[    1.966795] mmcblk1: mmc1:aaaa SK32G 29.7 GiB
+[    1.972812]  mmcblk1: p1 p2 p3 p4
+[    2.189582] NET: Registered PF_INET6 protocol family
+[    2.195368] Segment Routing with IPv6
+[    2.199112] In-situ OAM (IOAM) with IPv6
+[    2.203100] sit: IPv6, IPv4 and MPLS over IPv4 tunneling driver
+[    2.209500] NET: Registered PF_PACKET protocol family
+[    2.214698] 9pnet: Installing 9P2000 support
+[    2.219062] Key type dns_resolver registered
+[    2.223394] start plist test
+[    2.228427] end plist test
+[    2.239108] Loading compiled-in X.509 certificates
+[    2.249302] debug_vm_pgtable: [debug_vm_pgtable         ]: Validating architecture page table helpers
+[    2.268992] edt_ft5x06 1-0038: supply vcc not found, using dummy regulator
+[    2.276084] edt_ft5x06 1-0038: supply iovcc not found, using dummy regulator
+[    2.285110] cfg80211: Loading compiled-in X.509 certificates for regulatory database
+[    2.294374] Loaded X.509 cert 'sforshee: 00b28ddf47aef9cea7'
+[    2.300711] Loaded X.509 cert 'wens: 61c038651aabdcf94bd0ac7ff06c7248db18c600'
+[    2.308048] clk: Disabling unused clocks
+[    2.312074] ALSA device list:
+[    2.315063]   #0: K230_I2S_INNO
+[    2.318516] platform regulatory.0: Direct firmware load for regulatory.db failed with error -2
+[    2.327197] cfg80211: failed to load regulatory.db
+[    2.630637] input: generic ft5x06 (79) as /devices/platform/soc/91408000.i2c/i2c-1/1-0038/input/input0
+[    2.714785] EXT4-fs (mmcblk1p2): mounted filesystem 6b6e9619-e344-4abf-9209-a9d77ddd5738 r/w with ordered data mode. Quota mode: disabled.
+[    2.727335] VFS: Mounted root (ext4 filesystem) on device 179:2.
+[    2.734101] devtmpfs: mounted
+[    2.737179] Freeing unused kernel image (initmem) memory: 452K
+[    2.743047] Kernel memory protection not selected by kernel config.
+[    2.749333] Run /sbin/init as init process
+[    2.753439]   with arguments:
+[    2.756424]     /sbin/init
+[    2.759140]   with environment:
+[    2.762289]     HOME=/
+[    2.764650]     TERM=linux
+[    2.889704] EXT4-fs (mmcblk1p2): re-mounted 6b6e9619-e344-4abf-9209-a9d77ddd5738 r/w. Quota mode: disabled.
+[    6.911053] [rb-mmc-diag] claim release host=mmc1 releaser=30:kworker/0:1H owner=184:rockbase-lcdui claim_cnt=1 held_ms=752 contended=0
+[    7.784971] [rb-mmc-diag] claim release host=mmc1 releaser=30:kworker/0:1H owner=184:rockbase-lcdui claim_cnt=1 held_ms=860 contended=0
+[   37.512575] EXT4-fs (mmcblk1p3): mounted filesystem 189352a0-4346-42b3-96d5-25e19c2ade85 r/w with ordered data mode. Quota mode: disabled.
+[   43.359376] 8189fs: loading out-of-tree module taints kernel.
+[   46.018181] warning: `iwconfig' uses wireless extensions which will stop working for Wi-Fi 7 hardware; use nl80211
+[   62.996462] EXT4-fs (mmcblk1p4): mounted filesystem c6560dcc-7680-4362-b942-85f7ea3ede68 r/w with ordered data mode. Quota mode: disabled.
+[   63.103393] zram0: detected capacity change from 0 to 262144
+[   63.127986] Adding 131068k swap on /dev/zram0.  Priority:-2 extents:1 across:131068k SS
+[  193.929881] sysrq: Show Blocked State
+[  453.919076] sysrq: Show Blocked State
+[  915.955304] sysrq: Show Blocked State
+[ 1268.685818] sysrq: Show Blocked State
+[ 2379.757954] sysrq: Show Blocked State
+[ 2484.855114] [rb-mmc-diag] claim release host=mmc1 releaser=738:kworker/0:0H owner=20:kworker/u2:1 claim_cnt=1 held_ms=616 contended=0
+[ 2509.355546] sysrq: Show Blocked State
+[ 2828.089436] sysrq: Show Blocked State
+[ 2976.122324] sysrq: Show Blocked State
+[ 3181.855673] sysrq: Show Blocked State
+[ 3722.251910] sysrq: Show Blocked State
+[ 4146.079310] [rb-mmc-diag] claim release host=mmc1 releaser=738:kworker/0:0H owner=63:kworker/u2:2 claim_cnt=1 held_ms=700 contended=0
+[ 4147.720930] sysrq: Show Blocked State
+[ 4305.786796] sysrq: Show Blocked State
+[ 4467.154521] sysrq: Show Blocked State
+[ 4610.725962] sysrq: Show Blocked State
+[ 4758.409776] sysrq: Show Blocked State
+[ 5218.789818] sysrq: Show Blocked State
+[ 5824.673025] sysrq: Show Blocked State
+[ 6080.564058] sysrq: Show Blocked State
+[ 6281.360416] sysrq: Show Blocked State
+[ 6452.113282] sysrq: Show Blocked State
+[ 6452.117095] task:b-msghand       state:D stack:0     pid:20225 ppid:1      flags:0x00000000
+[ 6452.125490] Call Trace:
+[ 6452.127952] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[ 6452.133199] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[ 6452.138088] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[ 6452.143253] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[ 6452.149449] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[ 6452.154955] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[ 6452.160113] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[ 6452.165960] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[ 6452.171544] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[ 6452.177390] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[ 6452.182719] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[ 6638.033864] sysrq: Show Blocked State
+[ 6780.018754] sysrq: Show Blocked State
+[ 7143.934053] sysrq: Show Blocked State
+[ 7664.341592] sysrq: Show Blocked State
+[ 7977.070743] sysrq: Show Blocked State
+[ 8267.083815] sysrq: Show Blocked State
+[ 8583.079991] sysrq: Show Blocked State
+[ 9065.691793] sysrq: Show Blocked State
+[ 9188.666251] sysrq: Show Blocked State
+[ 9507.169803] sysrq: Show Blocked State
+[ 9738.565888] sysrq: Show Blocked State
+[ 9888.839839] sysrq: Show Blocked State
+[10120.456241] sysrq: Show Blocked State
+[10494.416949] sysrq: Show Blocked State
+[11337.887613] sysrq: Show Blocked State
+[11561.212450] sysrq: Show Blocked State
+[11924.000146] [rb-mmc-diag] claim release host=mmc1 releaser=7706:kworker/0:0H owner=22312:b-msghand claim_cnt=1 held_ms=568 contended=0
+[11932.703870] sysrq: Show Blocked State
+[11957.690132] [rb-mmc-diag] claim release host=mmc1 releaser=7706:kworker/0:0H owner=7706:kworker/0:0H claim_cnt=1 held_ms=1496 contended=0
+[12077.114015] sysrq: Show Blocked State
+[12202.985187] sysrq: Show Blocked State
+[12471.659148] sysrq: Show Blocked State
+[12638.483113] sysrq: Show Blocked State
+[12761.679963] sysrq: Show Blocked State
+[12950.376776] sysrq: Show Blocked State
+[13353.690011] sysrq: Show Blocked State
+[13739.349586] sysrq: Show Blocked State
+[13936.340971] sysrq: Show Blocked State
+[14136.346741] sysrq: Show Blocked State
+[14287.068407] sysrq: Show Blocked State
+[14287.072188] task:b-msghand       state:D stack:0     pid:20225 ppid:1      flags:0x00000000
+[14287.080667] Call Trace:
+[14287.083134] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[14287.088384] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[14287.093275] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[14287.098424] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[14287.104619] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[14287.110116] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[14287.115282] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[14287.121127] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[14287.126711] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[14287.132558] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[14287.137881] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[14447.136266] sysrq: Show Blocked State
+[14588.449433] sysrq: Show Blocked State
+[14741.105928] sysrq: Show Blocked State
+[14929.272134] sysrq: Show Blocked State
+[15121.575611] sysrq: Show Blocked State
+[15121.579418] task:b-msghand       state:D stack:0     pid:20225 ppid:1      flags:0x00000000
+[15121.587840] Call Trace:
+[15121.590307] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[15121.595562] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[15121.600462] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[15121.605627] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[15121.611839] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[15121.617339] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[15121.622490] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[15121.628338] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[15121.633927] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[15121.639775] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[15121.645097] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[15384.067594] sysrq: Show Blocked State
+[15935.572455] sysrq: Show Blocked State
+[16198.769215] sysrq: Show Blocked State
+[16387.686216] sysrq: Show Blocked State
+[16619.774066] sysrq: Show Blocked State
+[17159.633003] sysrq: Show Blocked State
+[17159.636835] task:b-msghand       state:D stack:0     pid:20225 ppid:1      flags:0x00000000
+[17159.645236] Call Trace:
+[17159.647695] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[17159.652944] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[17159.657840] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[17159.662999] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[17159.669195] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[17159.674699] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[17159.679852] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[17159.685697] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[17159.691281] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[17159.697128] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[17159.702458] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[17542.235469] sysrq: Show Blocked State
+[17911.951826] sysrq: Show Blocked State
+[17911.955614] task:b-msghand       state:D stack:0     pid:20225 ppid:1      flags:0x00000000
+[17911.964038] Call Trace:
+[17911.966511] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[17911.971771] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[17911.976663] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[17911.981827] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[17911.988024] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[17911.993526] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[17911.998679] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[17912.004531] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[17912.010121] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[17912.015969] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[17912.021296] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[18139.881269] sysrq: Show Blocked State
+[18272.715169] sysrq: Show Blocked State
+[18676.921732] [rb-mmc-diag] claim release host=mmc1 releaser=28796:kworker/0:2H owner=63:kworker/u2:2 claim_cnt=1 held_ms=984 contended=0
+[18677.977900] sysrq: Show Blocked State
+[18918.233066] sysrq: Show Blocked State
+[19056.374200] sysrq: Show Blocked State
+[19201.687010] sysrq: Show Blocked State
+[19830.089734] sysrq: Show Blocked State
+[20074.552849] sysrq: Show Blocked State
+[20074.556643] task:b-msghand       state:D stack:0     pid:20225 ppid:1      flags:0x00000000
+[20074.565056] Call Trace:
+[20074.567515] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[20074.572766] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[20074.577661] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[20074.582813] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[20074.589008] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[20074.594506] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[20074.599658] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[20074.605507] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[20074.611091] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[20074.616939] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[20074.622262] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[20784.356727] sysrq: Show Blocked State
+[21167.375238] sysrq: Show Blocked State
+[21441.656066] sysrq: Show Blocked State
+[21441.659849] task:b-msghand       state:D stack:0     pid:20225 ppid:1      flags:0x00000000
+[21441.668273] Call Trace:
+[21441.670752] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[21441.676007] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[21441.680904] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[21441.686056] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[21441.692251] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[21441.697756] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[21441.702908] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[21441.708753] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[21441.714336] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[21441.720201] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[21441.725526] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[21552.175084] [rb-mmc-diag] claim release host=mmc1 releaser=30071:kworker/0:1H owner=30071:kworker/0:1H claim_cnt=1 held_ms=2876 contended=0
+[21664.075905] sysrq: Show Blocked State
+[21812.858917] sysrq: Show Blocked State
+[22081.441969] sysrq: Show Blocked State
+[22236.356163] sysrq: Show Blocked State
+[22243.915529] [rb-mmc-diag] claim release host=mmc1 releaser=24831:kworker/0:2H owner=63:kworker/u2:2 claim_cnt=1 held_ms=872 contended=0
+[22417.210650] sysrq: Show Blocked State
+[22575.989901] sysrq: Show Blocked State
+[22717.237919] sysrq: Show Blocked State
+[23204.894109] sysrq: Show Blocked State
+[23811.209998] sysrq: Show Blocked State
+[23971.898437] sysrq: Show Blocked State
+[24144.580532] sysrq: Show Blocked State
+[24349.486182] sysrq: Show Blocked State
+[24597.892347] sysrq: Show Blocked State
+[24772.766641] sysrq: Show Blocked State
+[25073.168524] sysrq: Show Blocked State
+[25638.696925] sysrq: Show Blocked State
+[25638.700738] task:b-msghand       state:D stack:0     pid:20225 ppid:1      flags:0x00000000
+[25638.709155] Call Trace:
+[25638.711622] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[25638.716869] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[25638.721759] [<ffffffff80b5e6e6>] io_schedule+0x32/0x4a
+[25638.726916] [<ffffffff801457a2>] folio_wait_bit_common+0x166/0x2c6
+[25638.733111] [<ffffffff8014880e>] filemap_fault+0x2de/0x7b2
+[25638.738608] [<ffffffff80174cbc>] __do_fault+0x26/0x1f4
+[25638.743772] [<ffffffff80179a92>] __handle_mm_fault+0x556/0xbe8
+[25638.749629] [<ffffffff8017a18c>] handle_mm_fault+0x68/0x20a
+[25638.755216] [<ffffffff8000a57c>] handle_page_fault+0x124/0x3b8
+[25638.761075] [<ffffffff80b5b976>] do_page_fault+0x1e/0x36
+[25638.766400] [<ffffffff80b64c88>] ret_from_exception+0x0/0x64
+[25638.772090] task:kworker/0:2     state:D stack:0     pid:15149 ppid:2      flags:0x00000000
+[25638.780462] Workqueue: events sdio_irq_work
+[25638.784662] Call Trace:
+[25638.787116] [<ffffffff80b5df42>] __schedule+0x298/0x904
+[25638.792361] [<ffffffff80b5e5f6>] schedule+0x48/0xd6
+[25638.797251] [<ffffffff80868240>] __mmc_claim_host+0x114/0x432
+[25638.803009] [<ffffffff80876f64>] sdio_irq_work+0x1c/0x4c
+[25638.808332] [<ffffffff800321c0>] process_one_work+0x104/0x1fa
+[25638.814099] [<ffffffff8003251c>] worker_thread+0x266/0x34a
+[25638.819597] [<ffffffff8003a3ee>] kthread+0xc4/0xde
+[25638.824400] [<ffffffff80b64d92>] ret_from_fork+0xe/0x1c
+[25699.253857] [rb-mmc-diag] claim release host=mmc1 releaser=11868:kworker/0:0H owner=22312:b-msghand claim_cnt=1 held_ms=816 contended=0
+[25712.307866] [rb-mmc-diag] claim release host=mmc1 releaser=11868:kworker/0:0H owner=4318:kworker/u2:3 claim_cnt=1 held_ms=1424 contended=0
+[25722.529808] [rb-mmc-diag] claim release host=mmc1 releaser=22312:b-msghand owner=4318:kworker/u2:3 claim_cnt=1 held_ms=1320 contended=0
+[25808.382231] sysrq: Show Blocked State
+[25959.194995] sysrq: Show Blocked State
+[26261.220955] sysrq: Show Blocked State
+[26418.754392] sysrq: Show Blocked State
+[26560.681979] sysrq: Show Blocked State
