@@ -186,3 +186,19 @@ dd if=/dev/mmcblk1p4 of=/dev/null bs=32M count=1 iflag=direct   # M4 x3
   0x9158031C=0x00400101 可读 → 空闲时 sdhci1 总线被门控，devmem 读回不可靠，
   不能用作"延迟线已写入"的证据；验证以 device-tree 属性 + 驱动代码路径为准
   （/proc/device-tree/soc/sdhci1@91581000/{rx,tx}_delay_line = 0x0d/0xc0 已确认）。
+
+### 5.3 结果记录（每档泡机结束/中止时填写）
+
+快照原始数据：板上 `/root/log/exp1-snapshots.log`（每 2h 一行，字段：
+m1_sysrq / m1_dstate / m2_n / m2_max_ms / m2_avg_ms / load / block / peers）；
+事件 dmesg 归档到 `docs/freeze-baselines/`。
+
+| 档 | DTB md5 | 泡机窗口 (UTC) | 时长 | M1 次/h | M2 max/avg ms | 结论 | 备注 |
+|---|---|---|---|---|---|---|---|
+| 基线 exp0 | 27a3fcc5 | 01:26–09:11 (9/30–10/1) | 7.77h | 12.2 | 2876/1107 | —（参照） | 见 §3 |
+| exp1-A rx=0x0d/tx=0xc0 | 5840c32e | 09:35–13:35 (10/1) | 4h 计划 | 待填 | 待填 | 待填 | 泡机中 |
+
+> 每档泡机结束：① 从上表所在板取终值填本表；② 完整 dmesg 存
+> `docs/freeze-baselines/dmesg-<board>-<date>-expN.txt`；③ 若中止/回滚，
+> 记录触发原因（红线事件）。所有源码改动（补丁）在实验结论出来前保持
+> 工作区未提交状态，结论为“无效”则直接删除补丁文件回基线。
