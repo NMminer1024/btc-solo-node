@@ -2888,12 +2888,12 @@ void play_boot_video() {
     const uint32_t start_ms = tick_ms();
     int last_index = 0;
 
-    // Boot sound (hologram sweep, ~310ms) end-aligned with the video.
+    // Boot sound (4-tick connect, ~500ms) end-aligned with the video.
     // Triggered by frame index (not elapsed time) because each frame's
     // actual duration = render + DRM commit + frame_ms sleep, which is
-    // longer than frame_ms alone.  ~5 frames at 15fps ≈ 330ms of video
+    // longer than frame_ms alone.  ~8 frames at 15fps ≈ 530ms of video
     // remaining when the sound starts.
-    constexpr int kBootSoundFrames = 5;
+    constexpr int kBootSoundFrames = 8;
     const int sound_trigger_frame =
         (g_boot_video.frame_count > kBootSoundFrames)
             ? (g_boot_video.frame_count - kBootSoundFrames) : 0;
@@ -2909,7 +2909,7 @@ void play_boot_video() {
             sound_started = true;
             pthread_t tid;
             if (pthread_create(&tid, nullptr,
-                [](void*) -> void* { buzzer_boot_hologram(); return nullptr; },
+                [](void*) -> void* { buzzer_boot_sound(); return nullptr; },
                 nullptr) == 0) {
                 pthread_detach(tid);
             }

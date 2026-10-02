@@ -185,12 +185,24 @@ static void pwm_sweep(int f1, int f2, int ms) {
     sysfs_write(g_enable_path, "0");
 }
 
-void buzzer_boot_hologram() {
+void buzzer_boot_sound() {
     if (!g_pwm_ready) return;
-    // Hologram: sweep up 1k→2.8k (180ms), gap 30ms, sweep down 2.8k→2k (100ms).
-    pwm_sweep(1000, 2800, 180);
-    usleep(30000);
-    pwm_sweep(2800, 2000, 100);
+    // Ascending 4-tick "connect" pattern: 2k→3k→4k→6k.
+    // Each tick 50ms, gap 100ms. Total ~500ms.
+    // 2k = resonant peak (loudest), 6k = upper band (softer).
+    const int freqs[] = {2000, 3000, 4000, 6000};
+    for (int i = 0; i < 4; i++) {
+        const uint32_t period_ns = 1000000000U / static_cast<uint32_t>(freqs[i]);
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%u", period_ns);
+        sysfs_write(g_period_path, buf);
+        std::snprintf(buf, sizeof(buf), "%u", period_ns / 2);
+        sysfs_write(g_duty_path, buf);
+        sysfs_write(g_enable_path, "1");
+        usleep(50000);   // 50ms beep
+        sysfs_write(g_enable_path, "0");
+        usleep(100000);  // 100ms gap
+    }
     // Restore 1kHz / 50% duty for normal click beeps.
     char buf[32];
     std::snprintf(buf, sizeof(buf), "%u", 1000000U);
