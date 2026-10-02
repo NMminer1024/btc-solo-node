@@ -446,3 +446,21 @@ Image 700d3506（Image.exp2pre.bak 同为 700d3506 系）。**回基线命令**�
 `cp /boot/Image.exp2pre.bak /boot/Image && cp /boot/k.dtb.exp1c.bak /boot/k.dtb && reboot`
 （M5 探针 rockbase-m5-probe.sh 持续运行中，换卡后自动继续记录，
 无需重部署——它是换卡实验的现成对照组指标。）
+
+**执行收尾（2026-10-02 09:21，用户指令"全部回退到基线并固化结论"）**：
+- **板子已回基线**：/boot/Image=f8c37440（=Image.exp1a.bak，战役前原版）、
+  /boot/k.dtb=27a3fcc5（=k.dtb.exp0.bak，战役前原版）；重启验证：
+  0 条实验日志、"new high speed SDHC card"（50MHz 恢复）、ext4 正常挂载、
+  无实验脚本进程。板上备份全保留（Image.exp1b/exp1de/exp2pre.bak、
+  k.dtb.exp0/exp1d/exp1de/exp1c/exp2pre.bak），/usr/bin/rockbase-exp*.sh
+  与 /root/log 实验日志保留为档案
+- **内核构建树已还原**：sdhci-of-kendryte.c 恢复为与上游逐字节一致
+  （md5 6c1fdf07，=ruyisdk@7d4e1f44 原版）；sdhci.c 两处 exp2 hunk
+  （no_hs 一票否决 + caps 调试日志）已精确逆向移除；两个 rockbase dts
+  的 &mmc_sd1 块恢复原始 4 行（status/no-1-8-v/cap-sd-highspeed/
+  mshc_ctrl_r=0x00）。全树 grep "rockbase-exp" 零残留
+- **补丁文件 0036/0037/0038 保留未跟踪**（用户约束"源码不 commit"；
+  作为改动档案供日后换卡/硬件实验时参考，不进入构建）
+- 战役判定见上：软件域时序旋钮全灭，下一步=硬件域（换卡裁决实验
+  为首选，用户暂无备用卡，挂起）
+
