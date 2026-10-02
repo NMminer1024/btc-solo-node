@@ -1,0 +1,66 @@
+== exp1de start 2026-10-02 03:30:31 AT-bits SET on sdhci1 0x91581540 ==
+T+1m 03:35:31 m1_total=2 load=1.25 up=647.06
+[  180.161768] sysrq: Show Blocked State
+[  569.291970] sysrq: Show Blocked State
+T+2m 03:40:31 m1_total=4 load=2.00 up=947.11
+[  760.475552] sysrq: Show Blocked State
+[  898.818010] sysrq: Show Blocked State
+T+3m 03:45:31 m1_total=5 load=2.17 up=1247.15
+[ 1172.956892] sysrq: Show Blocked State
+T+4m 03:50:31 m1_total=6 load=1.46 up=1547.22
+[ 1318.913440] sysrq: Show Blocked State
+T+5m 03:55:31 m1_total=7 load=1.60 up=1847.28
+[ 1547.740779] sysrq: Show Blocked State
+T+6m 04:00:31 m1_total=9 load=1.20 up=2147.35
+[ 1916.660150] sysrq: Show Blocked State
+[ 2042.859462] sysrq: Show Blocked State
+T+7m 04:05:32 m1_total=10 load=2.84 up=2447.46
+[ 2313.982147] sysrq: Show Blocked State
+=== atmon head/tail ===
+== atmon start 2026-10-02 03:30:31 (expect sdhci1 0x540 to gain 0x1E000000/bit0 signature if HW tuning runs)
+03:30:31 sdhci1 0x540=0x01000004 0x544=0x00000006 | sdhci0 0x540=0x1F1B0001 0x544=0x00000006
+03:31:31 sdhci1 0x540=0x01000004 0x544=0x00000006 | sdhci0 0x540=0x1F1B0001 0x544=0x00000006
+03:48:32 sdhci1 0x540=0x01000004 0x544=0x00000006 | sdhci0 0x540=0x1F1B0001 0x544=0x00000006
+03:49:32 sdhci1 0x540=0x01000004 0x544=0x00000006 | sdhci0 0x540=0x1F1B0001 0x544=0x00000006
+== atmon end 2026-10-02 03:50:32 ==
+=== dmesg (probe + m1 events) ===
+[    1.705254] sdhci: Secure Digital Host Controller Interface driver
+[    1.711500] sdhci: Copyright(c) Pierre Ossman
+[    1.716459] sdhci-pltfm: SDHCI platform and OF driver helper
+[    1.748600] rockbase-exp1b 91580000.sdhci0: base=91580000.sdhci0 have_phy=1 dl:tx=0xc0 rx=0xd phy:cnfg=0x00890003 cmd=0x00 sdclkdl_cnfg=0x00 sdclkdl_dc=0x40 smpldl=0x0d atdl=0x0c
+[    1.764677] rockbase-exp1b 91580000.sdhci0: delay write tx=0xc0 rx=0xd rb:sdclkdl_cnfg=0x01 sdclkdl_dc=0x40 smpldl=0x0d phy_cnfg=0x00000002
+[    1.777772] rockbase-exp1d 91581000.sdhci1: force_at_tune AT_CTRL 0x01000004 -> 0x011b0004 AT_STAT=0x00000006
+[    1.787764] rockbase-exp1b 91581000.sdhci1: base=91581000.sdhci1 have_phy=0 dl:tx=0x0 rx=0x0 phy:cnfg=0xffffffff cmd=0xff sdclkdl_cnfg=0xff sdclkdl_dc=0xff smpldl=0xff atdl=0xff
+[    1.816119] rockbase-exp1b 91580000.sdhci0: delay write tx=0xc0 rx=0xd rb:sdclkdl_cnfg=0x01 sdclkdl_dc=0x40 smpldl=0x0d phy_cnfg=0x00000002
+[    1.861527] mmc1: SDHCI controller on 91581000.sdhci1 [91581000.sdhci1] using ADMA
+[    1.869227] mmc0: SDHCI controller on 91580000.sdhci0 [91580000.sdhci0] using ADMA
+[    1.882201] mmc1: Got command interrupt 0x00000001 even though no command operation was in progress.
+[    1.891345] mmc1: sdhci: ============ SDHCI REGISTER DUMP ===========
+[    1.897787] mmc1: sdhci: Sys addr:  0x00000000 | Version:  0x00000005
+[    1.904228] mmc1: sdhci: Blk size:  0x00000000 | Blk cnt:  0x00000000
+[    1.910670] mmc1: sdhci: Argument:  0x00000000 | Trn mode: 0x00000000
+[    1.917110] mmc1: sdhci: Present:   0x03ff0000 | Host ctl: 0x00000001
+[    1.923551] mmc1: sdhci: Power:     0x0000000f | Blk gap:  0x00000000
+[    1.929992] mmc1: sdhci: Wake-up:   0x00000000 | Clock:    0x00007d27
+[    1.936433] mmc1: sdhci: Timeout:   0x00000000 | Int stat: 0x00000000
+[    1.942875] mmc1: sdhci: Int enab:  0x00ff1083 | Sig enab: 0x00ff1083
+[    1.949316] mmc1: sdhci: ACmd stat: 0x00000000 | Slot int: 0x00000000
+[    1.955757] mmc1: sdhci: Caps:      0x276a6481 | Caps_1:   0x08008071
+[    1.962198] mmc1: sdhci: Cmd:       0x00000502 | Max curr: 0x00000000
+[    1.968639] mmc1: sdhci: Resp[0]:   0x000001aa | Resp[1]:  0x00000000
+[    1.975079] mmc1: sdhci: Resp[2]:   0x00000000 | Resp[3]:  0x00000000
+[    1.981520] mmc1: sdhci: Host ctl2: 0x00000000
+[    1.985963] mmc1: sdhci: ADMA Err:  0x00000000 | ADMA Ptr: 0x00000000
+[    1.992404] mmc1: sdhci: ============================================
+[    2.034182] mmc1: new high speed SDHC card at address aaaa
+[    2.040148] mmcblk1: mmc1:aaaa SK32G 29.7 GiB
+[    5.305020] [rb-mmc-diag] claim release host=mmc1 releaser=30:kworker/0:1H owner=159:rockbase-lcdui claim_cnt=1 held_ms=736 contended=0
+[    6.828443] [rb-mmc-diag] claim release host=mmc1 releaser=30:kworker/0:1H owner=159:rockbase-lcdui claim_cnt=1 held_ms=1468 contended=0
+[  180.161768] sysrq: Show Blocked State
+[  569.291970] sysrq: Show Blocked State
+[  760.475552] sysrq: Show Blocked State
+[  898.818010] sysrq: Show Blocked State
+[ 1172.956892] sysrq: Show Blocked State
+[ 1318.913440] sysrq: Show Blocked State
+[ 1547.740779] sysrq: Show Blocked State
+[ 1916.660150] sysrq: Show Blocked State

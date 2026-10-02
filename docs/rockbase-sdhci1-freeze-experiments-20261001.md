@@ -240,6 +240,8 @@ m1_sysrq / m1_dstate / m2_n / m2_max_ms / m2_avg_ms / load / block / peers）；
 | exp1-A rx=0x0d/tx=0xc0 | 5840c32e | 09:35–11:00 (10/1) | 1.43h（用户判定提前终止） | **13.3**（19 次/1.43h，基线 12.2） | 1604/1153（含 2 次自测 dd 制造） | **无正向收益 → 事后重定性为 no-op（§5.5）** | 1.43h 速率与基线重合；§5.5 查明驱动对 91581000 硬编码 have_phy=0，延迟线从未写入 → **该档实为基线复测**（13.3/h 与基线 12.2 一致，数据有效，结论改为"复测确认基线速率"）；启动期伪中断未消失（§5.2） |
 | exp0b 进程归因（停 bitcoind 1h） | 5840c32e | 11:37–12:42 (10/1，第 2 次尝试） | 1.08h | **9.2**（10 次/1.08h；同期运行段 13.3，基线 12.2） | 1604/1153（n=4 累计，与 exp1-A 持平，无恶化） | **未归零、降幅不显著**（Poisson p≈0.15–0.22） | 判据结果=后半支：**停了 bitcoind D 事件仍 ~9 次/h** → bitcoind 读不是主触发源；12:31:16 栈捕获受害者 = **jbd2/mmcblk1p3（ext4 日志线程，SD 卡）**，12:34:10 出现 d=2；触发时 disk_wbusy=0%（卡响应迟滞，非队列积压）。**第 1 次尝试（11:00:14 起）作废**：仅 `bitcoin-cli stop` 被 supervisord 22s 后拉起；修正=先落 `/run/rockbase/bitcoind-user-stopped` 再停（"skip bitcoind: user-stopped flag present" 确认）。12:44 删标志恢复 bitcoind：block 969442、peers 爬坡、ckpool up，运行正常。事件时间戳/采集器全量：`freeze-baselines/exp0b-obs-log-20261001.txt`；dmesg：`freeze-baselines/dmesg-e0cafa-cdd6b3-20261001-exp0b.txt` |
 | exp1b PHY 探测（驱动诊断） | dtb 5840c32e / **Image 8ca5f33e** | 10/1 16:06 部署+重启 | 探测型（无泡机指标） | — | — | **延迟线假设判死**（§5.5） | sdhci1@91581000 PHY 块(0x300)整块读回全 0xFF = 寄存器文件不存在；sdhci0 同法读回全吻合（写 tx=0xc0/rx=0x0d → 回读 cnfg=0x01/dc=0x40/smpl=0x0d），方法有效。force_phy 阶段 2 不做（写空寄存器+未知 0x540 AT 位，风险>收益）。板上保留诊断内核（日志前缀 rockbase-exp1b，含 PWRGOOD 超时安全网） |
+| exp1d 热写 AT 位（userspace） | 同上（无内核/dtb 变更） | 10/2 02:41–03:07（提前收工，25min） | 0.42h | **14.3**（6 次/0.42h；对照同 uptime 前段 12.1） | — | **无变化 → 判定事件驱动** | AT 位 25min 零 HW 活动 + 健康实例指纹位 10.5h 静态 = 一次性戳记 → 热写永不被消费（调谐仅在卡初始化跑）→ 转 exp1d'（§5.7）。数据：`freeze-baselines/exp1d-hot-at-reg-log-20261002.txt` |
+| exp1d' probe 前置 AT 位（内核版） | dtb edbd68a5 / **Image e705189e** | 10/2 03:30–04:07 本地（用户判定 35min 提前收工） | 0.61h | **16.4**（10 次/0.61h；基线 12.2，复测 13.3，热写档 14.3） | 无红线事件（load ≤2.9，无 >10min stall） | **无效 → AT 机制对该实例判死** | 调谐**确已执行**：probe 写 0x011b0004（读回吻合，早于卡初始化）→ 卡初始化（t≈2.0s HS SDHC）后 0x540 回到 0x01000004（使能位被 HW 消费），与热写档"无初始化事件则永驻"对照闭环。但 M1 不降（16.4/h ≥ 各档基线）→ **auto-tuning 跑了也救不了** → 转 exp-1c（mshc_ctrl_r 0x00→0x01，§5.8）。数据：`freeze-baselines/exp1de-obs-log-20261002.txt`、`freeze-baselines/dmesg-e705189e-exp1d-exp1c-prep-20261002.txt` |
 
 > 每档泡机结束：① 从上表所在板取终值填本表；② 完整 dmesg 存
 > `docs/freeze-baselines/dmesg-<board>-<date>-expN.txt`；③ 若中止/回滚，
@@ -342,3 +344,71 @@ M1/M2 → devmem 写回。逃逸链：①ssh 活着则手动写回；②ssh 死�
 → panic，kernel.panic=10 自动重启，重启即清 AT 位）；③mshc_ctrl_r
 在下次 RESET_ALL 时被驱动按 DTS 值重写（双重自愈）。**红线不变**：
 观察期出现 >10min 卡死立即回滚。
+
+### 5.7 exp-1d 热测与 exp-1d'（内核版）（2026-10-02 02:41 起）
+
+- **exp-1d（热写，02:41–03:07 本地，提前收工）**：devmem 将 sdhci1
+  AT_CTRL(0x91581540) `0x01000004 → 0x011F0004`（置位内核 PHY 路径所用
+  的 BIT16/17/19/20），AT_STAT 写 0（读回恒 0x06，疑只读状态位）。
+  60s×25 采样：两实例 AT 寄存器**全程零变动**；M1 14.3 次/h 不变。
+  **判定：auto-tuning 为事件驱动（卡初始化/HS 切换时跑一次），热写
+  置位后无触发事件，位不被消费**。
+- **exp-1d'（内核版，10/2 03:28 重启部署，03:30–04:07 本地，
+  用户判定 35min 提前收工）**：补丁 0038（未跟踪）在 probe 非 PHY
+  分支、卡初始化**之前**置位 AT 位（DTS 门控 `force_at_tune`，仅
+  `&mmc_sd1` 添加）+ pr_info 读回日志（前缀 `rockbase-exp1d`）。
+  **调谐真实执行的证据链闭环**：
+  - probe 日志（t=1.777s，早于卡初始化 t=2.0s）：
+    `force_at_tune AT_CTRL 0x01000004 -> 0x011b0004 AT_STAT=0x00000006`
+    （写+读回吻合，注意内核 PHY 路径掩码实为 BIT16|17|19|20=0x001B0000）
+  - 卡初始化（"new high speed SDHC card"）后 0x540 回到 **0x01000004**
+    = 使能位被 HW 消费；对照热写档"无初始化事件 → 位永驻 25min 不动"
+    → 消费模型成立，调谐在卡初始化时确实跑了一遍
+  - atmon 20min（03:30–03:50）：两实例 AT 寄存器全程静态，无后续
+    再调谐事件
+  - **结果：M1 10 次/0.61h ≈ 16.4/h，不降反噪高（基线 12.2 / 复测
+    13.3 / 热写档 14.3）** → **auto-tuning 跑了也救不了，AT 机制对
+    该实例判死**。0038 存档弃用（不固化）。
+- 重启部署=热写值的天然回滚。
+- **下一步 exp-1c**（§5.8）：mshc_ctrl_r 0x00→0x01。
+
+### 5.8 exp-1c：mshc_ctrl_r=0x01（2026-10-02 04:10 起）
+
+**依据**（§5.6 实测对照 + 本次 04:07 复测）：两实例 MSHC_CTRL_R(0x508)
+活值唯一差异在低字节——sdhci0（健康）=**0x01**（硬件自置，驱动写 0x00
+后仍保持 0x01），sdhci1（病）=**0x00**（DTS 钉死 0x00，驱动每次
+RESET_ALL 用 DTS 值重写，若硬件曾置位也会被抹掉）。高 16 位 0x0F0000
+两实例相同（无关变量）。
+**改动**：DTS `&mmc_sd1` 的 `mshc_ctrl_r = <0x00>` → `<0x01>`，使驱动
+每次 RESET_ALL 都替硬件维持 bit0（镜像健康实例的稳态）。同一构建中
+移除 `force_at_tune` 属性（AT 已判死，保持单变量；0038 驱动代码
+留树内但失去 DTS 门控，行为等同基线）。
+**位语义仍黑盒**（§5.6：公开资料无定义），本档性质=镜像对照实验，
+非机制修复声明。
+**部署**：重建 dtb → /boot/k.dtb（备份 k.dtb.exp1d.bak2）→ 重启 →
+devmem 0x91581508 低字节应为 0x01 验证 → 1h 泡机（判据同 exp1d'：
+M1 显著低于 12–14/h 才有效；红线 >10min stall 即回滚）。
+
+**部署实测与重大发现（04:13 重启，Image 700d3506 / dtb e55c56f1，
+旧版备份 Image.exp1de.bak=e705189e / k.dtb.exp1de.bak=edbd68a5）**：
+- 重启验证：uptime 起新、`force_at_tune` probe 行消失 ✓、
+  /proc/device-tree/soc/sdhci1@91581000/mshc_ctrl_r = 0x00000001 ✓、
+  卡 HS 50MHz 正常挂载 ✓
+- **但 devmem 0x91581508 低字节仍读 0x00** → devmem 写读测试查明：
+  写 0x000F0001 立即读回 0x01 ✓（寄存器可写），**2s 后自动变回
+  0x000F0000** = **bit0 会被硬件自行清除**
+- 含义：此前"健康实例 0x01 / 病实例 0x00"的静态对照**可能只是
+  流量副产物而非原因**——bit0 疑为"下一次 CMD/DATA 按 cclk_tx 上升
+  沿发射"的一次性 strobe（内核唯一注释），每条命令发射后消耗归零；
+  sdhci0（WiFi SDIO，基本无流量）保有 0x01，sdhci1（SD 卡持续
+  流量）恒被消耗 → exp-1c 的 DTS 值只在每次 RESET_ALL 后的短暂
+  窗口内有效，**预期收益下调**
+- 决策：配置已部署，泡机成本≈0，继续 1h 观察（04:19:36 本地起，
+  13×5min tick → /root/log/exp1c-obs.log；0x508 双实例 60s×20 采样
+  → /root/log/exp1c-mshcmon.log）。M1 不降 → exp-1c 判死 +
+  bit0=流量副产物假说升为主解释 → 转 exp2
+- **M4 吞吐基线（50MHz，本启动窗口实测，exp2 对照用）**：
+  direct 顺序读 32MB ≈ 2s（~16 MB/s）、direct 写 32MB ≈ 2s
+  （~16 MB/s，ext4 根分区；/tmp 为 tmpfs 不计）。若 exp2 降到
+  25MHz 后 M4 显著减半则验证"频率轴有效"，也给出对 bitcoind
+  读放大影响的量化参照（用户 9/30 提问）
