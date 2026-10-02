@@ -19,6 +19,7 @@
 #include <sys/ioctl.h>
 #include <sys/time.h>
 #include <time.h>
+#include <pthread.h>
 #include <unistd.h>
 #include <map>
 #include <vector>
@@ -2886,10 +2887,33 @@ void play_boot_video() {
 
     const uint32_t start_ms = tick_ms();
     int last_index = 0;
+
+    // Boot sound (hologram sweep, ~310ms) end-aligned with the video.
+    // Triggered by frame index (not elapsed time) because each frame's
+    // actual duration = render + DRM commit + frame_ms sleep, which is
+    // longer than frame_ms alone.  ~5 frames at 15fps ≈ 330ms of video
+    // remaining when the sound starts.
+    constexpr int kBootSoundFrames = 5;
+    const int sound_trigger_frame =
+        (g_boot_video.frame_count > kBootSoundFrames)
+            ? (g_boot_video.frame_count - kBootSoundFrames) : 0;
+    bool sound_started = false;
+
     for (int index = 0; index < g_boot_video.frame_count; ++index) {
         if (g_stop) break;
         if (tick_ms() - start_ms > kBootVideoMaxMs) break;
         last_index = index;
+
+        // Trigger the boot sound thread when we reach the trigger frame.
+        if (!sound_started && index >= sound_trigger_frame) {
+            sound_started = true;
+            pthread_t tid;
+            if (pthread_create(&tid, nullptr,
+                [](void*) -> void* { buzzer_boot_hologram(); return nullptr; },
+                nullptr) == 0) {
+                pthread_detach(tid);
+            }
+        }
 
         auto* dst = static_cast<uint32_t*>(g_buffer->map);
         g_boot_video.render_frame(index, dst, stride_px);

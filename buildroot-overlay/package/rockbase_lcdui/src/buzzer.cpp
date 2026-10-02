@@ -165,3 +165,36 @@ void buzzer_shutdown() {
         g_pwm_ready = false;
     }
 }
+
+// Helper: sweep PWM frequency from f1 to f2 over ms milliseconds.
+// The buzzer stays enabled throughout; volume naturally rises/falls with
+// proximity to the 2kHz resonance point.
+static void pwm_sweep(int f1, int f2, int ms) {
+    sysfs_write(g_enable_path, "1");
+    const int steps = ms / 5;
+    for (int i = 0; i <= steps; i++) {
+        const int f = f1 + (f2 - f1) * i / steps;
+        const uint32_t period_ns = 1000000000U / static_cast<uint32_t>(f);
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "%u", period_ns);
+        sysfs_write(g_period_path, buf);
+        std::snprintf(buf, sizeof(buf), "%u", period_ns / 2);
+        sysfs_write(g_duty_path, buf);
+        usleep(5000);
+    }
+    sysfs_write(g_enable_path, "0");
+}
+
+void buzzer_boot_hologram() {
+    if (!g_pwm_ready) return;
+    // Hologram: sweep up 1k→2.8k (180ms), gap 30ms, sweep down 2.8k→2k (100ms).
+    pwm_sweep(1000, 2800, 180);
+    usleep(30000);
+    pwm_sweep(2800, 2000, 100);
+    // Restore 1kHz / 50% duty for normal click beeps.
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%u", 1000000U);
+    sysfs_write(g_period_path, buf);
+    std::snprintf(buf, sizeof(buf), "%u", 500000U);
+    sysfs_write(g_duty_path, buf);
+}

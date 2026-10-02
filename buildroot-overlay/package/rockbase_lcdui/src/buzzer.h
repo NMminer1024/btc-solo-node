@@ -17,3 +17,8 @@ void buzzer_init();
 void buzzer_beep();
 void buzzer_update();
 void buzzer_shutdown();
+
+// Boot sound: hologram sweep (1k→2.8k up, 2.8k→2k down), ~310ms.
+// Must be called from a separate thread (it blocks ~310ms via usleep).
+// Restores the 1kHz/50% duty settings for normal click beeps on return.
+void buzzer_boot_hologram();
