@@ -242,6 +242,8 @@ m1_sysrq / m1_dstate / m2_n / m2_max_ms / m2_avg_ms / load / block / peers）；
 | exp1b PHY 探测（驱动诊断） | dtb 5840c32e / **Image 8ca5f33e** | 10/1 16:06 部署+重启 | 探测型（无泡机指标） | — | — | **延迟线假设判死**（§5.5） | sdhci1@91581000 PHY 块(0x300)整块读回全 0xFF = 寄存器文件不存在；sdhci0 同法读回全吻合（写 tx=0xc0/rx=0x0d → 回读 cnfg=0x01/dc=0x40/smpl=0x0d），方法有效。force_phy 阶段 2 不做（写空寄存器+未知 0x540 AT 位，风险>收益）。板上保留诊断内核（日志前缀 rockbase-exp1b，含 PWRGOOD 超时安全网） |
 | exp1d 热写 AT 位（userspace） | 同上（无内核/dtb 变更） | 10/2 02:41–03:07（提前收工，25min） | 0.42h | **14.3**（6 次/0.42h；对照同 uptime 前段 12.1） | — | **无变化 → 判定事件驱动** | AT 位 25min 零 HW 活动 + 健康实例指纹位 10.5h 静态 = 一次性戳记 → 热写永不被消费（调谐仅在卡初始化跑）→ 转 exp1d'（§5.7）。数据：`freeze-baselines/exp1d-hot-at-reg-log-20261002.txt` |
 | exp1d' probe 前置 AT 位（内核版） | dtb edbd68a5 / **Image e705189e** | 10/2 03:30–04:07 本地（用户判定 35min 提前收工） | 0.61h | **16.4**（10 次/0.61h；基线 12.2，复测 13.3，热写档 14.3） | 无红线事件（load ≤2.9，无 >10min stall） | **无效 → AT 机制对该实例判死** | 调谐**确已执行**：probe 写 0x011b0004（读回吻合，早于卡初始化）→ 卡初始化（t≈2.0s HS SDHC）后 0x540 回到 0x01000004（使能位被 HW 消费），与热写档"无初始化事件则永驻"对照闭环。但 M1 不降（16.4/h ≥ 各档基线）→ **auto-tuning 跑了也救不了** → 转 exp-1c（mshc_ctrl_r 0x00→0x01，§5.8）。数据：`freeze-baselines/exp1de-obs-log-20261002.txt`、`freeze-baselines/dmesg-e705189e-exp1d-exp1c-prep-20261002.txt` |
+| exp1c mshc_ctrl_r=0x01 | dtb e55c56f1 / **Image 700d3506** | 10/2 04:19–04:46 本地（提前收工） | 0.46h | **19.2**（8 次/0.46h；基线 12.2） | 无红线事件 | **无效** | devmem 实测 0x508 bit0 写入后 **2s 内被硬件自动清除** → 此前"健康 0x01/病 0x00"静态对照疑为流量副产物（bit0 疑为每命令 strobe，sdhci1 持续流量恒被消耗）；DTS 0x01 只在每次 RESET_ALL 后短暂窗口有效（§5.8） |
+| exp2 降频 50→25MHz（no_hs） | dtb c5bbb189 / **Image 5c71dbe8** | 10/2 05:20–06:25 本地 | 0.92h | **15.2**（14 次/0.92h；基线 12.2，复测 13.3，p≈0.26 无显著差异） | 无红线事件（load ≤3.4） | **无效 → 频率轴判死，软件域时序旋钮试尽** | 部署：DTS 去 cap-sd-highspeed 无效（HW CAPS 自通告 HS；本树 SDHCI_CAN_DO_HISPD=0x00200000=bit21 非标准 bit19）；sdhci-caps-mask 也无效（core 读时 dt_mask=0）；终方案=sdhci.c HS 授予点加 DTS 门控 `no_hs` 一票否决（`no_hs veto HS` 日志确认，卡 "new SDHC card" 无 high speed）。M5 探针（4K-direct/2s，>100ms 记 SLOW）2094 样本仅 1 次（开机首分钟 150ms）= 单读微卡顿罕见；**M1 不降 = 降频救不了 D 态冻结**。受害者模式不变（b-msghand filemap_fault 页读 SD 卡 >10s；同 tick ckpool 同 D）。M4：25MHz direct 读 32MB≈3s（~11MB/s vs 50MHz ~16MB/s）。数据：`freeze-baselines/exp2-50mhz-soak-dmesg-20261002.txt` |
 
 > 每档泡机结束：① 从上表所在板取终值填本表；② 完整 dmesg 存
 > `docs/freeze-baselines/dmesg-<board>-<date>-expN.txt`；③ 若中止/回滚，
@@ -412,3 +414,35 @@ M1 显著低于 12–14/h 才有效；红线 >10min stall 即回滚）。
   （~16 MB/s，ext4 根分区；/tmp 为 tmpfs 不计）。若 exp2 降到
   25MHz 后 M4 显著减半则验证"频率轴有效"，也给出对 bitcoind
   读放大影响的量化参照（用户 9/30 提问）
+
+### 5.9 阶段性总判（2026-10-02 06:30）：软件域时序旋钮试尽，转硬件域
+
+**全灭清单**（每个都有"参数确实生效"的闭环证据，排除无效操作假阳）：
+1. ~~PHY 延迟线~~：硬件寄存器文件不存在（exp1b，0x300 块全 0xFF）
+2. ~~auto-tuning~~：确认已执行（使能位被卡初始化消费）但无效（exp1d'）；
+   与 1 同根因——调谐的执行机构（延迟线）在降配实例上不存在
+3. ~~mshc_ctrl_r bit0~~：写入 2s 内被硬件清除（exp1c），静态对照为流量副产物
+4. ~~50→25MHz 降频~~：M1 15.2/h 不降（exp2，no_hs 一票否决确认生效）
+
+**统一结论**：sdhci1（降配实例）上的 D 态冻结**不与总线时钟频率成比例**，
+控制器侧软件可达的时序自由度为零（无延迟线、无有效 AT、ctrl_r 位瞬态）。
+受害模式恒定：页缓存读 SD 卡的进程（bitcoind b-msghand / jbd2 / 甚至
+ckpool）在 10s+ 的卡级无响应中排队；dmesg 无控制器错误日志（重试在
+控制器/ADMA 内消化）；WiFi 实例（满配）全程零错误。
+
+**指向硬件域的三个候选**（优先级降序）：
+1. **SD 卡本身**（弱卡/坏块区/电容老化）——最便宜的裁决实验：
+   **换一张卡**。换卡后同样 ~12/h → 卡无关（控制器/PCB/电源）；
+   换卡后显著下降/归零 → 原卡物理衰退，直接换卡即"修复"
+2. **电源完整性**：SD VCC/VQCC 轨噪声或 LDO 余量不足，瞬态负载
+   （WiFi TX 峰值）拉低卡供电 → 示波器/万用表动态量
+3. **PCB 走线/SI**：降配实例走线长度/阻抗失配（板厂设计）
+
+**留档的运行配置**：当前板跑 exp2 配置（25MHz，Image 5c71dbe8 +
+dtb c5bbb189）。注意 25MHz 吞吐低 30%，若换卡实验需要 50MHz 基线
+对照，用 /boot/k.dtb.exp2pre.bak（3ded397e 带 caps-mask 无效档）回
+不到——应回到 k.dtb.exp1c.bak（e55c56f1，50MHz 等效基线）+ 对应
+Image 700d3506（Image.exp2pre.bak 同为 700d3506 系）。**回基线命令**：
+`cp /boot/Image.exp2pre.bak /boot/Image && cp /boot/k.dtb.exp1c.bak /boot/k.dtb && reboot`
+（M5 探针 rockbase-m5-probe.sh 持续运行中，换卡后自动继续记录，
+无需重部署——它是换卡实验的现成对照组指标。）
