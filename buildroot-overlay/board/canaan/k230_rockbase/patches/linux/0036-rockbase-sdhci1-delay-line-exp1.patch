@@ -1,0 +1,40 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bitpony <bitpony@example.com>
+Date: Wed, 1 Oct 2026 17:20:00 +0800
+Subject: [PATCH] rockbase exp-1: PHY delay lines for sdhci1@91581000 (mmc_sd1)
+
+Freeze root-cause experiment 1 (docs/rockbase-sdhci1-freeze-experiments-20261001.md).
+Add the PHY rx/tx delay-line calibration to the uncalibrated second
+SDHCI instance (91581000), which carries the SD card on 1G boards.
+Values mirror the working mmc_sd0 (91580000) calibration: rx=0x0d,
+tx=0xc0. DTS-only; reversible by renaming this patch to .disabled.
+Signed-off-by: bitpony <bitpony@example.com>
+
+--- a/arch/riscv/boot/dts/canaan/k230-rockbase.dts
++++ b/arch/riscv/boot/dts/canaan/k230-rockbase.dts
+@@ -85,6 +85,11 @@
+ 	no-1-8-v;
+ 	cap-sd-highspeed;
+ 	mshc_ctrl_r = <0x00>;
++	/* rockbase exp-1 (2026-10-01): PHY delay lines for the uncalibrated
++	 * sdhci1@91581000 instance (freeze-microstall root-cause experiment).
++	 * Values mirror the working mmc_sd0 calibration. */
++	rx_delay_line = <0x0d>;
++	tx_delay_line = <0xc0>;
+ };
+ 
+ &usb0 {
+--- a/arch/riscv/boot/dts/canaan/k230-rockbase-lcd.dts
++++ b/arch/riscv/boot/dts/canaan/k230-rockbase-lcd.dts
+@@ -87,6 +87,11 @@
+ 	no-1-8-v;
+ 	cap-sd-highspeed;
+ 	mshc_ctrl_r = <0x00>;
++	/* rockbase exp-1 (2026-10-01): PHY delay lines for the uncalibrated
++	 * sdhci1@91581000 instance (freeze-microstall root-cause experiment).
++	 * Values mirror the working mmc_sd0 calibration. */
++	rx_delay_line = <0x0d>;
++	tx_delay_line = <0xc0>;
+ };
+ 
+ &usb0 {

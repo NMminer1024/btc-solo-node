@@ -1,0 +1,90 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2021
+From: bitpony <bitpony@example.com>
+Date: Wed, 1 Oct 2026 16:00:00 +0800
+Subject: [PATCH] rockbase exp-1b: sdhci PHY probe diagnostics + force_phy gate
+
+Freeze root-cause experiment 1b (docs/rockbase-sdhci1-freeze-experiments-20261001.md).
+exp-1 (DTS delay lines only) was a NO-OP: the vendor driver hardcodes
+have_phy=0 for the 91581000 instance (SD card on Rockbase), so
+rx/tx_delay_line are never read or written there. Changes:
+
+1. Read-only PHY block (0x300) register dump at probe for BOTH instances
+   (log-only; all-0f/00 => register file not implemented).
+2. Delay-line write + readback log in dwcmshc_phy_delay_config (only
+   runs on have_phy=1 instances).
+3. PHY_PWRGOOD timeout no longer fails probe (log + continue) so a
+   PHY-less instance with force_phy stays bootable (safety net).
+4. DTS-gated "force_phy" property: when present, forces have_phy=1 so
+   the delay-line path runs on 91581000. Inert unless present.
+
+Reversible by renaming this patch to .disabled (source not committed).
+Signed-off-by: bitpony <bitpony@example.com>
+
+--- a/drivers/mmc/host/sdhci-of-kendryte.c
++++ b/drivers/mmc/host/sdhci-of-kendryte.c
++++ output/k230_rockbase_defconfig/build/linux-7d4e1f444f461dbe3833bd99a4640e7b6c2cd529/drivers/mmc/host/sdhci-of-kendryte.c	2026-10-02 00:01:45.878287228 +0800
+@@ -131,6 +131,14 @@
+ 		sdhci_writeb(host, priv->tx_delay_line, DWC_MSHC_SDCLKDL_DC);
+ 	}
+ 	sdhci_writeb(host, priv->rx_delay_line, DWC_MSHC_SMPLDL_CNFG);
++	/* rockbase exp-1b (2026-10-01): delay-line write + register readback
++	 * (freeze root-cause verification, log-only, no behavior change). */
++	pr_info("rockbase-exp1b %s: delay write tx=0x%x rx=0x%x rb:sdclkdl_cnfg=0x%02x sdclkdl_dc=0x%02x smpldl=0x%02x phy_cnfg=0x%08x\n",
++		host->hw_name, priv->tx_delay_line, priv->rx_delay_line,
++		sdhci_readb(host, DWC_MSHC_SDCLKDL_CNFG),
++		sdhci_readb(host, DWC_MSHC_SDCLKDL_DC),
++		sdhci_readb(host, DWC_MSHC_SMPLDL_CNFG),
++		sdhci_readl(host, DWC_MSHC_PHY_CNFG));
+ 	sdhci_writeb(host, 0xc, DWC_MSHC_ATDL_CNFG);
+ 	sdhci_writel(host,
+ 		     (sdhci_readl(host, SDHCI_VENDER_AT_CTRL_REG) | BIT(16) |
+@@ -171,8 +179,14 @@
+ 		reg = sdhci_readl(host, DWC_MSHC_PHY_CNFG);
+ 		if (reg & PHY_PWRGOOD)
+ 			break;
+-		if (!timeout)
+-			return -1;
++		if (!timeout) {
++			/* rockbase exp-1b (2026-10-01): do not fail probe when the PHY
++			 * power-good never asserts; log and continue so a PHY-less
++			 * instance stays bootable (freeze experiment safety net). */
++			pr_err("rockbase-exp1b %s: PHY_PWRGOOD timeout (phy_cnfg=0x%08x), continuing\n",
++			       host->hw_name, reg);
++			return 0;
++		}
+ 
+ 		timeout--;
+ 
+@@ -353,6 +367,12 @@
+ 		data |= 1 << 6 | 1 << 4;
+ 		writel(data, priv->hs_regs + 0);
+ 	}
++	/* rockbase exp-1b (2026-10-01): DTS-gated override so the delay-line
++	 * path can be force-enabled on the instance the vendor hardcodes
++	 * have_phy=0 (91581000). Inert unless the "force_phy" property is
++	 * present (freeze root-cause experiment). */
++	if (device_property_present(&pdev->dev, "force_phy"))
++		priv->have_phy = 1;
+ 
+ 	if (device_property_present(&pdev->dev, "is_emmc"))
+ 		priv->is_emmc_card = 1;
+@@ -383,6 +403,19 @@
+ 			priv->mshc_ctrl_r = 0;
+ 	}
+ 
++	/* rockbase exp-1b (2026-10-01): read-only PHY block dump. All-0x...f /
++	 * 0x...0 across the 0x300 block => register file not implemented on
++	 * this instance (delay-line hypothesis dead for that instance). */
++	pr_info("rockbase-exp1b %s: base=%s have_phy=%d dl:tx=0x%x rx=0x%x phy:cnfg=0x%08x cmd=0x%02x sdclkdl_cnfg=0x%02x sdclkdl_dc=0x%02x smpldl=0x%02x atdl=0x%02x\n",
++		dev_name(&pdev->dev), host->hw_name, priv->have_phy,
++		priv->tx_delay_line, priv->rx_delay_line,
++		sdhci_readl(host, DWC_MSHC_PHY_CNFG),
++		sdhci_readb(host, DWC_MSHC_COMMDL_CNFG),
++		sdhci_readb(host, DWC_MSHC_SDCLKDL_CNFG),
++		sdhci_readb(host, DWC_MSHC_SDCLKDL_DC),
++		sdhci_readb(host, DWC_MSHC_SMPLDL_CNFG),
++		sdhci_readb(host, DWC_MSHC_ATDL_CNFG));
++
+ 	if (priv->io_fixed_1v8)
+ 		host->flags &= ~SDHCI_SIGNALING_330;
+ 

@@ -1,0 +1,73 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2021
+From: bitpony <bitpony@example.com>
+Date: Thu, 2 Oct 2026 03:10:00 +0800
+Subject: [PATCH] rockbase exp-1d': enable HW auto-tune on non-PHY sdhci before card init
+
+Freeze root-cause experiment 1d' (docs/rockbase-sdhci1-freeze-experiments-20261001.md).
+exp-1d hot test (userspace write of AT bits at 0x540 on 91581000, 25 min):
+M1 unchanged (~14/h), AT register untouched by HW for the whole window,
+and the healthy instance's extra AT bits are a one-time stamp (static for
+10.5h) => auto-tune runs once at card init (HS 25->50MHz switch), so a
+hot write is never consumed. Set the AT enable bits in probe (before card
+init) instead, DTS-gated by "force_at_tune" (mmc_sd1). Also add the DTS
+property to &mmc_sd1 in k230-rockbase{,-lcd}.dts. Reversible by renaming
+to .disabled (source not committed).
+Signed-off-by: bitpony <bitpony@example.com>
+
+--- a/drivers/mmc/host/sdhci-of-kendryte.c
++++ b/drivers/mmc/host/sdhci-of-kendryte.c
++++ /home/bitpony/Desktop/mining/btc-solo-node/k230/output/k230_rockbase_defconfig/build/linux-7d4e1f444f461dbe3833bd99a4640e7b6c2cd529/drivers/mmc/host/sdhci-of-kendryte.c	2026-10-02 11:09:25.866248014 +0800
+@@ -401,6 +401,25 @@
+ 					      &priv->mshc_ctrl_r);
+ 		if (err)
+ 			priv->mshc_ctrl_r = 0;
++
++		/* rockbase exp-1d' (2026-10-02): DTS-gated auto-tune enable
++		 * for non-PHY instances (freeze root-cause experiment).
++		 * Set the AT enable bits BEFORE card init so the HW
++		 * sampling auto-tune runs with them active during the
++		 * 25->50MHz HS switch at card init. Inert unless the
++		 * "force_at_tune" property is present. */
++		if (device_property_present(&pdev->dev, "force_at_tune")) {
++			u32 at = sdhci_readl(host, SDHCI_VENDER_AT_CTRL_REG);
++
++			sdhci_writel(host,
++				     at | BIT(16) | BIT(17) | BIT(19) | BIT(20),
++				     SDHCI_VENDER_AT_CTRL_REG);
++			sdhci_writel(host, 0x0, SDHCI_VENDER_AT_STAT_REG);
++			pr_info("rockbase-exp1d %s: force_at_tune AT_CTRL 0x%08x -> 0x%08x AT_STAT=0x%08x\n",
++				dev_name(&pdev->dev), at,
++				sdhci_readl(host, SDHCI_VENDER_AT_CTRL_REG),
++				sdhci_readl(host, SDHCI_VENDER_AT_STAT_REG));
++		}
+ 	}
+ 
+ 	/* rockbase exp-1b (2026-10-01): read-only PHY block dump. All-0x...f /
+
+--- a/arch/riscv/boot/dts/canaan/k230-rockbase.dts
++++ b/arch/riscv/boot/dts/canaan/k230-rockbase.dts
+@@ -85,6 +85,10 @@
+ 	no-1-8-v;
+ 	cap-sd-highspeed;
+ 	mshc_ctrl_r = <0x00>;
++	/* rockbase exp-1d' (2026-10-02): enable HW sampling
++	 * auto-tune on the non-PHY instance before card init
++	 * (freeze root-cause experiment). */
++	force_at_tune;
+ 	/* rockbase exp-1 (2026-10-01): PHY delay lines for the uncalibrated
+ 	 * sdhci1@91581000 instance (freeze-microstall root-cause experiment).
+ 	 * Values mirror the working mmc_sd0 calibration. */
+
+--- a/arch/riscv/boot/dts/canaan/k230-rockbase-lcd.dts
++++ b/arch/riscv/boot/dts/canaan/k230-rockbase-lcd.dts
+@@ -87,6 +87,10 @@
+ 	no-1-8-v;
+ 	cap-sd-highspeed;
+ 	mshc_ctrl_r = <0x00>;
++	/* rockbase exp-1d' (2026-10-02): enable HW sampling
++	 * auto-tune on the non-PHY instance before card init
++	 * (freeze root-cause experiment). */
++	force_at_tune;
+ 	/* rockbase exp-1 (2026-10-01): PHY delay lines for the uncalibrated
+ 	 * sdhci1@91581000 instance (freeze-microstall root-cause experiment).
+ 	 * Values mirror the working mmc_sd0 calibration. */

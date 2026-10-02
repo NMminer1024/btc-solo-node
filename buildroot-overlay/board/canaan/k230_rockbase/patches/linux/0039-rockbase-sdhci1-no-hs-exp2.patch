@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: bitpony <bitpony@example.com>
+Subject: [PATCH] rockbase exp2: DTS-gated no_hs HS veto (50->25MHz) (archive, judged INEFFECTIVE)
+
+Freeze root-cause experiment 2 (docs/rockbase-sdhci1-freeze-experiments-20261001.md S5.9).
+Vetoes the high-speed (50MHz) switch on the derated sdhci1 instance by gating
+the sdhci core HS capability grant on the DTS 'no_hs' property. Deployed
+Image 5c71dbe8 / dtb c5bbb189; verdict: M1 15.2/h vs 12.2/h baseline =>
+INEFFECTIVE, frequency axis dead. Reverted from the tree; this file is
+the change archive only. Note: intermediate iterations (cap-sd-highspeed
+removal alone, sdhci-caps-mask, host->caps clear at probe) were all no-ops;
+only this core-guard gate actually forced 25MHz.
+Signed-off-by: bitpony <bitpony@example.com>
+
+--- a/drivers/mmc/host/sdhci.c
++++ b/drivers/mmc/host/sdhci.c
+@@ -4501,8 +4501,17 @@
+ 	if (host->quirks2 & SDHCI_QUIRK2_HOST_NO_CMD23)
+ 		mmc->caps &= ~MMC_CAP_CMD23;
+ 
+-	if (host->caps & SDHCI_CAN_DO_HISPD)
+-		mmc->caps |= MMC_CAP_SD_HIGHSPEED | MMC_CAP_MMC_HIGHSPEED;
++	if (host->caps & SDHCI_CAN_DO_HISPD) {
++		/* rockbase exp2 (2026-10-02): DTS-gated HS veto for the
++		 * derated instance (freeze root-cause experiment). Inert
++		 * unless the "no_hs" property is present. */
++		if (!device_property_present(mmc_dev(mmc), "no_hs"))
++			mmc->caps |= MMC_CAP_SD_HIGHSPEED |
++					MMC_CAP_MMC_HIGHSPEED;
++		else
++			pr_info("rockbase-exp2 %s: no_hs veto HS, mmc->caps=0x%x\n",
++				mmc_hostname(mmc), mmc->caps);
++	}
+ 
+ 	if ((host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION) &&
+ 	    mmc_card_is_removable(mmc) &&
+--- a/arch/riscv/boot/dts/canaan/k230-rockbase-lcd.dts
++++ b/arch/riscv/boot/dts/canaan/k230-rockbase-lcd.dts
+@@ -85,7 +85,10 @@
+ &mmc_sd1{
+ 	status = "okay";
+ 	no-1-8-v;
+-	cap-sd-highspeed;
++	/* rockbase exp2 (2026-10-02): veto high-speed (50MHz) switch, card
++	 * stays at legacy 25MHz (freeze root-cause experiment, derated
++	 * instance). Consumed by the sdhci core HS-grant guard. */
++	no_hs;
+ 	mshc_ctrl_r = <0x00>;
+ };
+ 
+--- a/arch/riscv/boot/dts/canaan/k230-rockbase.dts
++++ b/arch/riscv/boot/dts/canaan/k230-rockbase.dts
+@@ -83,7 +83,10 @@
+ &mmc_sd1{
+ 	status = "okay";
+ 	no-1-8-v;
+-	cap-sd-highspeed;
++	/* rockbase exp2 (2026-10-02): veto high-speed (50MHz) switch, card
++	 * stays at legacy 25MHz (freeze root-cause experiment, derated
++	 * instance). Consumed by the sdhci core HS-grant guard. */
++	no_hs;
+ 	mshc_ctrl_r = <0x00>;
+ };
+ 
