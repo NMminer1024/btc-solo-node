@@ -1,0 +1,143 @@
+== exp1d start 2026-10-02 02:41:43 AT-bits SET on sdhci1 0x91581540 ==
+T+1m 02:46:43 m1_total=129 load=2.92 up=38424.07
+[  145.193334] sysrq: Show Blocked State
+[  323.908378] sysrq: Show Blocked State
+[  466.759924] sysrq: Show Blocked State
+[  665.351591] sysrq: Show Blocked State
+[  914.096459] sysrq: Show Blocked State
+[ 1267.011257] sysrq: Show Blocked State
+[ 1576.449946] sysrq: Show Blocked State
+[ 2058.509640] sysrq: Show Blocked State
+[ 2244.978626] sysrq: Show Blocked State
+[ 2403.316918] sysrq: Show Blocked State
+[ 2765.139713] sysrq: Show Blocked State
+[ 2988.844832] sysrq: Show Blocked State
+[ 3270.428844] sysrq: Show Blocked State
+[ 3429.497636] sysrq: Show Blocked State
+[ 4071.545838] sysrq: Show Blocked State
+[ 4429.729575] sysrq: Show Blocked State
+[ 4760.339720] sysrq: Show Blocked State
+[ 4916.169859] sysrq: Show Blocked State
+[ 5195.680380] sysrq: Show Blocked State
+[ 5412.967273] sysrq: Show Blocked State
+[ 5794.219363] sysrq: Show Blocked State
+[ 5970.924296] sysrq: Show Blocked State
+[ 6307.005045] sysrq: Show Blocked State
+[ 6518.691587] sysrq: Show Blocked State
+[ 6705.413310] sysrq: Show Blocked State
+[ 7108.214456] sysrq: Show Blocked State
+[ 7296.463953] sysrq: Show Blocked State
+[ 7461.865990] sysrq: Show Blocked State
+[ 7624.148558] sysrq: Show Blocked State
+[ 7757.416661] sysrq: Show Blocked State
+[ 7933.991720] sysrq: Show Blocked State
+[ 8073.566702] sysrq: Show Blocked State
+[ 8445.116338] sysrq: Show Blocked State
+[ 8864.472082] sysrq: Show Blocked State
+[ 9166.214272] sysrq: Show Blocked State
+[ 9423.718453] sysrq: Show Blocked State
+[ 9557.501089] sysrq: Show Blocked State
+[ 9796.559754] sysrq: Show Blocked State
+[10168.323769] sysrq: Show Blocked State
+[10344.349948] sysrq: Show Blocked State
+[11149.267148] sysrq: Show Blocked State
+[11519.210974] sysrq: Show Blocked State
+[11712.258539] sysrq: Show Blocked State
+[11841.725355] sysrq: Show Blocked State
+[11994.287319] sysrq: Show Blocked State
+[12340.711287] sysrq: Show Blocked State
+[12468.618022] sysrq: Show Blocked State
+[12699.516248] sysrq: Show Blocked State
+[12927.825765] sysrq: Show Blocked State
+[13317.504257] sysrq: Show Blocked State
+[13523.421489] sysrq: Show Blocked State
+[13981.849762] sysrq: Show Blocked State
+[14226.097528] sysrq: Show Blocked State
+[14353.222545] sysrq: Show Blocked State
+[14519.076564] sysrq: Show Blocked State
+[15530.827417] sysrq: Show Blocked State
+[15662.581662] sysrq: Show Blocked State
+[15933.804358] sysrq: Show Blocked State
+[16142.366532] sysrq: Show Blocked State
+[16264.628344] sysrq: Show Blocked State
+[16388.654331] sysrq: Show Blocked State
+[16531.347947] sysrq: Show Blocked State
+[17351.678397] sysrq: Show Blocked State
+[17606.277194] sysrq: Show Blocked State
+[18071.430306] sysrq: Show Blocked State
+[18240.257336] sysrq: Show Blocked State
+[18729.156692] sysrq: Show Blocked State
+[18948.643187] sysrq: Show Blocked State
+[19239.176020] sysrq: Show Blocked State
+[20006.307231] sysrq: Show Blocked State
+[20248.407748] sysrq: Show Blocked State
+[20559.120459] sysrq: Show Blocked State
+[20738.275198] sysrq: Show Blocked State
+[20872.287357] sysrq: Show Blocked State
+[20996.259679] sysrq: Show Blocked State
+[21626.134234] sysrq: Show Blocked State
+[22091.946668] sysrq: Show Blocked State
+[22323.999323] sysrq: Show Blocked State
+[22829.675261] sysrq: Show Blocked State
+[22993.607199] sysrq: Show Blocked State
+[23761.371645] sysrq: Show Blocked State
+[23963.046788] sysrq: Show Blocked State
+[24316.904165] sysrq: Show Blocked State
+[24916.467026] sysrq: Show Blocked State
+[25049.397387] sysrq: Show Blocked State
+[25459.003664] sysrq: Show Blocked State
+[25595.306821] sysrq: Show Blocked State
+[25738.161713] sysrq: Show Blocked State
+[25913.870284] sysrq: Show Blocked State
+[26149.210492] sysrq: Show Blocked State
+[26458.139472] sysrq: Show Blocked State
+[26776.898367] sysrq: Show Blocked State
+[27093.214157] sysrq: Show Blocked State
+[27212.014537] sysrq: Show Blocked State
+[27579.909674] sysrq: Show Blocked State
+[28039.137755] sysrq: Show Blocked State
+[28897.109753] sysrq: Show Blocked State
+[29225.489687] sysrq: Show Blocked State
+[29471.746427] sysrq: Show Blocked State
+[29618.033314] sysrq: Show Blocked State
+[30595.755437] sysrq: Show Blocked State
+[30996.539032] sysrq: Show Blocked State
+[31196.901908] sysrq: Show Blocked State
+[31319.192394] sysrq: Show Blocked State
+[31499.890188] sysrq: Show Blocked State
+[31629.030419] sysrq: Show Blocked State
+[31888.008682] sysrq: Show Blocked State
+[32236.348056] sysrq: Show Blocked State
+[32472.679518] sysrq: Show Blocked State
+[32653.349703] sysrq: Show Blocked State
+[33071.189772] sysrq: Show Blocked State
+[33542.825166] sysrq: Show Blocked State
+[33692.323995] sysrq: Show Blocked State
+[33839.198186] sysrq: Show Blocked State
+[33996.679863] sysrq: Show Blocked State
+[34422.890336] sysrq: Show Blocked State
+[34689.535703] sysrq: Show Blocked State
+[35023.748185] sysrq: Show Blocked State
+[35486.015774] sysrq: Show Blocked State
+[35654.158926] sysrq: Show Blocked State
+[36170.055727] sysrq: Show Blocked State
+[36327.003146] sysrq: Show Blocked State
+[36579.164318] sysrq: Show Blocked State
+[36787.186559] sysrq: Show Blocked State
+[37307.002205] sysrq: Show Blocked State
+[37459.046431] sysrq: Show Blocked State
+[37754.878582] sysrq: Show Blocked State
+[37990.599708] sysrq: Show Blocked State
+[38181.111183] sysrq: Show Blocked State
+T+2m 02:51:43 m1_total=132 load=2.66 up=38724.23
+[38437.672784] sysrq: Show Blocked State
+[38578.527855] sysrq: Show Blocked State
+[38705.003359] sysrq: Show Blocked State
+T+3m 02:56:43 m1_total=133 load=1.50 up=39024.40
+[38895.610320] sysrq: Show Blocked State
+T+4m 03:01:43 m1_total=134 load=2.35 up=39324.48
+[39031.084556] sysrq: Show Blocked State
+T+5m 03:06:43 m1_total=134 load=1.88 up=39624.59
+03:06:39 sdhci1 0x540=0x011F0004 0x544=0x00000006 | sdhci0 0x540=0x1F1B0001 0x544=0x00000006
+03:07:39 sdhci1 0x540=0x011F0004 0x544=0x00000006 | sdhci0 0x540=0x1F1B0001 0x544=0x00000006
+03:08:39 sdhci1 0x540=0x011F0004 0x544=0x00000006 | sdhci0 0x540=0x1F1B0001 0x544=0x00000006
