@@ -33,8 +33,8 @@ W = 800
 H = 480
 # Cap the number of frames so the boot hold stays short and the .yuv stays
 # small (~576KB/frame). 8s @ 15fps = 120 frames ~= 69MB.
-MAX_FRAMES = 130
-TARGET_FPS = 15
+MAX_FRAMES = 200
+TARGET_FPS = 24
 
 
 def default_paths():
