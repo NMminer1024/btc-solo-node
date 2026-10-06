@@ -85,8 +85,10 @@ raw_file_today() {
 
 cleanup_old_files() {
   [ -d "$DATA_DIR" ] || return 0
-  find "$DATA_DIR" -type f -name 'node-*.jsonl' -mtime +"$RETENTION_DAYS" -delete 2>/dev/null || true
-  find "$DATA_DIR" -type f -name 'user-*.jsonl' -mtime +"$RETENTION_DAYS" -delete 2>/dev/null || true
+  # NOTE: busybox find has no -delete; use -exec rm instead (same as
+  # rockbase-ota.sh / S05config). -delete made prune silently no-op on board.
+  find "$DATA_DIR" -type f -name 'node-*.jsonl' -mtime +"$RETENTION_DAYS" -exec rm -f {} \; 2>/dev/null || true
+  find "$DATA_DIR" -type f -name 'user-*.jsonl' -mtime +"$RETENTION_DAYS" -exec rm -f {} \; 2>/dev/null || true
   cleanup_offline_users
 }
 
