@@ -668,7 +668,7 @@ cmd_apply() {
 
     # Clean up downloaded slot images to free /root/config space.
     # The image has been dd'd to the target partition; keeping stale copies
-    # (~74 MB each) will eventually fill the 975 MB config partition.
+    # (~74 MB each) will eventually fill the 512 MB config partition.
     local cleaned
     for cleaned in "$WORKDIR"/slot-*.img.gz "$WORKDIR"/slot-*.img.gz.sig; do
         [ -f "$cleaned" ] && rm -f "$cleaned" && log "cleaned: $(basename "$cleaned")"

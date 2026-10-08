@@ -5,7 +5,7 @@
 # The config partition holds everything that must survive BOTH an OTA rootfs
 # swap AND a blockdata re-seed (WiFi profile, bitcoin.conf, ckpool.conf,
 # ckpool runtime data, history curves, future web assets). It is a dedicated
-# partition (1G), separate from blockdata, mounted at /root/config well
+# partition (512M), separate from blockdata, mounted at /root/config well
 # before S38wifi / S61bitcoind / S62ckpool need it, WITHOUT waiting for
 # /resize_done.
 #

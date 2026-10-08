@@ -128,7 +128,7 @@ gen_blockdata_ext4()
 	chmod a+rw "${image}"
 }
 
-# User-config partition (A1 v2): empty 1G ext4, LABEL=config.
+# User-config partition (A1 v2): empty 512M ext4, LABEL=config.
 # Contents are seeded on first boot by S05config from
 # /etc/rockbase-factory-defaults/ (single seeding path, no duplication here).
 gen_rockcfg_ext4()
