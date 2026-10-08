@@ -18,10 +18,12 @@ freeze 优化基线与采集命令见 repo memory `freeze-baseline.md`。
 | `e0:ca:fa:cd:d6:b3` | （原 192.168.124.9，09-24 14:51 不在线） | 1G | mmc0=SDIO WiFi, mmc1=SD card (SK32G) |
 | `e0:60:19:30:32:bc` | 192.168.124.15 | 1G | mmc0=SDIO WiFi, mmc1=SD card (SD64G)；hung_task_panic 自愈重启 |
 | `e0:a2:01:6a:99:35` | 192.168.124.28 | 1G | mmc0=SDIO WiFi, mmc1=SD card (SD64G)；硬卡死 held_ms 峰值 704s |
-| `e0:eb:4e:2c:2d:70` | 192.168.124.34 | 1G | mmc0=SDIO WiFi, mmc1=SD card |
-| `e0:d9:1b:92:d8:56` | 192.168.124.38 | 1G | mmc0=SDIO WiFi, mmc1=SD card |
+| `e0:eb:4e:2c:2d:70` | 192.168.124.10 | 1G | mmc0=SDIO WiFi, mmc1=SD card |
+| `e0:d9:1b:92:d8:56` | 192.168.124.31 | 1G | mmc0=SDIO WiFi, mmc1=SD card |
+| `e0:ac:9c:94:25:a5` | 192.168.124.30 | 1G | mmc0=SDIO WiFi, mmc1=SD card；**旧镜像 v0.0.05**，死因=WiFi 8189fs `sd_recv` WARN + `panic_on_warn=1` |
 
-> **2026-09-24 起局域网只有以上 6 台真机**（已全部 1G，不再测试 2G 板）。
+> **2026-09-24 起局域网 6 台真机，2026-10-08 新增第 7 台 `e0:ac:9c:94:25:a5`**（已全部 1G，不再测试 2G 板）。
+> 新板 `e0:ac:9c:94:25:a5` 跑旧版 v0.0.05 镜像，崩溃根因是 WiFi 驱动而非 SD 卡，与其他 6 台不同。
 > **124.9 是唯一接入真实矿机的板子**，其余 5 台空闲无矿机负载。
 > .1/.5/.12 非 Rockbase（.12 是 RDK X5 seed 源）。
 > 历史文档中出现的 124.23(2G)/124.28/124.30/124.35 等 IP 为旧板/旧 DHCP 地址，已不在网。
