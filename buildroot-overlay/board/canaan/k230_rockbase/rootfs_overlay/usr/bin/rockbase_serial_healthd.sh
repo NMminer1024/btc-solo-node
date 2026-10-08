@@ -51,6 +51,20 @@ num_or_zero() {
     esac
 }
 
+# 周期性截断 ckpool.log (板子无 cron 任务, 不依赖重启).
+# 与 S62ckpool 的 trim_log 同阈值; 用 `: >` 原地截断, 不破坏 ckpool 持有的 fd.
+# 正确性说明: ckpool 以非 O_APPEND 方式持有 fd, 截断后其偏移量不重置, 下次写入
+# 会在旧偏移处落盘, 中间形成 sparse hole. ext4 的 hole 不分配磁盘块, 故 df/du
+# 只统计真实数据块 -> 实际磁盘占用被限制在"两次截断间新写入量"(~0.1MB/h), 分区不会涨满.
+trim_ckpool_log() {
+    [ -f "${CKPOOL_LOG_FILE}" ] || return 0
+    sz="$(wc -c <"${CKPOOL_LOG_FILE}" 2>/dev/null)"
+    sz="$(num_or_zero "${sz}")"
+    [ "${sz}" -gt "${CKPOOL_LOG_MAX_BYTES}" ] || return 0
+    : >"${CKPOOL_LOG_FILE}" 2>/dev/null || true
+    log_diag "trimmed ${CKPOOL_LOG_FILE} ${sz}B -> 0 (>${CKPOOL_LOG_MAX_BYTES}B)"
+}
+
 CONSOLE_SUMMARY_INTERVAL="$(num_or_zero "${CONSOLE_SUMMARY_INTERVAL}")"
 [ "${CONSOLE_SUMMARY_INTERVAL}" -gt 0 ] || CONSOLE_SUMMARY_INTERVAL=10
 DIAG_COOLDOWN_SEC="$(num_or_zero "${DIAG_COOLDOWN_SEC}")"
@@ -65,6 +79,15 @@ PANIC_COOLDOWN_SEC="$(num_or_zero "${PANIC_COOLDOWN_SEC}")"
 [ "${PANIC_COOLDOWN_SEC}" -gt 0 ] || PANIC_COOLDOWN_SEC=600
 PANIC_STARTUP_GRACE="$(num_or_zero "${PANIC_STARTUP_GRACE}")"
 [ "${PANIC_STARTUP_GRACE}" -gt 0 ] || PANIC_STARTUP_GRACE=180
+# 周期性日志截断: ckpool 无内置轮转, 仅在启动时 trim; 板子长期不重启会无限涨.
+# healthd 常驻, 每小时检查一次, 超阈值截断, 不依赖重启.
+CKPOOL_LOG_FILE=/root/config/ckpool/logs/ckpool.log
+CKPOOL_LOG_MAX_BYTES=${ROCKBASE_CKPOOL_LOG_MAX_BYTES:-52428800}  # 50 MiB, 与 S62ckpool 一致
+LOG_TRIM_INTERVAL_SEC=${ROCKBASE_LOG_TRIM_INTERVAL_SEC:-3600}
+CKPOOL_LOG_MAX_BYTES="$(num_or_zero "${CKPOOL_LOG_MAX_BYTES}")"
+[ "${CKPOOL_LOG_MAX_BYTES}" -gt 0 ] || CKPOOL_LOG_MAX_BYTES=52428800
+LOG_TRIM_INTERVAL_SEC="$(num_or_zero "${LOG_TRIM_INTERVAL_SEC}")"
+[ "${LOG_TRIM_INTERVAL_SEC}" -gt 0 ] || LOG_TRIM_INTERVAL_SEC=3600
 
 read_disk() {
     awk -v dev="$1" '$3 == dev { print $6, $10, $13, $14, $12 }' /proc/diskstats 2>/dev/null
@@ -464,6 +487,7 @@ log_console "start interval=${INTERVAL}s summary_interval=${CONSOLE_SUMMARY_INTE
 
 summary_last=0
 PANIC_STUCK_SINCE=""
+log_trim_last=0
 
 while :; do
     sleep "${INTERVAL}"
@@ -497,6 +521,11 @@ while :; do
     load="${la1} ${la2} ${la3}"
     read -r up_raw _ < /proc/uptime
     up="${up_raw%.*}"
+    # 周期性日志截断 (不依赖重启): 每 LOG_TRIM_INTERVAL_SEC 检查一次 ckpool.log
+    if [ $((up - log_trim_last)) -ge "${LOG_TRIM_INTERVAL_SEC}" ]; then
+        trim_ckpool_log
+        log_trim_last="${up}"
+    fi
     task_stats="$(tasks_line)"
     d_count="$(num_or_zero "$(tasks_d_count "${task_stats}")")"
 
