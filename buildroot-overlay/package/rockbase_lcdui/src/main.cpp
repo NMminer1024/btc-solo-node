@@ -83,6 +83,11 @@ constexpr const char* kBootVideoDir = "/usr/share/rockbase-lcdui/boot-video";
 constexpr uint32_t kBootVideoMaxMs = 10000;  // safety cap so boot never stalls
 constexpr uint32_t kBootVideoFadeMs = 600;   // video -> black fade-out before dashboard
 constexpr uint32_t kBootVideoFadeInMs = 500;  // content fade-in from black at boot
+// Boot-time network connect timeout: if the device is still offline (no IP
+// or no gateway) this long after the first valid status read, pop the WiFi
+// config overlay so the user can pick a network. Wired (USB Ethernet)
+// devices are exempt. Fires at most once per boot.
+constexpr uint32_t kNetConnectTimeoutMs = 30000;
 volatile sig_atomic_t g_stop = 0;
 display* g_display = nullptr;
 display_plane* g_plane = nullptr;
@@ -275,6 +280,10 @@ uint32_t g_fps_window_start_ms = 0;
 uint32_t g_fps_frame_count = 0;
 bool g_clock_refresh_pending = false;
 bool g_status_refresh_pending = false;
+// Connect-timeout state (see kNetConnectTimeoutMs).
+bool g_net_online_ever = false;      // device came online (or is wired) at least once this boot
+uint32_t g_net_offline_since_ms = 0; // tick when offline clock started (0 = not running)
+bool g_net_timeout_fired = false;    // WiFi overlay already popped (or user opened it)
 WifiConfigOverlay g_wifi_config_overlay;
 bool g_wifi_config_overlay_open_pending = false;
 bool g_wifi_config_overlay_wait_release = false;
@@ -335,6 +344,9 @@ struct ConfigHotspot {
 
 void open_wifi_config_overlay() {
     g_wifi_config_overlay_open_pending = true;
+    // User opened it manually: treat as handled so the boot-time
+    // connect-timeout prompt does not fire on top of it.
+    g_net_timeout_fired = true;
 }
 
 void open_timezone_overlay() {
@@ -2632,6 +2644,26 @@ void refresh_status_cb(lv_timer_t*) {
     if (!build_ui_model(model)) {
         mark_dirty_pages(apply_status_unavailable_model());
         return;
+    }
+
+    // Boot-time connect timeout: the clock starts on the first valid status
+    // read (statusd is up, so the WiFi connect has actually begun). If still
+    // offline after kNetConnectTimeoutMs, pop the WiFi overlay once. Wired
+    // devices and devices that were ever online never trigger it.
+    const bool net_wired = model.network.iface_icon != kSymbolWifi;
+    const bool net_online = model.network.device_up && model.network.gateway_up;
+    if (net_wired || net_online) {
+        g_net_online_ever = true;
+        g_net_offline_since_ms = 0;
+    }
+    else if (!g_net_online_ever && !g_net_timeout_fired) {
+        if (g_net_offline_since_ms == 0) {
+            g_net_offline_since_ms = tick_ms();
+        }
+        else if (tick_ms() - g_net_offline_since_ms >= kNetConnectTimeoutMs) {
+            g_net_timeout_fired = true;
+            open_wifi_config_overlay();
+        }
     }
 
     mark_dirty_pages(apply_ui_model(model));
