@@ -225,7 +225,7 @@ constexpr uint32_t page_dirty_bit(uint32_t page) {
 }
 
 constexpr TileSpec kTiles[kTileCount] = {
-    {"Bitcoind", "Local Bitcoin solo node overview", 0x0a141b, 0xf0b44c, true},
+    {"Bitcoin Core", "Local Bitcoin solo node overview", 0x0a141b, 0xf0b44c, true},
     {"Stratum", "", 0x101418, 0x51c7a3, true},
     {"System", "Core vitals - CPU / Memory / Thermal", 0x13151e, 0x8fb7ff, true},
     {"Network", "Active interface and upstream path", 0x101719, 0xff8c64, true},
