@@ -320,7 +320,9 @@ critical_d_process() {
         [ "${state}" = "D" ] || continue
         comm="$(cat "/proc/${pid}/comm" 2>/dev/null)"
         case "${comm}" in
-            *kblockd*|jbd2/*|flush-*|mmcqd*|RTW_*|*sdhci*|*8189*)
+            # WiFi 线程（RTW_*/8189*）挂死由 rockbase_wifi.sh 看门狗自恢复，
+            # 不在此触发整机 panic；仅保留 SD 卡 I/O 线程。
+            *kblockd*|jbd2/*|flush-*|mmcqd*|*sdhci*)
                 return 0
                 ;;
         esac

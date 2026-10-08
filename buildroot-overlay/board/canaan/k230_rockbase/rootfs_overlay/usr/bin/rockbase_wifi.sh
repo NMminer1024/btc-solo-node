@@ -17,6 +17,7 @@ WIFI_WATCHDOG_INTERVAL=${WIFI_WATCHDOG_INTERVAL:-20}
 WIFI_WATCHDOG_FAIL_THRESHOLD=${WIFI_WATCHDOG_FAIL_THRESHOLD:-3}
 WIFI_WATCHDOG_PIDFILE=${WIFI_WATCHDOG_PIDFILE:-/var/run/rockbase-wifi-watchdog.pid}
 WIFI_APPLY_LOCK=${WIFI_APPLY_LOCK:-/tmp/rockbase-wifi-apply.lock}
+WIFI_RTW_D_FILE=${WIFI_RTW_D_FILE:-/tmp/rockbase-wifi-rtw-d}
 
 wifi_shell_quote() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
@@ -481,20 +482,66 @@ wifi_start_service() {
   return 2
 }
 
+# 单次 awk 遍历检测是否有 RTW 线程卡 D（驱动挂死信号，避免 per-pid fork）。
+# 结果写入 $WIFI_RTW_D_FILE（1=有 RTW D，0=无）。检测失败默认 0（不误触发重载）。
+wifi_rtw_d_state() {
+  printf '0' >"$WIFI_RTW_D_FILE" 2>/dev/null || true
+  awk '
+    FNR == 1 {
+      pid = FILENAME; sub("/proc/", "", pid); sub("/stat", "", pid)
+      rest = $0; sub(/^[^)]*\) /, "", rest)
+      state = substr(rest, 1, 1)
+      if (state != "D") next
+      f = "/proc/" pid "/comm"
+      if ((getline cline < f) > 0) { close(f); if (cline ~ /^RTW_/) { found = 1; exit } }
+    }
+    END { print (found ? 1 : 0) }' /proc/[0-9]*/stat 2>/dev/null >"$WIFI_RTW_D_FILE" 2>/dev/null || true
+}
+
 wifi_watchdog_health() {
   [ -e "/sys/class/net/${WLAN_DEV}" ] || return 1
+  # 驱动挂死检测：任一 RTW 线程卡 D 即视为不健康（覆盖 wpa 卡住盲区）
+  wifi_rtw_d_state
+  [ "$(cat "$WIFI_RTW_D_FILE" 2>/dev/null)" = "1" ] && return 1
   wifi_current_status
   [ "$WIFI_CONNECTED_STATE" = "COMPLETED" ] && [ "$WIFI_CONNECTED_IP" != "-" ]
 }
 
+wifi_watchdog_rmmod_sdio() {
+  # 后台卸载 8189fs，防 RTW 线程 D 导致 rmmod 阻塞恢复脚本自身。
+  # 轮询 lsmod 确认卸载完成，最多 20s；超时清理子进程并返回 1（交 WDT/healthd 兜底）。
+  ( rmmod 8189fs 2>/dev/null ) &
+  rmmod_pid=$!
+  i=0
+  while [ "$i" -lt 20 ]; do
+    lsmod 2>/dev/null | grep -q '^8189fs' || return 0
+    sleep 1
+    i=$((i + 1))
+  done
+  kill "$rmmod_pid" 2>/dev/null || true
+  return 1
+}
+
 wifi_watchdog_reload() {
-  wifi_console_log "watchdog: link down (state=${WIFI_CONNECTED_STATE} ssid=\"${WIFI_CONNECTED_SSID}\" ip=${WIFI_CONNECTED_IP}), reloading driver"
+  wifi_load_netsel
+  wifi_console_log "watchdog: link down (mode=${NET_MODE} state=${WIFI_CONNECTED_STATE} ssid=\"${WIFI_CONNECTED_SSID}\" ip=${WIFI_CONNECTED_IP}), reloading driver"
   wifi_stop_service
-  rmmod rtw88_8821cu 2>/dev/null || true
-  rmmod rtw88_8821c 2>/dev/null || true
-  rmmod rtw88_usb 2>/dev/null || true
-  rmmod rtw88_core 2>/dev/null || true
-  sleep 2
+  if [ "$NET_MODE" = "sdio_wifi" ]; then
+    # SDIO 8189fs 驱动挂死：卸载重载。后台 rmmod 防 RTW 线程 D 阻塞。
+    if ! wifi_watchdog_rmmod_sdio; then
+      wifi_console_log "watchdog: sdio rmmod timed out, skip reload (WDT/healthd fallback)"
+      return 1
+    fi
+    sleep 3
+    modprobe 8189fs 2>/dev/null || true
+    sleep 2
+  else
+    rmmod rtw88_8821cu 2>/dev/null || true
+    rmmod rtw88_8821c 2>/dev/null || true
+    rmmod rtw88_usb 2>/dev/null || true
+    rmmod rtw88_core 2>/dev/null || true
+    sleep 2
+  fi
   wifi_start_service
 }
 

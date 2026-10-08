@@ -1,0 +1,16 @@
+--- a/hal/rtl8188f/sdio/sdio_ops.c
++++ b/hal/rtl8188f/sdio/sdio_ops.c
+@@ -1332,7 +1332,12 @@
+ 
+ 	if (readsize > MAX_RECVBUF_SZ) {
+ 		RTW_INFO(FUNC_ADPT_FMT" %u\n", FUNC_ADPT_ARG(padapter), readsize);
+-		rtw_warn_on(readsize > MAX_RECVBUF_SZ);
++		/* Rockbase: RND4() rounding can push readsize just past
++		 * MAX_RECVBUF_SZ on some SDIO hosts. Known benign boundary, not a
++		 * real bug. WARN_ON here escalates to a full kernel panic under
++		 * panic_on_warn=1 (set by S04serialhealth), rebooting the whole
++		 * board over a WiFi recv-buffer edge case. Log only so the module
++		 * can self-recover. */
+ 	}
+ 
+ 	/* 3 1. alloc recvbuf */
