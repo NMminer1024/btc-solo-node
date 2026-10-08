@@ -2,6 +2,8 @@
 
 > 写给接手 OTA 开发的 agent/人。读完这份 + `docs/design/rockbase-ota-plan.md` 即可无缝继续。
 > 更新日期：2026-09-03　当前分支：`dev`（`ota` 分支已 ff 合并进 dev，见第 2 节）
+>
+> **⚠️ 2026-10-08 分区布局变更（v0.1.05）**：slot_a/slot_b 由 2G 缩为 **512M**，config 由 1G 缩为 **512M**。本文中的分区大小已同步为 512M；带日期戳的历史验证记录（如 2026-08-21 的 `config(1G)`、`2G/2G/1G/剩余`）反映的是当时镜像状态，现按当前布局标注。详见 repo memory `partition-layout-512m.md`。
 
 ---
 
@@ -75,7 +77,7 @@ ota 分支（已全部 ff 合并进 dev @ 131a4fca，后续直接在 dev 上开�
 |---|---|---|
 | **A2** | libubootenv（fw_printenv/fw_setenv）上板 + 修 S00 fw_env 时机 | ✅ **完成并已验证**（commit 56f929dd） |
 | **A3** | OTA agent + 打包脚本 + 确认服务 + 签名工具链 | ✅ **完成并已验证**（commit 0ef9fcb8 + e954f64c，2026-08-21 设备 dry-run 通过） |
-| **A1** | 用户配置独立分区（p3=config 1G `LABEL=config` / p4=blockdata） | ✅ **完成并已验证**（2026-08-21，124.30 重分区 + 热部署验证通过） |
+| **A1** | 用户配置独立分区（p3=config 512M `LABEL=config` / p4=blockdata） | ✅ **完成并已验证**（2026-08-21，124.30 重分区 + 热部署验证通过） |
 
 ### 阶段 B：uboot A/B 逻辑（串口命令行手测，不烧录）✅ 已完成（2026-08-24，124.30 串口）
 
@@ -174,8 +176,8 @@ kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=..
 | `rootfs_overlay/etc/rockbase-factory-defaults/` | A1：出厂默认 `bitcoin.conf`/`ckpool.conf`（原 rootfs 实体文件移入） | ✅ 板端 md5 与原文件一致 |
 | 消费方路径直改 `/root/config/…`（无符号链接） | `S61bitcoind`/`S62ckpool`/`bitcoind start|stop.sh`/`ckpool/start.sh`/`rockbase_statusd.sh`/`rockbase_bitcoind_ready.sh`/`rockbase_wifi.sh`(`WIFI_CONFIG_FILE`) | ✅ 板端验证（重启后 bitcoind 以新路径启动） |
 | `S59blockdata` / `S00resizemmc` | A1 v2：S59 按 LABEL=blockdata 挂载（回退 p4）；S00 扩容对象 p3→p4；S00 `resize_fs()` 脏 FS 先 e2fsck 再 resize（E2 修复） | ✅ E1/E3 验证（扩容、脏挂载恢复均正常） |
-| `genimage.cfg` + `post-image.sh` | A1 v2：新增 p3 config 分区（空 1G `config.ext4`，`gen_rockcfg_ext4`） | ✅ 阶段 D 镜像已验证 |
-| `genimage.cfg`（阶段 D） | 删 80M boot 分区；p1=slot_a / p2=slot_b（同一 `rootfs.ext4` 写两遍）；p3=config(1G)、p4=blockdata | ✅ 镜像分区表 fdisk 验证（30M 起，2G/2G/1G/剩余） |
+| `genimage.cfg` + `post-image.sh` | A1 v2：新增 p3 config 分区（空 512M `config.ext4`，`gen_rockcfg_ext4`） | ✅ 阶段 D 镜像已验证 |
+| `genimage.cfg`（阶段 D） | 删 80M boot 分区；p1=slot_a / p2=slot_b（同一 `rootfs.ext4` 写两遍）；p3=config(512M)、p4=blockdata | ✅ 镜像分区表 fdisk 验证（30M 起，512M/512M/512M/剩余） |
 | `post-build.sh`（阶段 D） | `gen_target_boot`：`Image`/`k.dtb`(实文件)/`fw_jump_add_uboot_head.bin` 装进 `${TARGET_DIR}/boot/` | ✅ rootfs.ext4 debugfs 验证 |
 | `default.env`（阶段 D） | A/B 版：`ota_part=1`/`bootlimit=3`/`upgrade_available=0`/新 `blinux`（bootargs 内联，uboot 单层展开）/`altbootcmd` | ✅ E1~E4 全链路验证 |
 | uboot `k230_rockbase_defconfig` | `CONFIG_BOOTCOUNT_LIMIT=y` + `CONFIG_BOOTCOUNT_ENV=y` | ✅ E4 验证：bootcount 逐次 +1、超限触发 altbootcmd 回滚 |
@@ -197,7 +199,7 @@ kernel cmdline 导致 VFS panic；`blinux` 必须内联 `setenv bootargs root=..
 - **板端文件与源码一致性（2026-08-21 已核对）**：`S00resizemmc`/pub key/netsel 全套 md5 与 ota 分支一致；
   `rockbase-ota.sh`/`S98otaconfirm` 曾落后源码（缺 e954f64c 修复），已重新 scp 同步。
 - **rootfs 为 ext4 rw**：热部署文件重启后保留（只有重烧镜像才会被源码版本覆盖）。
-- **A1 v2（2026-08-21，124.30）**：板端已重分区为 `p1=boot / p2=rootfs / p3=config(1G,LABEL=config) / p4=blockdata(55.6G,LABEL=blockdata)`；
+- **A1 v2（2026-08-21，124.30）**：板端已重分区为 `p1=boot / p2=rootfs / p3=config(512M,LABEL=config) / p4=blockdata(55.6G,LABEL=blockdata)`；
   重启后 S05config/S59 按 LABEL 正常挂载、出厂默认播种正确（md5 一致）、bitcoind 以 `-conf=/root/config/bitcoin.conf` 启动、
   WiFi 保存直写 p3。原 p3 区块数据已按既定决策销毁（重灌 seed 或网络重同步；bitcoind 已在 p4 重新同步）。
   `S00resizemmc` 的 p4 扩容逻辑只改了源码，本板 `/resize_done` 已存在不会触发，待阶段 D 新卡验证。

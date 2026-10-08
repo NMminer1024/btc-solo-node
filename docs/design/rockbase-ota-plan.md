@@ -1,6 +1,8 @@
 # Rockbase OTA 升级方案（保用户参数 · A/B 双槽 · 自动回滚）
 
 > **⚠️ 2026-09 profile 合并说明**：1G/2G 已合并为单一 `k230_rockbase_defconfig`（内存由 U-Boot 运行时探测）。本文正文中的 defconfig 引用为当时历史记录，现已过时。详见 `AGENTS.md`「Profile 合并记录」。
+>
+> **⚠️ 2026-10-08 分区布局变更（v0.1.05）**：slot_a/slot_b 由 2G 缩为 **512M**，config 由 1G 缩为 **512M**，为 blockdata 腾出 3.5G（防 bitcoind leveldb compaction 撑满）。本文已同步为 512M。现有板子 OTA 升级安全（小镜像 dd 进旧大分区）但 blockdata 不变；仅全新烧录享受新布局。详见 repo memory `partition-layout-512m.md`。
 
 - 版本：v1.0（设计定稿，待实施 P1）
 - 日期：2026-08-21
@@ -24,7 +26,7 @@
 
 有利条件：
 
-- rootfs 实际占用仅 ~71MB（2G 镜像 96% 空闲），A/B 双 2G 槽在 SD 卡上轻松容纳。
+- rootfs 实际占用 ~343M（512M 镜像约 34% 空闲），A/B 双 512M 槽在 SD 卡上轻松容纳。
 - uboot `board_fdt_chosen_bootargs()`（k230_img.c）**优先读 env `bootargs`**，
   因此 A/B 切换 `root=` 无需改任何 C 代码。
 - blockdata 仍由现有脚本扩容/挂载（改为按 LABEL 识别，分区号 p3→p4 见 2.3）。
@@ -42,8 +44,8 @@
 | uboot | 2M | raw | `fn_ug_u-boot.bin` |
 | env（冗余拷贝） | 0x380000 | 128K | 静态写入，uboot 不读 |
 | p1 boot | 30M | 80M ext4 | `Image` / `k.dtb` / `fw_jump_add_uboot_head.bin` |
-| p2 rootfs | 128M | 2G ext4 | 完整系统（实际仅用 ~170MB） |
-| p3 config | 紧随 p2 | 1G ext4 `LABEL=config` | A1 v2 新增：用户配置分区，挂载 `/root/config` |
+| p2 rootfs | 128M | 512M ext4 | 完整系统（实际仅用 ~170MB） |
+| p3 config | 紧随 p2 | 512M ext4 `LABEL=config` | A1 v2 新增：用户配置分区，挂载 `/root/config` |
 | p4 blockdata | 紧随 p3 | 构建时 256M/20G | 首启被 S00resizemmc 扩到卡尾，挂载 `/root/block` = bitcoind datadir |
 
 > 注：A1 v2 之前的老镜像为「p1 boot / p2 rootfs / p3 blockdata（扩到卡尾）」，
@@ -79,9 +81,9 @@ SPL → uboot → run blinux
 
 ```
 raw 区不变：SPL / env@0x1e0000 / uboot / env@0x380000
-p1 = slot_a  2G ext4   完整系统，内含 /boot/{Image, k.dtb, fw_jump_add_uboot_head.bin}
-p2 = slot_b  2G ext4   出厂时为 slot_a 的拷贝
-p3 = config  1G ext4  用户配置分区（LABEL=config，挂载 /root/config）
+p1 = slot_a  512M ext4  完整系统，内含 /boot/{Image, k.dtb, fw_jump_add_uboot_head.bin}
+p2 = slot_b  512M ext4  出厂时为 slot_a 的拷贝
+p3 = config  512M ext4  用户配置分区（LABEL=config，挂载 /root/config）
 p4 = blockdata          剩余全部（LABEL=blockdata，挂载 /root/block）
 ```
 
@@ -89,14 +91,15 @@ p4 = blockdata          剩余全部（LABEL=blockdata，挂载 /root/block）
 
 - 内核/dtb/opensbi 收进各槽 `/boot/`，每槽自包含、版本自洽；uboot 只是按槽号
   ext4load（机制与今天读 boot.ext4 完全相同）。取消 80M 共享 boot 分区。
-- **根分区定为 2G**（`EXT2_SIZE` 维持 2G 不变）。选型理由见 2.6：由于 gzip 会把
-  空闲块压掉，2G 与更小 FS 的 OTA 下载体积几乎相同，缩 FS 只能省 dd 刷写时间；
-  保留 2G 换来充足的未来升级余量，且**改动最小、风险最低**（与当前 rootfs 等大，
-  无需重调构建参数与挂载/扩容逻辑）。
+- **根分区定为 512M**（`BR2_TARGET_ROOTFS_EXT2_SIZE=512M`，2026-10-08 起，原为 2G）。
+  实际内容 ~343M，留 ~170M 余量。缩小 slot/config 是为 blockdata 腾出空间
+  （全新烧录时 blockdata 扩到卡尾更大，防 bitcoind leveldb compaction 撑满）。
+  现有板子 OTA 升级安全（小镜像 dd 进旧大分区），但 blockdata 不变；仅全新烧录受益。
 - blockdata 为 p4（config 占据 p3）：S00resizemmc 的扩容对象改为 p4，
   S59blockdata 挂载改为按 LABEL 识别；OTA 永远只写 p1/p2，
   p3/p4 上的用户配置与区块数据物理上不可能被碰。
-- 卡容量要求：A/B 双 2G 槽 + config(1G) + blockdata，建议 **≥ 32G SD 卡**。
+- 卡容量要求：A/B 双 512M 槽 + config(512M) + blockdata，建议 **≥ 32G SD 卡**
+  （blockdata 需容纳 chainstate ~11-20G，卡容量主要由 blockdata 决定）。
 
 ### 2.2 启动与回滚（uboot 层：纯 env 脚本 + 1 个 defconfig 开关）
 
@@ -122,10 +125,11 @@ altbootcmd=if test "${ota_part}" = 1; then ota_part=2; else ota_part=1; fi; \
 
 ### 2.3 用户配置独立分区（"保参数"的核心，A1 v2 定稿）
 
-- **独立配置分区 p3**（1G，ext4，`LABEL=config`，挂载 `/root/config`），
+- **独立配置分区 p3**（512M，ext4，`LABEL=config`，挂载 `/root/config`），
   与 blockdata（p4，`LABEL=blockdata`）并列。OTA 刷 rootfs 槽不碰它，
   **重灌区块 seed（mkfs blockdata）也不碰它**——用户参数与区块数据彻底解耦。
-  1G 的余量为 ckpool 运行时数据、历史曲线、自定义图片/动画等预留空间。
+  512M 的余量为 ckpool 运行时数据、历史曲线、自定义图片/动画等预留空间
+  （ckpool.log 有 50MiB 周期截断，不会撑满）。
 - 集中存放：`rockbase-wifi.conf`、`bitcoin.conf`、`ckpool.conf`、
   `ckpool/logs/`（矿工身份/池状态/日志）、`rockbase-history/`（历史曲线）、
   `ota/`（OTA 下载工作区），以及未来 web 新增的所有用户设置/自定义资产。
@@ -140,8 +144,8 @@ altbootcmd=if test "${ota_part}" = 1; then ota_part=2; else ota_part=1; fi; \
 - 分区布局（当前与阶段 D 一致）：
 
   ```
-  现网过渡:  p1=boot  p2=rootfs    p3=config(1G)  p4=blockdata(扩到卡尾)
-  阶段D:     p1=rootfsA(2G) p2=rootfsB(2G)  p3=config(1G)  p4=blockdata(扩到卡尾)
+  现网过渡:  p1=boot  p2=rootfs    p3=config(512M)  p4=blockdata(扩到卡尾)
+  阶段D:     p1=rootfsA(512M) p2=rootfsB(512M)  p3=config(512M)  p4=blockdata(扩到卡尾)
   ```
 
   S00resizemmc 的扩容对象相应从 p3 改为 p4。
@@ -155,7 +159,7 @@ altbootcmd=if test "${ota_part}" = 1; then ota_part=2; else ota_part=1; fi; \
 
 ```
 manifest.json         # 见 2.5.3，版本/URL/sha256/大小/签名的索引
-slot-<ver>.img.gz     # 2G 槽镜像 gzip（实测约 43MB，见 2.6）
+slot-<ver>.img.gz     # 512M 槽镜像 gzip（实测约 43MB，见 2.6）
 slot-<ver>.img.gz.sig # 对 slot img.gz 的 RSA/SHA256 签名（openssl dgst）
 ```
 
@@ -355,12 +359,12 @@ P1 采用「整槽 ext2 + gzip」，43MB 已足够快，不折腾裁剪与增量
 
 | # | 文件 | 改动 |
 |---|---|---|
-| 1 | buildroot-overlay/board/canaan/k230_rockbase/genimage.cfg | 删 boot 分区；p1/p2 两个 2G 槽；p3 config（1G `config.ext4`）；blockdata 跟随为 p4 |
-| 2 | buildroot-overlay/configs/k230_rockbase_{1g,2g}_defconfig | EXT2_SIZE 维持 2G 不变；新增 `BR2_PACKAGE_LIBUBOOTENV`、`BR2_PACKAGE_LIBCURL(+_CURL/_OPENSSL)`、`BR2_PACKAGE_CA_CERTIFICATES`、`BR2_PACKAGE_OPENSSL_BIN`（dgst 验签） |
+| 1 | buildroot-overlay/board/canaan/k230_rockbase/genimage.cfg | 删 boot 分区；p1/p2 两个 512M 槽；p3 config（512M `config.ext4`）；blockdata 跟随为 p4 |
+| 2 | buildroot-overlay/configs/k230_rockbase_defconfig | EXT2_SIZE=512M（2026-10-08 起，原 2G）；新增 `BR2_PACKAGE_LIBUBOOTENV`、`BR2_PACKAGE_LIBCURL(+_CURL/_OPENSSL)`、`BR2_PACKAGE_CA_CERTIFICATES`、`BR2_PACKAGE_OPENSSL_BIN`（dgst 验签） |
 | 3 | buildroot-overlay/board/canaan/k230_rockbase/default.env | A/B bootcmd / altbootcmd / ota_part / bootlimit |
 | 4 | buildroot-overlay/boot/uboot/u-boot-2022.10-overlay/configs/k230_rockbase_defconfig | `CONFIG_BOOTCOUNT_LIMIT=y` |
 | 5 | post-build.sh | 生成 `fw_jump_add_uboot_head.bin` 并把 Image/k.dtb 装入 `${TARGET_DIR}/boot/`；安装 factory-defaults |
-| 6 | post-image.sh | slot_b 由 slot_a 复制；导出逻辑保留；新增 OTA 包产物输出；新增 `gen_rockcfg_ext4`（空 1G，`LABEL=config`） |
+| 6 | post-image.sh | slot_b 由 slot_a 复制；导出逻辑保留；新增 OTA 包产物输出；新增 `gen_rockcfg_ext4`（空 512M，`LABEL=config`） |
 | 7 | rootfs_overlay/etc/init.d/S00resizemmc | `fw_env.config` 生成移到 done 检查之前（当前在 `/resize_done` 后直接退出，dd 出来的新槽会缺此文件导致 `fw_setenv` 失败）；blockdata 扩容对象 p3→p4 |
 | 8 | rootfs_overlay/etc/init.d/S59blockdata + 新增 S05config | S59 改按 LABEL=blockdata 挂载（回退 p4）；新 `S05config` 早期挂载 LABEL=config 到 `/root/config` 并播种出厂默认 |
 | 9 | overlay 新增 | `/usr/sbin/rockbase-ota.sh`、`/etc/init.d/S98otaconfirm`、`/root/web/api/ota.cgi`、`/etc/rockbase-factory-defaults/`、`/etc/rockbase-ota-pub.pem`（验签公钥）；消费方路径直改 `/root/config/…`（不用符号链接） |
@@ -434,7 +438,7 @@ P1 采用「整槽 ext2 + gzip」，43MB 已足够快，不折腾裁剪与增量
   消费方路径直改 `/root/config/…`（无符号链接）、首启播种逻辑、
   `/etc/rockbase-factory-defaults/`、`S59blockdata` 改 LABEL 挂载、`S00resizemmc` 扩容对象 p3→p4。
 - 热部署验证（124.30，USB 有线）：
-  1. 板端重分区：p3=config(1G) / p4=blockdata，mkfs 打 LABEL。
+  1. 板端重分区：p3=config(512M) / p4=blockdata，mkfs 打 LABEL。
   2. 改 WiFi（web）→ 确认落到 `/root/config/rockbase-wifi.conf`（p3）。
   3. 改 ckpool 配置 → 重启服务仍生效。
   4. 重启 → S05config/S59 按 LABEL 挂载、配置播种、bitcoind 以 `-conf=/root/config/bitcoin.conf` 启动。
@@ -496,7 +500,7 @@ manifest 内 `slot.url`/`sig_url` 直连 GitHub 下载，验签+sha256+dd+切槽
 
 > 前面全部验证通过后，才动分区。这是唯一不可逆步骤。
 
-1. 改 `genimage.cfg`（删 boot 分区、p1/p2 双 2G 槽、p3 config、p4 blockdata——
+1. 改 `genimage.cfg`（删 boot 分区、p1/p2 双 512M 槽、p3 config、p4 blockdata——
    config 分区已在 A1 v2 先行加入）、`post-build.sh`（Image/dtb/fw_jump 装进 `/boot/`）、
    `post-image.sh`（slot_b 复制 slot_a）。
 2. 构建新镜像 → 烧录到 124.30（第一台吃新布局的板子，USB 有线）。
