@@ -1,0 +1,51 @@
+From: RockBase SDK <dev@rockbase.local>
+Subject: [PATCH] dts: canaan: st7701-480x800: align DSI timing with RTOS (27MHz)
+
+RockBase 480x800 ST7701 panel: lower the DSI pixel clock from 39.6MHz to
+27MHz (and match RTOS mipi_st7701_480x800 porches: htotal 556, vtotal 868).
+
+Why: with the old timing the DSI link runs at pclk*24/(2lanes*2) =
+1.56Gbps per lane (canaan_dsi.c: clk*3*8/lanes/2). The RTOS firmware
+drives the same panel at 27MHz = 569Mbps/lane. On the same unshielded
+FPC flex cable, touching the MIPI ribbon under the 1.56Gbps link
+reliably blacks out the display (EMI/ground-loop coupling), while the
+569Mbps RTOS link is immune. Aligning the Linux timing to the RTOS
+values restores the same link margin.
+
+Refresh: 39.6MHz/1110 lines = 35.9Hz -> 27MHz/868 lines = 34.4Hz
+(same as RTOS; fine for this status display).
+
+Affects boards including display-st7701-480x800.dtsi (currently
+k230-rockbase-lcd.dts, the RockBase board).
+
+---
+diff --git a/arch/riscv/boot/dts/canaan/display-st7701-480x800.dtsi b/arch/riscv/boot/dts/canaan/display-st7701-480x800.dtsi
+index 1e76aa6..3fd339f 100644
+--- a/arch/riscv/boot/dts/canaan/display-st7701-480x800.dtsi
++++ b/arch/riscv/boot/dts/canaan/display-st7701-480x800.dtsi
+@@ -70,15 +70,18 @@
+ 
+ 		display-timings {
+ 			timing-0 {
+-				clock-frequency = <39600000>;
++				/* RockBase: align with RTOS mipi_st7701 27MHz timing to
++				 * lower DSI lane rate (1.56G->569Mbps/lane) for EMI margin.
++				 * htotal=556, vtotal=868 -> 34.4Hz, matching RTOS. */
++				clock-frequency = <27000000>;
+ 				hactive = <480>;
+ 				vactive = <800>;
+-				hfront-porch = <80>;
+-				hback-porch = <20>;
+-				hsync-len = <20>;
+-				vfront-porch = <220>;
+-				vback-porch = <70>;
+-				vsync-len = <10>;
++				hfront-porch = <30>;
++				hback-porch = <10>;
++				hsync-len = <4>;
++				vfront-porch = <40>;
++				vback-porch = <20>;
++				vsync-len = <8>;
+ 			};
+ 		};
+ 
