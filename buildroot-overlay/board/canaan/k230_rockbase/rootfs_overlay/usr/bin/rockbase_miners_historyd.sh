@@ -1,6 +1,6 @@
 #!/bin/sh
 # Rockbase miners history cache.
-# Reads /run/rockbase/miners.json and keeps a low-write JSONL history on /root/block.
+# Reads /run/rockbase/miners.json and keeps low-write JSONL history on config.
 
 MINERS_CACHE=${MINERS_CACHE:-/run/rockbase/miners.json}
 DATA_DIR=${MINERS_HISTORY_DIR:-/root/config/rockbase-history/miners}
@@ -12,7 +12,6 @@ MIN_SLEEP=${MINERS_HISTORY_MIN_SLEEP:-110}
 MAX_SLEEP=${MINERS_HISTORY_MAX_SLEEP:-150}
 RETENTION_DAYS=${MINERS_HISTORY_RETENTION_DAYS:-7}
 MAX_POINTS=${MINERS_HISTORY_MAX_POINTS:-720}
-OFFLINE_SECONDS=${MINERS_OFFLINE_SECONDS:-1800}
 USER_OFFLINE_DROP_SECONDS=${MINERS_USER_OFFLINE_DROP_SECONDS:-604800}
 
 json_str() {
@@ -42,10 +41,25 @@ json_cache_num() {
   sed -n 's/.*"'"${key}"'"[[:space:]]*:[[:space:]]*\([-0-9.][0-9.]*\).*/\1/p' "$MINERS_CACHE" 2>/dev/null | head -n1
 }
 
-json_file_str() {
-  key=$1
-  file=$2
-  sed -n 's/.*"'"${key}"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$file" 2>/dev/null | head -n1
+json_cache_bool() {
+  sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' "$MINERS_CACHE" | head -n1
+}
+
+json_text_str() {
+  printf '%s' "$2" | sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+}
+
+json_text_num() {
+  printf '%s' "$2" | sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*\([-0-9.][0-9.]*\).*/\1/p'
+}
+
+json_text_bool() {
+  printf '%s' "$2" | sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p'
+}
+
+report_error() {
+  echo "rockbase_miners_historyd: $*" >&2
+  logger -t rockbase-miners-history "$*"
 }
 
 json_file_num() {
@@ -123,17 +137,6 @@ write_sample() {
   [ -r "$MINERS_CACHE" ] || return 1
   mkdir -p "$DATA_DIR" "$CACHE_DIR" || return 1
 
-  now=$(date +%s)
-  cache_ok=$(sed -n 's/.*"ok"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' "$MINERS_CACHE" 2>/dev/null | head -n1)
-  [ "$cache_ok" = "false" ] && return 0
-
-  ts=$(json_cache_num lastupdate)
-  if [ -z "$ts" ] || [ "$ts" = "0" ]; then
-    ts=$(json_cache_num generated_at)
-  fi
-  [ -n "$ts" ] || ts=$now
-  case "$ts" in ''|*[!0-9]*) ts=$now ;; esac
-
   h1m=$(json_cache_str hashrate1m)
   h5m=$(json_cache_str hashrate5m)
   h15m=$(json_cache_str hashrate15m)
@@ -165,45 +168,38 @@ write_sample() {
     printf ',"users":%s' "$(json_num "$users" 0)"
     printf ',"workers":%s' "$(json_num "$workers" 0)"
     printf ',"bestshare":%s' "$(json_num "$bestshare" 0)"
+    printf ',"estimated":%s' "$(json_cache_bool estimated)"
+    printf ',"source_lastupdate":%s' "$(json_num "$(json_cache_num lastupdate)" 0)"
     printf '}\n'
   } >> "$raw_file"
 }
 
-# Per-wallet samples, mirroring the pi5 ck-monitor user_history table:
-# online wallets record live window hashrates; offline wallets record zeros
-# so the chart drops to 0 instead of a flat stale line.
+# Consume the same effective rates as the LCD/Web, not the frozen user files.
 write_user_samples() {
-  [ -d "$USERS_DIR" ] || return 0
-  now=$(date +%s)
-  for user_file in "$USERS_DIR"/*; do
-    [ -f "$user_file" ] || continue
-    address=$(basename "$user_file")
+  awk '
+    /"miners"[[:space:]]*:/ { miners=1 }
+    miners && /"address"[[:space:]]*:/ { row=$0; capture=1; next }
+    capture && /"workers_detail"[[:space:]]*:/ { print row; capture=0; next }
+    capture { row=row " " $0 }
+  ' "$MINERS_CACHE" | while IFS= read -r obj; do
+    address=$(json_text_str address "$obj")
     valid_address "$address" || continue
 
-    lastshare=$(json_file_num lastshare "$user_file")
-    case "$lastshare" in ''|*[!0-9]*) lastshare=0 ;; esac
-    online=0
-    [ "$lastshare" -gt 0 ] && [ $((now - lastshare)) -le "$OFFLINE_SECONDS" ] && online=1
-
-    if [ "$online" = "1" ]; then
-      h1m=$(json_file_str hashrate1m "$user_file")
-      h5m=$(json_file_str hashrate5m "$user_file")
-      h1h=$(json_file_str hashrate1hr "$user_file")
-      h1d=$(json_file_str hashrate1d "$user_file")
-      h7d=$(json_file_str hashrate7d "$user_file")
-      workers=$(json_file_num workers "$user_file")
-    else
-      h1m=0; h5m=0; h1h=0; h1d=0; h7d=0; workers=0
-    fi
-    bestshare=$(json_file_num bestshare "$user_file")
-    bestever=$(json_file_num bestever "$user_file")
+    h1m=$(json_text_str hashrate1m "$obj")
+    h5m=$(json_text_str hashrate5m "$obj")
+    h1h=$(json_text_str hashrate1hr "$obj")
+    h1d=$(json_text_str hashrate1d "$obj")
+    h7d=$(json_text_str hashrate7d "$obj")
+    workers=$(json_text_num workers "$obj")
+    bestshare=$(json_text_num bestshare "$obj")
+    bestever=$(json_text_num bestever "$obj")
 
     raw_file="$DATA_DIR/user-${address}-$(date -u +%Y%m%d).jsonl"
     last_ts=$(tail -n 1 "$raw_file" 2>/dev/null | sed -n 's/.*"ts":[[:space:]]*\([0-9][0-9]*\).*/\1/p')
-    [ "$last_ts" = "$now" ] && continue
+    [ "$last_ts" = "$ts" ] && continue
 
     {
-      printf '{"ts":%s' "$now"
+      printf '{"ts":%s' "$ts"
       printf ',"h1m":%s' "$(json_str "$h1m")"
       printf ',"h5m":%s' "$(json_str "$h5m")"
       printf ',"h1h":%s' "$(json_str "$h1h")"
@@ -212,8 +208,10 @@ write_user_samples() {
       printf ',"workers":%s' "$(json_num "$workers" 0)"
       printf ',"bestshare":%s' "$(json_num "$bestshare" 0)"
       printf ',"bestever":%s' "$(json_num "$bestever" 0)"
+      printf ',"estimated":%s' "$(json_text_bool estimated "$obj")"
+      printf ',"source_lastupdate":%s' "$(json_num "$(json_text_num source_lastupdate "$obj")" 0)"
       printf '}\n'
-    } >> "$raw_file"
+    } >> "$raw_file" || exit 1
   done
 }
 
@@ -263,8 +261,37 @@ render_cache() {
 
 collect_once() {
   cleanup_old_files
-  write_sample || true
-  write_user_samples || true
+  mkdir -p "$CACHE_DIR" || return 1
+  input="${CACHE_DIR}/miners-history-input.$$"
+  if ! cp "$MINERS_CACHE" "$input"; then
+    report_error "Cannot snapshot miner cache"
+    return 1
+  fi
+  original_cache=$MINERS_CACHE
+  MINERS_CACHE=$input
+  ts=$(json_cache_num generated_at)
+  cache_ok=$(json_cache_bool ok)
+  case "$ts" in
+    ''|0|*[!0-9]*)
+      report_error "Invalid miner cache timestamp"
+      rm -f "$input"
+      MINERS_CACHE=$original_cache
+      return 1
+      ;;
+  esac
+  result=0
+  if [ "$cache_ok" = true ]; then
+    write_sample && write_user_samples || result=1
+  elif [ "$cache_ok" != false ]; then
+    report_error "Invalid miner cache availability"
+    result=1
+  fi
+  MINERS_CACHE=$original_cache
+  rm -f "$input"
+  if [ "$result" != 0 ]; then
+    report_error "Cannot record miner history"
+    return "$result"
+  fi
   render_cache
 }
 

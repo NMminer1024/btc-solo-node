@@ -109,6 +109,37 @@ Rockbase 的产品形态是：
 
 ## 采样周期建议
 
+### Stratum 算力缓存与历史
+
+LCD 和 Web 共用 `rockbase_miners_cache.sh` 输出的
+`/run/rockbase/miners.json`，历史由 `rockbase_miners_historyd.sh`
+写入 `/root/config/rockbase-history/miners/`，并生成
+`/run/rockbase/miners-history-node.json`。
+
+- ckpool 运行且统计新鲜时，保留原始窗口算力，不重复衰减。
+- ckpool 停止，或统计超过 300 秒未更新时，从最后有效统计值和时间推算
+  无新增 share 的窗口算力。`pool.running` 表示进程状态，`pool.estimated`
+  标记估算；`pool.stale`、`pool.lastupdate` 保留源数据的新鲜度信息。
+- 在线状态与窗口算力分开：停服/统计失效时不报告在线矿机或活动 worker，
+  但 5m、6h、1d 等历史窗口各自逐渐衰减。累计 shares、bestshare 不清零。
+- `usr/share/rockbase/hashrate-decay.awk` 按当前 ckpool 的名义 1.875 秒
+  周期、每步 `1 / (2 - exp(-dt/window))` 推演。用基础浮点运算实现，
+  兼容未编译数学函数的 BusyBox awk；低于 1 hash/s 的估算归零。
+  这是无新增 share 的估算，不代表停服期间实测算力。
+- 矿机/worker 使用用户统计文件 mtime 作为算力基准时间，不使用
+  lastshare，避免重复计入 ckpool 已应用的衰减。明细中的 `estimated`、
+  矿机的 `source_lastupdate` 标明估算来源。
+- 节点和单矿机历史从同一份缓存快照取值，以缓存 `generated_at`
+  作为有效采样时间去重，不再使用冻结的 ckpool `lastupdate`。
+  新点保留 `estimated` 和 `source_lastupdate`；原有历史点不改写，
+  未采样的空档不伪造补点。缓存不可用时不记录假零值。
+- LCD 只消费缓存和历史，不在显示路径另算衰减。算力已降为零后，
+  长窗口仍可能非零；曲线右端随后台采样继续推进。
+
+回归测试：在仓库根目录运行 `python3 tools/test_rockbase_miners.py -v`。
+覆盖正常统计、停服/过期衰减、不同窗口、历史推进与去重、重启幂等、
+新鲜统计恢复、时间回拨、失败保留原缓存和显式报错。
+
 按模块分频，不要所有数据同频刷新：
 
 - `summary`：5 秒。

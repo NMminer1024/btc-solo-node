@@ -17,6 +17,18 @@ MIN_SLEEP=${MINERS_MIN_SLEEP:-15}
 MAX_SLEEP=${MINERS_MAX_SLEEP:-25}
 OFFLINE_SECONDS=${MINERS_OFFLINE_SECONDS:-1800}
 STALE_SECONDS=${MINERS_STALE_SECONDS:-300}
+HASHRATE_DECAY_AWK=${HASHRATE_DECAY_AWK:-/usr/share/rockbase/hashrate-decay.awk}
+
+decay_rates() {
+  age=$1
+  shift
+  printf '%s\n' "$@" | awk -v age="$age" -f "$HASHRATE_DECAY_AWK"
+}
+
+report_error() {
+  echo "rockbase_miners_cache: $*" >&2
+  logger -t rockbase-miners-cache "$*"
+}
 
 json_str() {
   printf '"'
@@ -132,6 +144,36 @@ collect_once() {
   [ "$pool_age" -lt 0 ] && pool_age=0
   pool_stale=0
   [ "$pool_age" -gt "$STALE_SECONDS" ] && pool_stale=1
+  pool_running=0
+  pidof ckpool >/dev/null 2>&1 && pool_running=1
+  pool_estimated=0
+  if [ "$pool_running" = 0 ] || [ "$pool_stale" = 1 ]; then
+    pool_estimated=1
+  fi
+  p_h1m=$(pool_str hashrate1m)
+  p_h5m=$(pool_str hashrate5m)
+  p_h15m=$(pool_str hashrate15m)
+  p_h1hr=$(pool_str hashrate1hr)
+  p_h6hr=$(pool_str hashrate6hr)
+  p_h1d=$(pool_str hashrate1d)
+  p_h7d=$(pool_str hashrate7d)
+  p_users=$(pool_num Users)
+  p_workers=$(pool_num Workers)
+  if [ "$pool_estimated" = 1 ]; then
+    p_users=0
+    p_workers=0
+    if [ "$pool_exists" = 1 ] && [ "$pool_last" -gt 0 ]; then
+      rates=$(decay_rates "$pool_age" "${p_h1m:-0}" "${p_h5m:-0}" \
+        "${p_h15m:-0}" "${p_h1hr:-0}" "${p_h6hr:-0}" "${p_h1d:-0}" "${p_h7d:-0}") || {
+        report_error "Cannot decay pool hashrates"
+        return 1
+      }
+      set -- $rates
+      p_h1m=$1; p_h5m=$2; p_h15m=$3; p_h1hr=$4; p_h6hr=$5; p_h1d=$6; p_h7d=$7
+    else
+      p_h1m=0; p_h5m=0; p_h15m=0; p_h1hr=0; p_h6hr=0; p_h1d=0; p_h7d=0
+    fi
+  fi
 
   {
     printf '{\n'
@@ -147,19 +189,21 @@ collect_once() {
     printf '  "pool": {\n'
     printf '    "available": %s,\n' "$(json_bool "$pool_exists")"
     printf '    "stale": %s,\n' "$(json_bool "$pool_stale")"
+    printf '    "running": %s,\n' "$(json_bool "$pool_running")"
+    printf '    "estimated": %s,\n' "$(json_bool "$pool_estimated")"
     printf '    "lastupdate": %s,\n' "$(json_num "$pool_last" 0)"
     printf '    "age_seconds": %s,\n' "$(json_num "$pool_age" 0)"
-    printf '    "users": %s,\n' "$(json_num "$(pool_num Users)" 0)"
-    printf '    "workers": %s,\n' "$(json_num "$(pool_num Workers)" 0)"
+    printf '    "users": %s,\n' "$(json_num "$p_users" 0)"
+    printf '    "workers": %s,\n' "$(json_num "$p_workers" 0)"
     printf '    "idle": %s,\n' "$(json_num "$(pool_num Idle)" 0)"
     printf '    "disconnected": %s,\n' "$(json_num "$(pool_num Disconnected)" 0)"
-    printf '    "hashrate1m": %s,\n' "$(json_str "$(pool_str hashrate1m)")"
-    printf '    "hashrate5m": %s,\n' "$(json_str "$(pool_str hashrate5m)")"
-    printf '    "hashrate15m": %s,\n' "$(json_str "$(pool_str hashrate15m)")"
-    printf '    "hashrate1hr": %s,\n' "$(json_str "$(pool_str hashrate1hr)")"
-    printf '    "hashrate6hr": %s,\n' "$(json_str "$(pool_str hashrate6hr)")"
-    printf '    "hashrate1d": %s,\n' "$(json_str "$(pool_str hashrate1d)")"
-    printf '    "hashrate7d": %s,\n' "$(json_str "$(pool_str hashrate7d)")"
+    printf '    "hashrate1m": %s,\n' "$(json_str "$p_h1m")"
+    printf '    "hashrate5m": %s,\n' "$(json_str "$p_h5m")"
+    printf '    "hashrate15m": %s,\n' "$(json_str "$p_h15m")"
+    printf '    "hashrate1hr": %s,\n' "$(json_str "$p_h1hr")"
+    printf '    "hashrate6hr": %s,\n' "$(json_str "$p_h6hr")"
+    printf '    "hashrate1d": %s,\n' "$(json_str "$p_h1d")"
+    printf '    "hashrate7d": %s,\n' "$(json_str "$p_h7d")"
     printf '    "diff": %s,\n' "$(json_num "$(pool_num diff)" 0)"
     printf '    "accepted": %s,\n' "$(json_num "$(pool_num accepted)" 0)"
     printf '    "rejected": %s,\n' "$(json_num "$(pool_num rejected)" 0)"
@@ -179,21 +223,34 @@ collect_once() {
         last_age=$((now - lastshare))
         [ "$last_age" -lt 0 ] && last_age=0
         online=0
-        [ "$lastshare" -gt 0 ] && [ "$last_age" -le "$OFFLINE_SECONDS" ] && online=1
-        # ckpool stops updating a miner's status file once it disconnects,
-        # so the hashrate fields freeze at the disconnect instant (e.g. an
-        # offline miner would otherwise keep showing "4.05T" for days).
-        # Report 0 for offline miners; cumulative fields (shares/bestshare)
-        # stay historical by design.
-        if [ "$online" = 1 ]; then
-          m_h1m=$(json_file_str hashrate1m "$user_file")
-          m_h5m=$(json_file_str hashrate5m "$user_file")
-          m_h1hr=$(json_file_str hashrate1hr "$user_file")
-          m_h1d=$(json_file_str hashrate1d "$user_file")
-          m_h7d=$(json_file_str hashrate7d "$user_file")
-        else
-          m_h1m=0; m_h5m=0; m_h1hr=0; m_h1d=0; m_h7d=0
+        [ "$pool_estimated" = 0 ] && [ "$lastshare" -gt 0 ] && \
+          [ "$last_age" -le "$OFFLINE_SECONDS" ] && online=1
+        # Rates are written after the last share; use file mtime, not lastshare,
+        # so ckpool's already-applied decay is not counted twice.
+        user_updated=$(date -r "$user_file" +%s) || {
+          report_error "Cannot read hashrate timestamp: $user_file"
+          return 1
+        }
+        user_age=$((now - user_updated))
+        [ "$user_age" -lt 0 ] && user_age=0
+        user_estimated=$pool_estimated
+        [ "$user_age" -gt "$STALE_SECONDS" ] && user_estimated=1
+        m_h1m=$(json_file_str hashrate1m "$user_file")
+        m_h5m=$(json_file_str hashrate5m "$user_file")
+        m_h1hr=$(json_file_str hashrate1hr "$user_file")
+        m_h1d=$(json_file_str hashrate1d "$user_file")
+        m_h7d=$(json_file_str hashrate7d "$user_file")
+        if [ "$user_estimated" = 1 ]; then
+          rates=$(decay_rates "$user_age" "${m_h1m:-0}" "${m_h5m:-0}" 0 \
+            "${m_h1hr:-0}" 0 "${m_h1d:-0}" "${m_h7d:-0}") || {
+            report_error "Cannot decay miner hashrates: $address"
+            return 1
+          }
+          set -- $rates
+          m_h1m=$1; m_h5m=$2; m_h1hr=$4; m_h1d=$6; m_h7d=$7
         fi
+        m_workers=$(json_file_num workers "$user_file")
+        [ "$online" = 1 ] || m_workers=0
         worker_objects=$(extract_worker_objects "$user_file")
         worker_detail_count=$(printf '%s\n' "$worker_objects" | sed '/^[[:space:]]*$/d' | wc -l)
         [ -z "$worker_detail_count" ] && worker_detail_count=0
@@ -203,10 +260,12 @@ collect_once() {
         printf '    {\n'
         printf '      "address": %s,\n' "$(json_str "$address")"
         printf '      "online": %s,\n' "$(json_bool "$online")"
+        printf '      "estimated": %s,\n' "$(json_bool "$user_estimated")"
+        printf '      "source_lastupdate": %s,\n' "$user_updated"
         printf '      "lastshare": %s,\n' "$(json_num "$lastshare" 0)"
         printf '      "lastshare_age_seconds": %s,\n' "$(json_num "$last_age" 0)"
         printf '      "lastshare_ago": %s,\n' "$(json_str "$(format_time_ago "$lastshare" "$now")")"
-        printf '      "workers": %s,\n' "$(json_num "$(json_file_num workers "$user_file")" "$worker_detail_count")"
+        printf '      "workers": %s,\n' "$(json_num "$m_workers" "$worker_detail_count")"
         printf '      "worker_detail_count": %s,\n' "$(json_num "$worker_detail_count" 0)"
         printf '      "hashrate1m": %s,\n' "$(json_str "$m_h1m")"
         printf '      "hashrate5m": %s,\n' "$(json_str "$m_h5m")"
@@ -228,16 +287,21 @@ collect_once() {
           w_age=$((now - w_last))
           [ "$w_age" -lt 0 ] && w_age=0
           w_online=0
-          [ "$w_last" -gt 0 ] && [ "$w_age" -le "$OFFLINE_SECONDS" ] && w_online=1
-          # Same stale-hashrate rule as the miner level, per worker.
-          if [ "$w_online" = 1 ]; then
-            w_h1m=$(json_text_str hashrate1m "$obj")
-            w_h5m=$(json_text_str hashrate5m "$obj")
-            w_h1hr=$(json_text_str hashrate1hr "$obj")
-            w_h1d=$(json_text_str hashrate1d "$obj")
-            w_h7d=$(json_text_str hashrate7d "$obj")
-          else
-            w_h1m=0; w_h5m=0; w_h1hr=0; w_h1d=0; w_h7d=0
+          [ "$pool_estimated" = 0 ] && [ "$w_last" -gt 0 ] && \
+            [ "$w_age" -le "$OFFLINE_SECONDS" ] && w_online=1
+          w_h1m=$(json_text_str hashrate1m "$obj")
+          w_h5m=$(json_text_str hashrate5m "$obj")
+          w_h1hr=$(json_text_str hashrate1hr "$obj")
+          w_h1d=$(json_text_str hashrate1d "$obj")
+          w_h7d=$(json_text_str hashrate7d "$obj")
+          if [ "$user_estimated" = 1 ]; then
+            rates=$(decay_rates "$user_age" "${w_h1m:-0}" "${w_h5m:-0}" 0 \
+              "${w_h1hr:-0}" 0 "${w_h1d:-0}" "${w_h7d:-0}") || {
+              report_error "Cannot decay worker hashrates: $workername"
+              exit 1
+            }
+            set -- $rates
+            w_h1m=$1; w_h5m=$2; w_h1hr=$4; w_h1d=$6; w_h7d=$7
           fi
           [ "${worker_first:-1}" = 1 ] || printf ',\n'
           worker_first=0
@@ -245,6 +309,7 @@ collect_once() {
           printf '          "name": %s,\n' "$(json_str "$shortname")"
           printf '          "full_name": %s,\n' "$(json_str "$workername")"
           printf '          "online": %s,\n' "$(json_bool "$w_online")"
+          printf '          "estimated": %s,\n' "$(json_bool "$user_estimated")"
           printf '          "lastshare": %s,\n' "$(json_num "$w_last" 0)"
           printf '          "lastshare_age_seconds": %s,\n' "$(json_num "$w_age" 0)"
           printf '          "lastshare_ago": %s,\n' "$(json_str "$(format_time_ago "$w_last" "$now")")"
@@ -257,7 +322,7 @@ collect_once() {
           printf '          "bestshare": %s,\n' "$(json_num "$(json_text_num bestshare "$obj")" 0)"
           printf '          "bestever": %s\n' "$(json_num "$(json_text_num bestever "$obj")" 0)"
           printf '        }'
-        done
+        done || return 1
 
         printf '\n'
         printf '      ]\n'
@@ -269,6 +334,12 @@ collect_once() {
     printf '  ]\n'
     printf '}\n'
   } > "$tmp" && mv "$tmp" "$CACHE_FILE"
+  result=$?
+  if [ "$result" != 0 ]; then
+    report_error "Cannot publish miner cache"
+    rm -f "$tmp"
+  fi
+  return "$result"
 }
 
 case "$1" in
