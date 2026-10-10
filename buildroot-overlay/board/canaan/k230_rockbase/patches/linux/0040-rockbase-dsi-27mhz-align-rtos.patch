@@ -23,7 +23,7 @@ diff --git a/arch/riscv/boot/dts/canaan/display-st7701-480x800.dtsi b/arch/riscv
 index 1e76aa6..3fd339f 100644
 --- a/arch/riscv/boot/dts/canaan/display-st7701-480x800.dtsi
 +++ b/arch/riscv/boot/dts/canaan/display-st7701-480x800.dtsi
-@@ -70,15 +70,18 @@
+@@ -70,15 +70,19 @@
  
  		display-timings {
  			timing-0 {
